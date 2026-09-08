@@ -1,0 +1,156 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vibe-seller — одна страница</title>
+<style>
+  :root {
+    --bg: #faf9f6;
+    --panel: #ffffff;
+    --ink: #1c1c1a;
+    --muted: #6d6d67;
+    --line: #e2e1da;
+    --accent: #2f6f4f;
+    --accent-soft: #e8f1eb;
+    --red: #a8412f;
+    --red-soft: #f7e9e6;
+    --amber: #8a6412;
+    --amber-soft: #f8f0dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a;
+      --panel: #1f2125;
+      --ink: #eaeae6;
+      --muted: #9c9c96;
+      --line: #33363b;
+      --accent: #82c6a3;
+      --accent-soft: #21302a;
+      --red: #e08b7a;
+      --red-soft: #33241f;
+      --amber: #d8b269;
+      --amber-soft: #2f2820;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.2rem 1.25rem 3rem;
+    background: var(--bg); color: var(--ink);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 2.1rem; line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.01em; }
+  h2 { font-size: 1.25rem; margin: 2.2rem 0 .6rem; }
+  h3 { font-size: 1.08rem; margin: 2rem 0 .5rem; }
+  .lede { font-size: 1.1rem; color: var(--muted); margin: 0 0 2rem; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1.2rem 1.4rem; margin: 1.2rem 0; }
+  .quote { border-left: 3px solid var(--accent); padding: .2rem 0 .2rem 1.1rem; margin: 1.4rem 0; font-size: 1.12rem; }
+  ul, ol { padding-left: 1.3rem; }
+  li { margin: .35rem 0; }
+  .muted { color: var(--muted); }
+  .flow { margin: 1.4rem 0; }
+  .row { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; }
+  .box {
+    flex: 1 1 150px; min-width: 130px; text-align: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: .7rem .6rem; font-size: .95rem;
+  }
+  .box b { display: block; font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: .2rem; font-weight: 600; }
+  .box.live { border-color: var(--accent); background: var(--accent-soft); }
+  .box.plan { border-style: dashed; }
+  .box.pain { border-color: var(--red); background: var(--red-soft); }
+  .arrow { text-align: center; color: var(--muted); font-size: 1.2rem; line-height: 1; margin: .45rem 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 1.2rem; font-size: .9rem; color: var(--muted); margin: .8rem 0 0; }
+  .legend span::before { content: "■ "; }
+  .legend .l1::before { color: var(--accent); }
+  .legend .l2::before { color: var(--line); }
+  table { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: .96rem; }
+  th, td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .verdict { display: inline-block; border-radius: 6px; padding: .05rem .45rem; font-weight: 600; font-size: .92rem; }
+  .v-yes { background: var(--accent-soft); color: var(--accent); }
+  .v-no { background: var(--red-soft); color: var(--red); }
+  .v-dunno { background: var(--amber-soft); color: var(--amber); }
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .92rem; }
+</style>
+</head>
+<body>
+<aside style="padding:16px;margin:16px;border:2px solid #b45309;background:#fff7ed;color:#431407;font:16px/1.5 sans-serif">Архив концепции. Не отражает ТЗ партнёра от 07.09.2026 и текущую готовность программы. Актуальные материалы: <a href="11-product-requirements.md">ТЗ 1.1</a>, <a href="12-requirements-traceability.md">покрытие требований</a>, <a href="13-partner-spec-audit.md">аудит программы</a>. Цифровые платформы предусмотрены с первого этапа: поиск поставщика и продажи с полки.</aside>
+<main>
+<h1>vibe-seller</h1>
+<p class="lede">Заказчик присылает техзадание. Программа сама находит товар, проверяет
+его на соответствие и считает деньги — со ссылкой на страницу документа под каждым
+утверждением.</p>
+
+<h2>Кто в цепочке</h2>
+<div class="flow">
+  <div class="row">
+    <div class="box"><b>Заказчик</b>присылает ТЗ: «нужно вот такое»</div>
+    <div class="box live"><b>Поставщик — наш клиент</b>должен найти, проверить, посчитать</div>
+    <div class="box"><b>Производители</b>десятки прайсов в разных форматах</div>
+  </div>
+</div>
+<p>Сейчас это ручная работа: 4–8 часов на одно ТЗ и ошибка в одной строке ценой
+отклонённой заявки или убыточной сделки.</p>
+
+<h2>Что делает программа</h2>
+<div class="flow">
+  <div class="row">
+    <div class="box"><b>1</b>Прочитала ТЗ</div>
+    <div class="box"><b>2</b>Вытащила требования</div>
+    <div class="box"><b>3</b>Нашла производителей</div>
+    <div class="box"><b>4</b>Запросила цены</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="row">
+    <div class="box live"><b>5</b>Сверила товар с каждым требованием</div>
+    <div class="box live"><b>6</b>Посчитала себестоимость и маржу</div>
+    <div class="box"><b>7</b>Показала короткий список с обоснованием</div>
+    <div class="box"><b>8</b>Человек выбрал и подтвердил</div>
+  </div>
+  <div class="legend">
+    <span class="l1">уже работает</span>
+    <span class="l2">в плане</span>
+  </div>
+</div>
+
+<h2>Три правила, на которых всё держится</h2>
+<div class="flow">
+  <div class="row">
+    <div class="box live"><b>Источник</b>«подходит, т.к. ТЗ стр. 16 требует 24 мес, паспорт стр. 3 даёт 36». Без ссылки факта не существует</div>
+    <div class="box live"><b>Три ответа</b><span class="verdict v-yes">да</span> <span class="verdict v-no">нет</span> <span class="verdict v-dunno">не знаю</span><br>пробел в данных не превращается в «подходит»</div>
+    <div class="box live"><b>Никаких 96%</b>провалено обязательное требование — товар не подходит. Процент не показываем: он обманывает</div>
+  </div>
+</div>
+<div class="quote">ИИ извлекает — правила решают. Ошибка ИИ стоит одного уточняющего
+вопроса, а не неверного вердикта.</div>
+
+<h2>Три числа, которые нельзя смешивать</h2>
+<div class="flow">
+  <div class="row">
+    <div class="box live"><b>Соответствие</b>подходит ли под ТЗ</div>
+    <div class="box live"><b>Экономика</b>сколько заработаем, всё включено</div>
+    <div class="box plan"><b>Риск</b>надёжность поставщика</div>
+  </div>
+</div>
+<p>Товар может идеально подходить и приносить убыток. Выбор такого компромисса —
+только за человеком, поэтому среднего балла из трёх чисел не существует.</p>
+
+<h2>Статус</h2>
+<div class="flow">
+  <div class="row">
+    <div class="box live"><b>Готово</b>ядро: сверка, три ответа, ссылки на источники, расчёт маржи. Сто автотестов, все зелёные</div>
+    <div class="box plan"><b>Дальше</b>чтение файлов, поиск, рассылка запросов, интерфейс</div>
+    <div class="box plan"><b>Потом</b>торговые площадки, 1С, электронная подпись</div>
+  </div>
+</div>
+<p>Сначала доказать, что умная часть не врёт, и только потом вкладываться в дорогие
+интеграции. Обратный порядок — способ потратить год впустую.</p>
+
+<footer>Syurai Procurement, 31.08.2026. Подробная версия — 09-concept.html.</footer>
+</main>
+</body>
+</html>
+
+

@@ -1,0 +1,60 @@
+[project]
+name = "syurai-procurement"
+version = "0.1.0"
+description = "Виртуальный тендерный отдел для компании-поставщика"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.14,<2",
+    "fastapi>=0.115,<1",
+    "psycopg[binary]>=3.2,<4",
+    "pydantic>=2.9",
+    "sqlalchemy>=2.0,<3",
+    "tzdata>=2025.2",
+    "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/procurement"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# Проект и вся документация в коде — на русском. Правила про «неоднозначные»
+# кириллические символы дают сотни ложных срабатываний и здесь бесполезны.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# UP042 (StrEnum) требует Python 3.11+ как минимума и меняет поведение
+# сериализации pydantic — переход обсуждается отдельно, см. docs/adr.
+"src/procurement/domain/*" = ["UP042"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/procurement/domain"]
+plugins = ["pydantic.mypy"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28,<1",
+]

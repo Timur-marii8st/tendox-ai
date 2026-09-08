@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+node_modules/
+.DS_Store
+/data/
+/postgres-data/
+/tmp/
+# Никогда не коммитим клиентские ТЗ, КП и сертификаты
+/samples/private/
+*.p12
+*.pfx
+*.key
