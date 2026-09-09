@@ -3,16 +3,27 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from docx import Document as DocxDocument
+from pypdf import PdfWriter
 
 from procurement.api import create_app
-from procurement.api.contracts import CasePage, EvaluationRecord, Principal, VersionConflict
+from procurement.api.contracts import (
+    CasePage,
+    DocumentRecord,
+    EvaluationRecord,
+    Principal,
+    VersionConflict,
+)
+from procurement.documents import ExtractionResult
 from procurement.domain.cases import ProcurementCase
 from procurement.domain.decisions import Recommendation
 
@@ -35,6 +46,8 @@ class FakeCaseService:
         self.evaluations: dict[tuple[str, str, int], EvaluationRecord] = {}
         self.evaluation_calls: list[dict[str, object]] = []
         self.created_with: list[dict[str, object]] = []
+        self.documents: dict[tuple[str, str], DocumentRecord] = {}
+        self.document_calls: list[dict[str, object]] = []
 
     async def create_case(
         self,
@@ -110,6 +123,48 @@ class FakeCaseService:
         self.evaluations[(company_id, case_id, version)] = record
         return record
 
+    async def store_document(
+        self,
+        *,
+        company_id: str,
+        actor_id: str,
+        document_id: str,
+        original_filename: str,
+        media_type: str,
+        content: bytes,
+        extraction: ExtractionResult,
+        idempotency_key: str,
+        request_digest: str,
+    ) -> DocumentRecord:
+        record = DocumentRecord(
+            document_id=document_id,
+            original_filename=original_filename,
+            media_type=media_type,
+            byte_size=len(content),
+            sha256=hashlib.sha256(content).hexdigest(),
+            extraction=extraction,
+            created_at=datetime.now(UTC),
+        )
+        self.documents[(company_id, document_id)] = record
+        self.document_calls.append(
+            {
+                "company_id": company_id,
+                "actor_id": actor_id,
+                "idempotency_key": idempotency_key,
+                "request_digest": request_digest,
+                "content": content,
+            }
+        )
+        return record
+
+    async def get_document(
+        self,
+        *,
+        company_id: str,
+        document_id: str,
+    ) -> DocumentRecord | None:
+        return self.documents.get((company_id, document_id))
+
 
 def paper_case_payload() -> dict[str, Any]:
     return json.loads(PAPER_CASE.read_text(encoding="utf-8"))
@@ -144,6 +199,22 @@ def request(app: object, method: str, url: str, **kwargs: object) -> httpx.Respo
             return await client.request(method, url, **kwargs)
 
     return asyncio.run(send())
+
+
+def docx_bytes(text: str) -> bytes:
+    document = DocxDocument()
+    document.add_paragraph(text)
+    output = BytesIO()
+    document.save(output)
+    return output.getvalue()
+
+
+def blank_pdf_bytes() -> bytes:
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
 
 
 def test_health_is_public_and_openapi_has_no_tenant_auth_header(app: object) -> None:
@@ -338,5 +409,95 @@ def test_latest_evaluation_cross_tenant_and_absent_are_identical(
         "/v1/cases/not-there/versions/1/evaluations/latest",
         headers=AUTH_A,
     )
+    assert guessed.status_code == missing.status_code == 404
+    assert guessed.json() == missing.json() == {"detail": "not_found"}
+
+
+def test_document_upload_extracts_provenance_and_never_returns_source_bytes(
+    app: object,
+    service: FakeCaseService,
+) -> None:
+    response = request(
+        app,
+        "POST",
+        "/v1/documents",
+        headers={**AUTH_A, "Idempotency-Key": "document-001"},
+        files={
+            "file": (
+                "technical-specification.docx",
+                docx_bytes("Paper A4, 500 sheets"),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert "content" not in payload
+    assert payload["extraction"]["status"] == "PASS"
+    assert payload["extraction"]["blocks"][0]["text"] == "Paper A4, 500 sheets"
+    assert payload["extraction"]["blocks"][0]["provenance"]["document_id"] == payload[
+        "document_id"
+    ]
+    assert service.document_calls[0]["actor_id"] == "operator-a"
+    assert len(str(service.document_calls[0]["request_digest"])) == 64
+
+    loaded = request(
+        app,
+        "GET",
+        f"/v1/documents/{payload['document_id']}",
+        headers=AUTH_A,
+    )
+    assert loaded.status_code == 200
+    assert loaded.json() == payload
+
+
+def test_blank_pdf_stays_unknown_and_bad_magic_is_rejected(app: object) -> None:
+    scanned = request(
+        app,
+        "POST",
+        "/v1/documents",
+        headers={**AUTH_A, "Idempotency-Key": "document-scan"},
+        files={"file": ("scan.pdf", blank_pdf_bytes(), "application/pdf")},
+    )
+    malformed = request(
+        app,
+        "POST",
+        "/v1/documents",
+        headers={**AUTH_A, "Idempotency-Key": "document-bad"},
+        files={"file": ("fake.pdf", b"not a PDF", "application/pdf")},
+    )
+
+    assert scanned.status_code == 201
+    assert scanned.json()["extraction"]["status"] == "UNKNOWN"
+    assert scanned.json()["extraction"]["reasons"] == ["OCR_REQUIRED"]
+    assert malformed.status_code == 422
+    assert malformed.json() == {"detail": {"code": "MAGIC_MISMATCH"}}
+
+
+def test_document_cross_tenant_and_missing_are_identical(
+    app: object,
+    service: FakeCaseService,
+) -> None:
+    foreign = DocumentRecord(
+        document_id="foreign-document",
+        original_filename="foreign.pdf",
+        media_type="application/pdf",
+        byte_size=1,
+        sha256="0" * 64,
+        extraction={
+            "status": "UNKNOWN",
+            "reasons": ["OCR_REQUIRED"],
+            "source_units_total": 1,
+            "source_units_extracted": 0,
+            "characters_extracted": 0,
+        },
+        created_at=datetime.now(UTC),
+    )
+    service.documents[("other-company", foreign.document_id)] = foreign
+
+    guessed = request(app, "GET", "/v1/documents/foreign-document", headers=AUTH_A)
+    missing = request(app, "GET", "/v1/documents/not-there", headers=AUTH_A)
+
     assert guessed.status_code == missing.status_code == 404
     assert guessed.json() == missing.json() == {"detail": "not_found"}

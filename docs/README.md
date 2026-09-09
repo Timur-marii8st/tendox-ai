@@ -14,6 +14,7 @@
 | Локальный запуск S1 | [16-local-case-workflow.md](16-local-case-workflow.md) | CLI, синтетический пример, журнал и ограничения |
 | PostgreSQL и API S2 | [17-storage-api.md](17-storage-api.md) | RLS, bearer identity, миграции, bootstrap и серверный запуск |
 | Первый экран S3 | [18-first-screen.md](18-first-screen.md) | Контракт внутреннего пилота, server-side BFF, пользовательский поток и границы |
+| Документы S4 | [19-document-pipeline.md](19-document-pipeline.md) | Immutable upload, безопасное нативное извлечение, provenance, API и границы OCR |
 | Реестр продуктовых агентов | [14-product-agents.md](14-product-agents.md) | Агенты, типизированные границы и уровни автономии |
 | Трассировка требований | [12-requirements-traceability.md](12-requirements-traceability.md) | Связь требований с реализацией и проверками |
 | Правовые и security ограничения | [06-legal-security.md](06-legal-security.md) | Источники, ограничения интеграций и безопасные границы |

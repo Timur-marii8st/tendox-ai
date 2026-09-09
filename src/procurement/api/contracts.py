@@ -12,6 +12,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from procurement.documents import ExtractionResult
 from procurement.domain.cases import ProcurementCase
 from procurement.domain.decisions import Recommendation
 
@@ -51,6 +52,20 @@ class EvaluationRecord(BaseModel):
     engine_version: str = Field(min_length=1)
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     effective_at: datetime
+
+
+class DocumentRecord(BaseModel):
+    """Public metadata and extraction result; source bytes never leave this boundary."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    document_id: str = Field(min_length=1)
+    original_filename: str = Field(min_length=1)
+    media_type: str = Field(min_length=1)
+    byte_size: int = Field(ge=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    extraction: ExtractionResult
+    created_at: datetime
 
 
 class VersionConflict(Exception):
@@ -112,3 +127,26 @@ class CaseService(Protocol):
         Reusing a key with a distinct ``request_digest`` raises
         :class:`VersionConflict`.
         """
+
+    async def store_document(
+        self,
+        *,
+        company_id: str,
+        actor_id: str,
+        document_id: str,
+        original_filename: str,
+        media_type: str,
+        content: bytes,
+        extraction: ExtractionResult,
+        idempotency_key: str,
+        request_digest: str,
+    ) -> DocumentRecord:
+        """Persist source bytes, typed extraction, audit event, and receipt atomically."""
+
+    async def get_document(
+        self,
+        *,
+        company_id: str,
+        document_id: str,
+    ) -> DocumentRecord | None:
+        """Return only tenant-visible metadata and extraction, never source bytes."""

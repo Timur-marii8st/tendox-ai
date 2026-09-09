@@ -1,9 +1,11 @@
 """PostgreSQL persistence interfaces."""
 
 from procurement.storage.models import (
+    MAX_DOCUMENT_BYTES,
     api_keys,
     audit_events,
     case_versions,
+    documents,
     evaluations,
     metadata,
     write_receipts,
@@ -15,6 +17,8 @@ from procurement.storage.repository import (
     AuditEventRecord,
     CasePage,
     CaseVersionConflict,
+    DocumentConflict,
+    DocumentRecord,
     EvaluationRecord,
     IdempotencyConflict,
     PostgresStorage,
@@ -25,12 +29,15 @@ from procurement.storage.repository import (
 )
 
 __all__ = [
+    "MAX_DOCUMENT_BYTES",
     "ApiKeyConflict",
     "ApiKeyRecord",
     "AuditEventConflict",
     "AuditEventRecord",
     "CasePage",
     "CaseVersionConflict",
+    "DocumentConflict",
+    "DocumentRecord",
     "EvaluationRecord",
     "IdempotencyConflict",
     "PostgresStorage",
@@ -41,6 +48,7 @@ __all__ = [
     "api_keys",
     "audit_events",
     "case_versions",
+    "documents",
     "evaluations",
     "metadata",
     "write_receipts",

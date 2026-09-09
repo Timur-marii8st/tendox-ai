@@ -10,19 +10,22 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import Engine, and_, create_engine, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.engine import Connection
 
+from procurement.documents import ExtractionResult
 from procurement.domain.cases import ProcurementCase, case_input_digest, evaluate_case
 from procurement.domain.decisions import Recommendation
 from procurement.storage.models import (
+    MAX_DOCUMENT_BYTES,
     api_keys,
     audit_events,
     case_versions,
+    documents,
     evaluations,
     write_receipts,
 )
@@ -34,6 +37,10 @@ class StorageError(RuntimeError):
 
 class CaseVersionConflict(StorageError):
     """The immutable identity already exists with a different payload."""
+
+
+class DocumentConflict(StorageError):
+    """The tenant already has an immutable document with this identity."""
 
 
 class AuditEventConflict(StorageError):
@@ -135,6 +142,53 @@ class EvaluationRecord(BaseModel):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("evaluation times must include a timezone")
         return value
+
+
+class DocumentRecord(BaseModel):
+    """Complete immutable source document and its typed extraction envelope."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    company_id: str = Field(min_length=1)
+    document_id: str = Field(min_length=1)
+    original_filename: str = Field(min_length=1)
+    media_type: str = Field(min_length=1)
+    byte_size: int = Field(ge=1, le=MAX_DOCUMENT_BYTES)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    content: bytes
+    extraction: ExtractionResult
+    created_at: datetime
+
+    @field_validator("company_id", "document_id", "original_filename", "media_type")
+    @classmethod
+    def _text_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("document text fields must not be blank")
+        return value
+
+    @field_validator("created_at")
+    @classmethod
+    def _created_at_is_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("created_at must include a timezone")
+        return value
+
+    @field_validator("content")
+    @classmethod
+    def _content_is_not_empty(cls, value: bytes) -> bytes:
+        if not value:
+            raise ValueError("document content must not be empty")
+        if len(value) > MAX_DOCUMENT_BYTES:
+            raise ValueError(f"document content exceeds {MAX_DOCUMENT_BYTES} bytes")
+        return value
+
+    @model_validator(mode="after")
+    def _content_matches_metadata(self) -> Self:
+        if len(self.content) != self.byte_size:
+            raise ValueError("byte_size does not match document content")
+        if hashlib.sha256(self.content).hexdigest() != self.sha256:
+            raise ValueError("sha256 does not match document content")
+        return self
 
 
 class CasePage(BaseModel):
@@ -358,6 +412,160 @@ class PostgresStorage:
                     response={"case_id": checked.case_id, "version": checked.version},
                 )
         return checked
+
+    def store_document(
+        self,
+        company_id: str,
+        actor_id: str,
+        original_filename: str,
+        media_type: str,
+        content: bytes,
+        extraction: ExtractionResult | dict[str, Any],
+        idempotency_key: str,
+        request_sha256: str,
+        *,
+        document_id: str | None = None,
+    ) -> DocumentRecord:
+        """Atomically store source bytes, extraction, audit fact, and replay receipt."""
+        tenant = _require_tenant(company_id)
+        if not actor_id.strip():
+            raise ValueError("actor_id must not be empty")
+        if not original_filename.strip():
+            raise ValueError("original_filename must not be empty")
+        if not media_type.strip():
+            raise ValueError("media_type must not be empty")
+        raw_content = bytes(content)
+        if not raw_content:
+            raise ValueError("document content must not be empty")
+        if len(raw_content) > MAX_DOCUMENT_BYTES:
+            raise ValueError(f"document content exceeds {MAX_DOCUMENT_BYTES} bytes")
+        _require_sha256(request_sha256, field="request_sha256")
+        try:
+            checked_extraction = ExtractionResult.model_validate(extraction)
+            normalized_extraction = checked_extraction.model_dump(mode="json")
+        except (TypeError, ValueError) as error:
+            raise ValueError("extraction must match the typed extraction schema") from error
+
+        chosen_id = document_id or str(uuid.uuid4())
+        if not chosen_id.strip():
+            raise ValueError("document_id must not be empty")
+        content_sha256 = hashlib.sha256(raw_content).hexdigest()
+        created_at = datetime.now(UTC)
+        candidate = DocumentRecord(
+            company_id=tenant,
+            document_id=chosen_id,
+            original_filename=original_filename,
+            media_type=media_type,
+            byte_size=len(raw_content),
+            sha256=content_sha256,
+            content=raw_content,
+            extraction=checked_extraction,
+            created_at=created_at,
+        )
+        extraction_sha256 = hashlib.sha256(
+            json.dumps(
+                normalized_extraction,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+
+        try:
+            with self.transaction(tenant) as connection:
+                self._lock_idempotency(
+                    connection,
+                    tenant,
+                    "store_document",
+                    idempotency_key,
+                )
+                replay = self._existing_receipt(
+                    connection,
+                    tenant,
+                    "store_document",
+                    idempotency_key,
+                    request_sha256,
+                )
+                if replay is not None:
+                    replay_id = replay.get("document_id")
+                    row = connection.execute(
+                        select(documents).where(
+                            and_(
+                                documents.c.company_id == tenant,
+                                documents.c.document_id == replay_id,
+                            )
+                        )
+                    ).mappings().one_or_none()
+                    if row is None:
+                        raise StorageError(
+                            "stored document receipt points to a missing record"
+                        )
+                    return DocumentRecord.model_validate(dict(row))
+
+                row = (
+                    connection.execute(
+                        insert(documents)
+                        .values(
+                            **(
+                                candidate.model_dump(mode="python", exclude={"extraction"})
+                                | {"extraction": normalized_extraction}
+                            )
+                        )
+                        .returning(documents)
+                    )
+                    .mappings()
+                    .one()
+                )
+                event = AuditEventRecord(
+                    event_id=str(uuid.uuid4()),
+                    company_id=tenant,
+                    actor_id=actor_id,
+                    event_type="document.stored",
+                    object_type="source_document",
+                    object_id=chosen_id,
+                    basis={
+                        "original_filename": original_filename,
+                        "media_type": media_type,
+                        "byte_size": len(raw_content),
+                        "sha256": content_sha256,
+                        "extraction_sha256": extraction_sha256,
+                    },
+                    occurred_at=created_at,
+                )
+                connection.execute(
+                    insert(audit_events).values(**event.model_dump(mode="python"))
+                )
+                self._insert_receipt(
+                    connection,
+                    tenant=tenant,
+                    operation="store_document",
+                    idempotency_key=idempotency_key,
+                    request_sha256=request_sha256,
+                    response={"document_id": chosen_id},
+                )
+        except Exception as error:
+            if getattr(getattr(error, "orig", None), "sqlstate", None) == "23505":
+                raise DocumentConflict(
+                    f"document {chosen_id!r} already exists for tenant"
+                ) from error
+            raise
+        return DocumentRecord.model_validate(dict(row))
+
+    def get_document(self, company_id: str, document_id: str) -> DocumentRecord | None:
+        """Load one visible immutable document, including its original bytes."""
+        tenant = _require_tenant(company_id)
+        if not document_id:
+            raise ValueError("document_id must not be empty")
+        with self.transaction(tenant) as connection:
+            row = connection.execute(
+                select(documents).where(
+                    and_(
+                        documents.c.company_id == tenant,
+                        documents.c.document_id == document_id,
+                    )
+                )
+            ).mappings().one_or_none()
+        return None if row is None else DocumentRecord.model_validate(dict(row))
 
     def get_case(
         self,

@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     PrimaryKeyConstraint,
     String,
@@ -21,6 +22,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 
 metadata = MetaData()
+
+MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
 
 case_versions = Table(
     "case_versions",
@@ -49,6 +52,52 @@ Index(
     "ix_case_versions_company_input_sha256",
     case_versions.c.company_id,
     case_versions.c.input_sha256,
+)
+
+documents = Table(
+    "documents",
+    metadata,
+    Column("company_id", Text, nullable=False),
+    Column("document_id", Text, nullable=False),
+    Column("original_filename", Text, nullable=False),
+    Column("media_type", Text, nullable=False),
+    Column("byte_size", Integer, nullable=False),
+    Column("sha256", String(64), nullable=False),
+    Column("content", LargeBinary, nullable=False),
+    Column("extraction", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    PrimaryKeyConstraint("company_id", "document_id", name="pk_documents"),
+    CheckConstraint("company_id <> ''", name="ck_documents_company_id_nonempty"),
+    CheckConstraint("document_id <> ''", name="ck_documents_document_id_nonempty"),
+    CheckConstraint(
+        "original_filename <> ''",
+        name="ck_documents_original_filename_nonempty",
+    ),
+    CheckConstraint("media_type <> ''", name="ck_documents_media_type_nonempty"),
+    CheckConstraint(
+        f"byte_size BETWEEN 1 AND {MAX_DOCUMENT_BYTES}",
+        name="ck_documents_byte_size",
+    ),
+    CheckConstraint(
+        "octet_length(content) = byte_size",
+        name="ck_documents_content_size",
+    ),
+    CheckConstraint("sha256 ~ '^[0-9a-f]{64}$'", name="ck_documents_sha256"),
+    CheckConstraint(
+        "jsonb_typeof(extraction) = 'object'",
+        name="ck_documents_extraction_object",
+    ),
+)
+Index(
+    "ix_documents_company_created",
+    documents.c.company_id,
+    documents.c.created_at,
+    documents.c.document_id,
+)
+Index(
+    "ix_documents_company_sha256",
+    documents.c.company_id,
+    documents.c.sha256,
 )
 
 audit_events = Table(

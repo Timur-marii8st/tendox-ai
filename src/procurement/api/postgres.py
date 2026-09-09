@@ -9,15 +9,18 @@ from anyio import to_thread
 
 from procurement.api.contracts import (
     CasePage,
+    DocumentRecord,
     EvaluationRecord,
     InvalidCursor,
     Principal,
     VersionConflict,
 )
+from procurement.documents import ExtractionResult
 from procurement.domain.cases import ProcurementCase
 from procurement.domain.decisions import Recommendation
 from procurement.storage import (
     CaseVersionConflict,
+    DocumentConflict,
     IdempotencyConflict,
     PostgresStorage,
 )
@@ -152,4 +155,61 @@ class PostgresCaseService:
             engine_version=stored.engine_version,
             input_digest=stored.input_sha256,
             effective_at=stored.effective_at,
+        )
+
+    async def store_document(
+        self,
+        *,
+        company_id: str,
+        actor_id: str,
+        document_id: str,
+        original_filename: str,
+        media_type: str,
+        content: bytes,
+        extraction: ExtractionResult,
+        idempotency_key: str,
+        request_digest: str,
+    ) -> DocumentRecord:
+        operation = partial(
+            self._storage.store_document,
+            company_id,
+            actor_id,
+            original_filename,
+            media_type,
+            content,
+            extraction.model_dump(mode="json"),
+            idempotency_key,
+            request_digest,
+            document_id=document_id,
+        )
+        try:
+            stored = await to_thread.run_sync(operation)
+        except (DocumentConflict, IdempotencyConflict) as error:
+            raise VersionConflict from error
+        return self._document_record(stored)
+
+    async def get_document(
+        self,
+        *,
+        company_id: str,
+        document_id: str,
+    ) -> DocumentRecord | None:
+        stored = await to_thread.run_sync(
+            partial(self._storage.get_document, company_id, document_id)
+        )
+        return None if stored is None else self._document_record(stored)
+
+    @staticmethod
+    def _document_record(stored: object) -> DocumentRecord:
+        from procurement.storage import DocumentRecord as StoredDocumentRecord
+
+        checked = StoredDocumentRecord.model_validate(stored)
+        return DocumentRecord(
+            document_id=checked.document_id,
+            original_filename=checked.original_filename,
+            media_type=checked.media_type,
+            byte_size=checked.byte_size,
+            sha256=checked.sha256,
+            extraction=ExtractionResult.model_validate(checked.extraction),
+            created_at=checked.created_at,
         )

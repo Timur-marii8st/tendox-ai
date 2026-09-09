@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import uuid
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ import httpx
 import pytest
 from alembic import command
 from alembic.config import Config
+from pypdf import PdfWriter
 from sqlalchemy import create_engine, text
 
 from procurement.api import create_app
@@ -74,6 +76,14 @@ def _provision_key(admin_url: str, company_id: str, actor_id: str) -> str:
     finally:
         engine.dispose()
     return secret
+
+
+def _blank_pdf() -> bytes:
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
 
 
 def test_real_api_auth_rls_idempotency_and_atomic_evaluation(
@@ -172,5 +182,34 @@ def test_real_api_auth_rls_idempotency_and_atomic_evaluation(
         assert cross_tenant_latest.json() == missing_latest.json() == {"detail": "not_found"}
         assert len(storage.list_audit_events(company_a, object_id=case_id)) == 1
         assert storage.list_audit_events(company_b, object_id=case_id) == []
+
+        document_headers = {**auth_a, "Idempotency-Key": "document-1"}
+        document_file = {"file": ("scan.pdf", _blank_pdf(), "application/pdf")}
+        uploaded = _request(
+            app,
+            "POST",
+            "/v1/documents",
+            headers=document_headers,
+            files=document_file,
+        )
+        uploaded_replay = _request(
+            app,
+            "POST",
+            "/v1/documents",
+            headers=document_headers,
+            files=document_file,
+        )
+        assert uploaded.status_code == uploaded_replay.status_code == 201
+        assert uploaded.json() == uploaded_replay.json()
+        document_id = uploaded.json()["document_id"]
+        assert uploaded.json()["extraction"]["status"] == "UNKNOWN"
+        assert "content" not in uploaded.json()
+        assert _request(
+            app,
+            "GET",
+            f"/v1/documents/{document_id}",
+            headers=auth_b,
+        ).status_code == 404
+        assert len(storage.list_audit_events(company_a, object_id=document_id)) == 1
     finally:
         engine.dispose()

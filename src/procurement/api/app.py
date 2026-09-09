@@ -2,10 +2,22 @@
 
 import hashlib
 import re
+import uuid
 from datetime import datetime
 from typing import Annotated, Self
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from anyio import to_thread
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -15,10 +27,19 @@ from procurement.api.contracts import (
     Authenticator,
     CasePage,
     CaseService,
+    DocumentRecord,
     EvaluationRecord,
     InvalidCursor,
     Principal,
     VersionConflict,
+)
+from procurement.documents import (
+    MAX_UPLOAD_BYTES,
+    DocumentInput,
+    DocumentRejected,
+    DocumentRejectionCode,
+    ExtractionReason,
+    extract_document,
 )
 from procurement.domain.cases import ProcurementCase, case_input_digest, evaluate_case
 
@@ -75,6 +96,23 @@ def _invalid_credentials() -> HTTPException:
         detail="invalid_credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+async def _read_upload(upload: UploadFile) -> bytes:
+    content = bytearray()
+    while chunk := await upload.read(min(1024 * 1024, MAX_UPLOAD_BYTES + 1 - len(content))):
+        content.extend(chunk)
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="document_too_large",
+            )
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": DocumentRejectionCode.PARSE_FAILED.value},
+        )
+    return bytes(content)
 
 
 def create_app(service: CaseService, authenticator: Authenticator) -> FastAPI:
@@ -176,6 +214,81 @@ def create_app(service: CaseService, authenticator: Authenticator) -> FastAPI:
         if any(case.company_id != principal.company_id for case in page.items):
             raise RuntimeError("storage returned a case for a different tenant")
         return page
+
+    @app.post(
+        "/v1/documents",
+        status_code=status.HTTP_201_CREATED,
+        response_model=DocumentRecord,
+    )
+    async def upload_document(
+        file: Annotated[UploadFile, File()],
+        principal: Annotated[Principal, Depends(current_principal)],
+        idempotency_key: Annotated[str, Depends(_idempotency_key)],
+    ) -> DocumentRecord:
+        filename = file.filename or ""
+        media_type = (file.content_type or "").strip().lower()
+        if (
+            not filename
+            or len(filename) > 255
+            or any(character in filename for character in ("/", "\\", "\x00"))
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": DocumentRejectionCode.FILENAME_INVALID.value},
+            )
+        content = await _read_upload(file)
+        document_id = str(uuid.uuid4())
+        try:
+            extraction = await to_thread.run_sync(
+                extract_document,
+                DocumentInput(
+                    document_id=document_id,
+                    filename=filename,
+                    declared_media_type=media_type,
+                    content=content,
+                ),
+            )
+        except DocumentRejected as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": error.code.value},
+            ) from error
+        if ExtractionReason.UNSUPPORTED_FORMAT in extraction.reasons:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail={"code": ExtractionReason.UNSUPPORTED_FORMAT.value},
+            )
+        content_sha256 = hashlib.sha256(content).hexdigest()
+        try:
+            return await service.store_document(
+                company_id=principal.company_id,
+                actor_id=principal.actor_id,
+                document_id=document_id,
+                original_filename=filename,
+                media_type=media_type,
+                content=content,
+                extraction=extraction,
+                idempotency_key=idempotency_key,
+                request_digest=_request_digest(filename, media_type, content_sha256),
+            )
+        except VersionConflict as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="version_conflict",
+            ) from error
+
+    @app.get("/v1/documents/{document_id}", response_model=DocumentRecord)
+    async def get_document(
+        document_id: Annotated[str, Field(min_length=1)],
+        principal: Annotated[Principal, Depends(current_principal)],
+    ) -> DocumentRecord:
+        document = await service.get_document(
+            company_id=principal.company_id,
+            document_id=document_id,
+        )
+        if document is None:
+            raise _not_found()
+        return document
 
     @app.post(
         "/v1/cases/{case_id}/versions/{version}/evaluations",
