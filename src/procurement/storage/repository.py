@@ -522,6 +522,34 @@ class PostgresStorage:
             ).mappings().one_or_none()
         return None if row is None else EvaluationRecord.model_validate(dict(row))
 
+    def get_latest_evaluation(
+        self,
+        company_id: str,
+        case_id: str,
+        case_version: int,
+    ) -> EvaluationRecord | None:
+        """Load the latest persisted evaluation for one tenant-scoped case version."""
+        tenant = _require_tenant(company_id)
+        if not case_id:
+            raise ValueError("case_id must not be empty")
+        if case_version < 1:
+            raise ValueError("case_version must be positive")
+        statement = (
+            select(evaluations)
+            .where(
+                and_(
+                    evaluations.c.company_id == tenant,
+                    evaluations.c.case_id == case_id,
+                    evaluations.c.case_version == case_version,
+                )
+            )
+            .order_by(evaluations.c.created_at.desc(), evaluations.c.evaluation_id.desc())
+            .limit(1)
+        )
+        with self.transaction(tenant) as connection:
+            row = connection.execute(statement).mappings().one_or_none()
+        return None if row is None else EvaluationRecord.model_validate(dict(row))
+
     def record_evaluation(
         self,
         company_id: str,

@@ -16,7 +16,10 @@ PostgreSQL 16 с RLS, immutable-версии кейсов, bearer identity, audi
 идемпотентность и FastAPI. Профиль, процедура, выбранное КП и три сценария
 связаны с оценкой точного снимка. Недостающий фильтр, истёкшее КП,
 неподтверждённый расход или изменение данных блокируют положительное решение.
-Следующий этап — первый пользовательский экран; live-статус находится в
+Первый пользовательский экран S3 завершён для внутреннего пилота одного tenant:
+список, карточки, provenance, gates, экономика, последняя evaluation, ручной
+JSON-импорт и безопасный серверный пересчёт. Контракт описан в
+[документе S3](docs/18-first-screen.md), live-статус — в
 [плане реализации](docs/15-implementation-plan.md).
 
 - требования и provenance, товары, сертификаты, `PASS | FAIL | UNKNOWN`;
@@ -30,8 +33,8 @@ PostgreSQL 16 с RLS, immutable-версии кейсов, bearer identity, audi
 - каркас цифровых платформ: раздельные поиск поставщика и продажи «с полки»,
   проверки допуска канала с источниками и версией правил.
 
-Это ещё не production-система: нет UI, очередей, production IAM/TLS и коннекторов
-к ЕИС, ЭТП, почте, маркетплейсам, логистике и банкам.
+Это ещё не production-система: нет очередей, production IAM/TLS, пользовательских
+сессий и коннекторов к ЕИС, ЭТП, почте, маркетплейсам, логистике и банкам.
 
 Исходные пробелы описаны в [историческом аудите](docs/13-partner-spec-audit.md).
 S1 закрывает типизированный ручной ввод КП, полноту проверок/расходов и связь
@@ -50,8 +53,8 @@ uv run python -m procurement evaluate examples/paper_case.json --actor demo-oper
 без него проверяется актуальность на текущий момент. Подробности и ограничения —
 [инструкция локального расчёта](docs/16-local-case-workflow.md).
 
-Проверено: 303 unit/API-теста, 12 PostgreSQL integration-тестов, 9 doctests,
-ruff и mypy домена.
+Проверено: 318 тестов с подключённой БД, включая 13 PostgreSQL integration-тестов,
+9 doctests, Ruff, mypy, ESLint и production build Next.js.
 
 ## Локальный сервер S2
 
@@ -78,6 +81,7 @@ uv run uvicorn --factory procurement.api.runtime:create_runtime_app
 | [15-implementation-plan.md](docs/15-implementation-plan.md) | Актуальный порядок работ и live-статус срезов |
 | [16-local-case-workflow.md](docs/16-local-case-workflow.md) | Запуск CLI, формат данных и журнал расчётов |
 | [17-storage-api.md](docs/17-storage-api.md) | PostgreSQL, RLS, bearer auth и FastAPI |
+| [18-first-screen.md](docs/18-first-screen.md) | Первый внутренний экран, server-side BFF и ограничения S3 |
 | [00-vision.md](docs/00-vision.md) | Видение, границы продукта и модель решений |
 | [01-domain-model.md](docs/01-domain-model.md) | Объекты и инварианты домена |
 | [02-architecture.md](docs/02-architecture.md) | Целевая архитектура SaaS + Local Agent |
@@ -103,4 +107,4 @@ PYTHONPATH=src uv run python -m pytest --doctest-modules src/procurement/domain
 ```
 
 С заполненными `DATABASE_URL` и `DATABASE_ADMIN_URL` команда `pytest` также
-выполняет 12 PostgreSQL integration-тестов; без них этот набор явно пропускается.
+выполняет 13 PostgreSQL integration-тестов; без них этот набор явно пропускается.

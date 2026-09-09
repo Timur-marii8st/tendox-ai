@@ -220,4 +220,22 @@ def create_app(service: CaseService, authenticator: Authenticator) -> FastAPI:
                 detail="version_conflict",
             ) from error
 
+    @app.get(
+        "/v1/cases/{case_id}/versions/{version}/evaluations/latest",
+        response_model=EvaluationRecord,
+    )
+    async def get_latest_evaluation(
+        case_id: Annotated[str, Field(min_length=1)],
+        version: Annotated[int, Field(ge=1)],
+        principal: Annotated[Principal, Depends(current_principal)],
+    ) -> EvaluationRecord:
+        evaluation = await service.get_latest_evaluation(
+            company_id=principal.company_id,
+            case_id=case_id,
+            version=version,
+        )
+        if evaluation is None:
+            raise _not_found()
+        return evaluation
+
     return app

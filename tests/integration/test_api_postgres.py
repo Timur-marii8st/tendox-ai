@@ -134,6 +134,9 @@ def test_real_api_auth_rls_idempotency_and_atomic_evaluation(
         assert malformed_cursor.json() == {"detail": "validation_error"}
 
         evaluation_path = f"/v1/cases/{case_id}/versions/1/evaluations"
+        latest_evaluation_path = f"{evaluation_path}/latest"
+        no_evaluation = _request(app, "GET", latest_evaluation_path, headers=auth_a)
+        assert no_evaluation.status_code == 404
         evaluation_headers = {**auth_a, "Idempotency-Key": "evaluate-1"}
         evaluation_body = {"effective_at": "2026-09-08T12:00:00+03:00"}
         evaluated = _request(
@@ -155,6 +158,18 @@ def test_real_api_auth_rls_idempotency_and_atomic_evaluation(
         assert evaluated.json() == evaluated_replay.json()
         evaluation_id = evaluated.json()["evaluation_id"]
         assert evaluated.json()["audit_event_id"] == evaluation_id
+        latest = _request(app, "GET", latest_evaluation_path, headers=auth_a)
+        cross_tenant_latest = _request(app, "GET", latest_evaluation_path, headers=auth_b)
+        missing_latest = _request(
+            app,
+            "GET",
+            "/v1/cases/missing/versions/1/evaluations/latest",
+            headers=auth_b,
+        )
+        assert latest.status_code == 200
+        assert latest.json() == evaluated.json()
+        assert cross_tenant_latest.status_code == missing_latest.status_code == 404
+        assert cross_tenant_latest.json() == missing_latest.json() == {"detail": "not_found"}
         assert len(storage.list_audit_events(company_a, object_id=case_id)) == 1
         assert storage.list_audit_events(company_b, object_id=case_id) == []
     finally:

@@ -84,6 +84,15 @@ class CaseService(Protocol):
 
     async def list_cases(self, *, company_id: str, cursor: str | None, limit: int) -> CasePage: ...
 
+    async def get_latest_evaluation(
+        self,
+        *,
+        company_id: str,
+        case_id: str,
+        version: int,
+    ) -> EvaluationRecord | None:
+        """Return only an already persisted result; absence remains ``None``."""
+
     async def record_evaluation(
         self,
         *,

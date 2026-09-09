@@ -88,6 +88,32 @@ class PostgresCaseService:
             raise InvalidCursor from error
         return CasePage(items=stored.items, next_cursor=stored.next_cursor)
 
+    async def get_latest_evaluation(
+        self,
+        *,
+        company_id: str,
+        case_id: str,
+        version: int,
+    ) -> EvaluationRecord | None:
+        stored = await to_thread.run_sync(
+            partial(
+                self._storage.get_latest_evaluation,
+                company_id,
+                case_id,
+                version,
+            )
+        )
+        if stored is None:
+            return None
+        return EvaluationRecord(
+            evaluation_id=stored.evaluation_id,
+            audit_event_id=stored.evaluation_id,
+            recommendation=stored.recommendation,
+            engine_version=stored.engine_version,
+            input_digest=stored.input_sha256,
+            effective_at=stored.effective_at,
+        )
+
     async def record_evaluation(
         self,
         *,

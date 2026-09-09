@@ -32,6 +32,7 @@ class FakeAuthenticator:
 class FakeCaseService:
     def __init__(self) -> None:
         self.cases: dict[tuple[str, str, int], ProcurementCase] = {}
+        self.evaluations: dict[tuple[str, str, int], EvaluationRecord] = {}
         self.evaluation_calls: list[dict[str, object]] = []
         self.created_with: list[dict[str, object]] = []
 
@@ -65,6 +66,15 @@ class FakeCaseService:
         items = tuple(case for (tenant, _, _), case in self.cases.items() if tenant == company_id)
         return CasePage(items=items[:limit])
 
+    async def get_latest_evaluation(
+        self,
+        *,
+        company_id: str,
+        case_id: str,
+        version: int,
+    ) -> EvaluationRecord | None:
+        return self.evaluations.get((company_id, case_id, version))
+
     async def record_evaluation(
         self,
         *,
@@ -89,7 +99,7 @@ class FakeCaseService:
                 "request_digest": request_digest,
             }
         )
-        return EvaluationRecord(
+        record = EvaluationRecord(
             evaluation_id=f"evaluation-{len(self.evaluation_calls)}",
             audit_event_id=f"audit-{len(self.evaluation_calls)}",
             recommendation=recommendation,
@@ -97,6 +107,8 @@ class FakeCaseService:
             input_digest=input_digest,
             effective_at=effective_at,
         )
+        self.evaluations[(company_id, case_id, version)] = record
+        return record
 
 
 def paper_case_payload() -> dict[str, Any]:
@@ -268,3 +280,63 @@ def test_naive_time_float_and_invalid_idempotency_are_sanitized(app: object) -> 
     )
     assert bad_key.status_code == 422
     assert bad_key.json() == {"detail": "validation_error"}
+
+
+def test_latest_evaluation_returns_only_the_persisted_record(
+    app: object,
+    service: FakeCaseService,
+) -> None:
+    case = ProcurementCase.model_validate(paper_case_payload())
+    service.cases[(case.company_id, case.case_id, case.version)] = case
+    latest_path = f"/v1/cases/{case.case_id}/versions/{case.version}/evaluations/latest"
+
+    absent = request(app, "GET", latest_path, headers=AUTH_A)
+    assert absent.status_code == 404
+    assert absent.json() == {"detail": "not_found"}
+    assert not service.evaluation_calls
+
+    created = request(
+        app,
+        "POST",
+        f"/v1/cases/{case.case_id}/versions/{case.version}/evaluations",
+        headers={**AUTH_A, "Idempotency-Key": "latest-evaluation"},
+        json={"effective_at": "2026-09-08T12:00:00+03:00"},
+    )
+    latest = request(app, "GET", latest_path, headers=AUTH_A)
+
+    assert created.status_code == 201
+    assert latest.status_code == 200
+    assert latest.json() == created.json()
+    assert len(service.evaluation_calls) == 1
+
+
+def test_latest_evaluation_cross_tenant_and_absent_are_identical(
+    app: object,
+    service: FakeCaseService,
+) -> None:
+    created = request(
+        app,
+        "POST",
+        "/v1/cases/other-case/versions/1/evaluations",
+        headers={
+            "Authorization": "Bearer tenant-b-token",
+            "Idempotency-Key": "tenant-b-eval",
+        },
+        json={"effective_at": "2026-09-08T12:00:00+03:00"},
+    )
+    assert created.status_code == 201
+
+    guessed = request(
+        app,
+        "GET",
+        "/v1/cases/other-case/versions/1/evaluations/latest",
+        headers={**AUTH_A, "X-Company-ID": "other-company"},
+    )
+    missing = request(
+        app,
+        "GET",
+        "/v1/cases/not-there/versions/1/evaluations/latest",
+        headers=AUTH_A,
+    )
+    assert guessed.status_code == missing.status_code == 404
+    assert guessed.json() == missing.json() == {"detail": "not_found"}

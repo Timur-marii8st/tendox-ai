@@ -264,6 +264,44 @@ def test_evaluation_audit_and_receipt_are_atomic_and_replayable(
     assert events[0].basis["engine_version"] == "domain-s1-v1"
 
 
+def test_latest_evaluation_is_ordered_and_tenant_scoped(storage: PostgresStorage) -> None:
+    tenant = f"tenant-{uuid.uuid4()}"
+    other = f"tenant-{uuid.uuid4()}"
+    case = _retarget_case(tenant)
+    storage.save_case(tenant, case)
+    digest = case_input_digest(case)
+
+    assert storage.get_latest_evaluation(tenant, case.case_id, case.version) is None
+    first = storage.record_evaluation(
+        tenant,
+        "reviewer",
+        case.case_id,
+        case.version,
+        AT,
+        digest,
+        "engine-v1",
+        evaluate_case(case, at=AT),
+        "latest-first",
+        "5" * 64,
+    )
+    second = storage.record_evaluation(
+        tenant,
+        "reviewer",
+        case.case_id,
+        case.version,
+        AT,
+        digest,
+        "engine-v2",
+        evaluate_case(case, at=AT),
+        "latest-second",
+        "6" * 64,
+    )
+
+    assert first.evaluation_id != second.evaluation_id
+    assert storage.get_latest_evaluation(tenant, case.case_id, case.version) == second
+    assert storage.get_latest_evaluation(other, case.case_id, case.version) is None
+
+
 def test_runtime_connection_has_no_unscoped_api_key_read(database_url: str) -> None:
     engine = create_engine(database_url)
     try:
