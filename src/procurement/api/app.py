@@ -30,6 +30,7 @@ from procurement.api.contracts import (
     DocumentRecord,
     EvaluationRecord,
     InvalidCursor,
+    OcrDerivativeRecord,
     Principal,
     VersionConflict,
 )
@@ -39,8 +40,11 @@ from procurement.documents import (
     DocumentRejected,
     DocumentRejectionCode,
     ExtractionReason,
+    build_ocr_derivative,
     extract_document,
+    ocr_candidates_from_native,
 )
+from procurement.documents.ocr import DEFAULT_OCR_CONFIDENCE_THRESHOLD, OcrEngineInput
 from procurement.domain.cases import ProcurementCase, case_input_digest, evaluate_case
 
 ENGINE_VERSION = "s1"
@@ -68,6 +72,15 @@ class EvaluationRequest(BaseModel):
         if self.effective_at.tzinfo is None or self.effective_at.utcoffset() is None:
             raise ValueError("effective_at must include a timezone")
         return self
+
+
+class OcrRequest(BaseModel):
+    """Request one OCR derivative for an already stored immutable document."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    engine: str = Field(default="local-stub/0.1", min_length=1, max_length=64)
+    threshold: float = Field(default=DEFAULT_OCR_CONFIDENCE_THRESHOLD, ge=0.0, le=1.0)
 
 
 async def _idempotency_key(
@@ -289,6 +302,102 @@ def create_app(service: CaseService, authenticator: Authenticator) -> FastAPI:
         if document is None:
             raise _not_found()
         return document
+
+    @app.post(
+        "/v1/documents/{document_id}/ocr",
+        status_code=status.HTTP_201_CREATED,
+        response_model=OcrDerivativeRecord,
+    )
+    async def create_ocr_derivative(
+        document_id: Annotated[str, Field(min_length=1)],
+        request: OcrRequest,
+        principal: Annotated[Principal, Depends(current_principal)],
+        idempotency_key: Annotated[str, Depends(_idempotency_key)],
+    ) -> OcrDerivativeRecord:
+        document = await service.get_document(
+            company_id=principal.company_id,
+            document_id=document_id,
+        )
+        if document is None:
+            raise _not_found()
+        source = OcrEngineInput(
+            source_document_id=document.document_id,
+            source_sha256=document.sha256,
+            page_count=document.extraction.source_units_total,
+        )
+        candidates = ocr_candidates_from_native(source, document.extraction)
+        try:
+            derivative = build_ocr_derivative(
+                source,
+                document.extraction,
+                candidates,
+                engine=request.engine,
+                threshold=request.threshold,
+            )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="validation_error",
+            ) from error
+        ocr_id = str(uuid.uuid4())
+        try:
+            return await service.store_ocr_derivative(
+                company_id=principal.company_id,
+                actor_id=principal.actor_id,
+                ocr_id=ocr_id,
+                source_document_id=document.document_id,
+                engine=request.engine,
+                threshold=request.threshold,
+                result=derivative,
+                mean_confidence=derivative.mean_confidence,
+                idempotency_key=idempotency_key,
+                request_digest=_request_digest(
+                    document.document_id,
+                    request.engine,
+                    str(request.threshold),
+                    document.sha256,
+                ),
+            )
+        except VersionConflict as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="version_conflict",
+            ) from error
+
+    @app.get(
+        "/v1/documents/{document_id}/ocr/latest",
+        response_model=OcrDerivativeRecord,
+    )
+    async def get_latest_ocr(
+        document_id: Annotated[str, Field(min_length=1)],
+        principal: Annotated[Principal, Depends(current_principal)],
+    ) -> OcrDerivativeRecord:
+        document = await service.get_document(
+            company_id=principal.company_id,
+            document_id=document_id,
+        )
+        if document is None:
+            raise _not_found()
+        derivative = await service.get_latest_ocr_for_document(
+            company_id=principal.company_id,
+            source_document_id=document_id,
+        )
+        if derivative is None:
+            raise _not_found()
+        return derivative
+
+    @app.get("/v1/document-ocr/{ocr_id}", response_model=OcrDerivativeRecord)
+    async def get_ocr_derivative(
+        ocr_id: Annotated[str, Field(min_length=1)],
+        principal: Annotated[Principal, Depends(current_principal)],
+    ) -> OcrDerivativeRecord:
+        derivative = await service.get_ocr_derivative(
+            company_id=principal.company_id,
+            ocr_id=ocr_id,
+        )
+        if derivative is None:
+            raise _not_found()
+        return derivative
 
     @app.post(
         "/v1/cases/{case_id}/versions/{version}/evaluations",

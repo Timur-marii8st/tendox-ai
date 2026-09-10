@@ -1,0 +1,44 @@
+{
+  "extraction": {
+    "status": "UNKNOWN",
+    "blocks": [
+      {
+        "text": "Гарантия не менее 12 мес.",
+        "provenance": {
+          "document_id": "goldenset-tz-003",
+          "locator": "Spec!A1",
+          "extractor": "native_xlsx",
+          "confidence": 1.0
+        }
+      }
+    ],
+    "reasons": [
+      "FORMULAS_IGNORED"
+    ],
+    "source_units_total": 2,
+    "source_units_extracted": 1,
+    "characters_extracted": 25
+  },
+  "mapping": {
+    "requirements": [
+      {
+        "property": "warranty",
+        "operator": ">=",
+        "value": 12,
+        "unit": "мес",
+        "mandatory": true,
+        "weight": 1,
+        "raw_text": "Гарантия не менее 12 мес.",
+        "provenance": {
+          "document_id": "goldenset-tz-003",
+          "locator": "Spec!A1",
+          "extractor": "native_xlsx",
+          "confidence": 1.0
+        }
+      }
+    ],
+    "unmapped": [],
+    "blocks_total": 1,
+    "blocks_mapped": 1
+  }
+}

@@ -13,6 +13,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from procurement.documents import ExtractionResult
+from procurement.documents.ocr import OcrDerivative
 from procurement.domain.cases import ProcurementCase
 from procurement.domain.decisions import Recommendation
 
@@ -65,6 +66,20 @@ class DocumentRecord(BaseModel):
     byte_size: int = Field(ge=1)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     extraction: ExtractionResult
+    created_at: datetime
+
+
+class OcrDerivativeRecord(BaseModel):
+    """Public OCR derivative; source bytes never leave this boundary."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ocr_id: str = Field(min_length=1)
+    source_document_id: str = Field(min_length=1)
+    engine: str = Field(min_length=1)
+    threshold: float = Field(ge=0.0, le=1.0)
+    result: OcrDerivative
+    mean_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     created_at: datetime
 
 
@@ -150,3 +165,35 @@ class CaseService(Protocol):
         document_id: str,
     ) -> DocumentRecord | None:
         """Return only tenant-visible metadata and extraction, never source bytes."""
+
+    async def store_ocr_derivative(
+        self,
+        *,
+        company_id: str,
+        actor_id: str,
+        ocr_id: str,
+        source_document_id: str,
+        engine: str,
+        threshold: float,
+        result: OcrDerivative,
+        mean_confidence: float | None,
+        idempotency_key: str,
+        request_digest: str,
+    ) -> OcrDerivativeRecord:
+        """Persist one immutable OCR derivative, audit fact, and receipt atomically."""
+
+    async def get_ocr_derivative(
+        self,
+        *,
+        company_id: str,
+        ocr_id: str,
+    ) -> OcrDerivativeRecord | None:
+        """Return only a tenant-visible OCR derivative."""
+
+    async def get_latest_ocr_for_document(
+        self,
+        *,
+        company_id: str,
+        source_document_id: str,
+    ) -> OcrDerivativeRecord | None:
+        """Return the latest tenant-visible OCR derivative for one source document."""

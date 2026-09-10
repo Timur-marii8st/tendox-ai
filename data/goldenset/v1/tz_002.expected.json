@@ -1,0 +1,18 @@
+{
+  "extraction": {
+    "status": "UNKNOWN",
+    "blocks": [],
+    "reasons": [
+      "OCR_REQUIRED"
+    ],
+    "source_units_total": 1,
+    "source_units_extracted": 0,
+    "characters_extracted": 0
+  },
+  "mapping": {
+    "requirements": [],
+    "unmapped": [],
+    "blocks_total": 0,
+    "blocks_mapped": 0
+  }
+}

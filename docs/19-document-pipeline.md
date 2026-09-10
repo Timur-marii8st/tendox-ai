@@ -102,7 +102,75 @@ approval.
 пустой PDF возвращает `UNKNOWN/OCR_REQUIRED`; архивные лимиты и macro/external
 link policy срабатывают до разбора; ни один parser не выполняет формулы или код.
 
-Нужно отдельно добавить OCR, проверку антивирусом/санитизацию, полнотекстовый и
+Нужно отдельно добавить проверку антивирусом/санитизацию, полнотекстовый и
 семантический индекс, извлечение таблиц с более точной геометрией, юридический
 модуль и источники ЕИС/ЭТП. До их реализации отсутствие извлечённого факта
 остаётся `UNKNOWN`.
+
+## OCR-производная версия (второй срез S4, 2026-09-09)
+
+Оригинал не мутирует: OCR создаёт отдельную immutable-запись
+`document_ocr_derivatives` с FK на `(company_id, source_document_id)`,
+собственным `ocr_id`, `engine`, `threshold`, типизированным `result`
+(`OcrDerivative`), `mean_confidence` и `created_at`. RLS/FORCE RLS,
+append-only trigger, `GRANT SELECT, INSERT` и атомарная связка
+запись + `document.ocr_stored` + idempotency receipt повторяют контракт
+таблицы `documents` (миграция `20260909_02`).
+
+API: `POST /v1/documents/{id}/ocr` (body `engine`, `threshold` по умолчанию
+`0.75`; обязательный `Idempotency-Key`; digest связывает
+`document_id/engine/threshold/source_sha256`), `GET
+/v1/documents/{id}/ocr/latest`, `GET /v1/document-ocr/{ocr_id}`. Байты наружу
+не отдаются; чужой tenant и отсутствующий id одинаково дают `404`; повтор
+ключа с тем же digest — тот же `201`, с другим — `409`.
+
+Домен (`procurement.documents.ocr`): кандидаты с `confidence < threshold`
+и пробельный текст отбрасываются и в факты не повышаются; пустой итог —
+`UNKNOWN/OCR_REQUIRED` с `mean_confidence 0.0`; прошедшие блоки несут
+`Provenance(extractor=ocr, confidence=кандидата)` с locator страницы/блока.
+Пилотный engine `local-stub/0.1` честно возвращает пустой итог через
+`ocr_candidates_from_native`; точка расширения для локального движка
+сохранена, сетевые OCR-сервисы запрещены теми же границами, что и весь
+конвейер.
+
+## Маппинг блоков в строгие факты и золотой набор v0 (третий срез S4, 2026-09-10)
+
+Детерминированный маппер `procurement.documents.facts.map_blocks_to_requirements`
+переводит `ExtractedBlock` в доменные `Requirement` (домен уже типизирован:
+`Requirement/Attribute/Certificate/LineItem + Provenance`). Правила среза —
+только `warranty` (гарантия, годы нормализуются в месяцы) и `ethernet_ports`
+(порты), оба `mandatory=True`, `operator=GE`, provenance блока без изменений.
+Блок с `confidence < 0.75` уходит в `unmapped` с `LOW_CONFIDENCE`, распознанный,
+но непокрытый правилами текст — с `NO_PATTERN_MATCH`; ничто непокрытое в факты
+не повышается. Результат — `FactMappingResult` (requirements, unmapped,
+blocks_total, blocks_mapped).
+
+Золотой набор `data/goldenset/v1/tz_001.{docx,expected.json}`: DOCX из трёх
+абзацев → 2 требования с точным provenance + 1 честный unmapped; тест
+`tests/test_goldenset_v1.py` сверяет маппинг с эталоном и запрещает ложный
+PASS (каждое требование обязано нести provenance с confidence не ниже порога).
+Расширение набора (скан-PDF, XLSX с формулами, КП-ловушки, сертификаты) и
+мониторинг источника — следующие срезы; S4 ещё не завершён.
+
+Золотой набор v1 (2026-09-10) добавляет негативные пути: `tz_002.pdf`
+(пустой скан → `UNKNOWN/OCR_REQUIRED`, блоков нет, маппинг пуст — без синтеза)
+и `tz_003.xlsx` (лист `Spec`: литерал `Spec!A1` маппится в `warranty >= 12`,
+формула `=1+1` исключена, статус `UNKNOWN/FORMULAS_IGNORED`). Набор синтетический
+и версионируется (`data/goldenset/`, исключение в `.gitignore`); эталоны
+проверены вручную поле за полем, `Decimal` в эталонах — числами.
+
+Правила R1–R4 (2026-09-10): запрет эквивалента → `equivalent_allowed=False`
+(отсутствие фразы — `None`, `True` не ставится никогда); якорная дата
+поставки `DD.MM.YYYY` → `delivery_deadline` (невалидная дата и относительные
+сроки — честный unmapped); ключевые числовые `depth`/`data_rate`/`power`
+с сырой единицей из ТЗ; страна происхождения только EQ
+(`NE` отложен — нужен словарь прилагательное→страна). Связка `tests/test_tz001_e2e.py`: факты tz_001 → `compliance.evaluate` —
+`COMPLIANT`, `FAIL` по гарантии/сертификату/эквиваленту,
+`NEEDS_CLARIFICATION` при пропуске и низкой уверенности; `%` при `FAIL`
+не показывается.
+
+Золотой набор v2 (2026-09-10): `tz_004` (запрет эквивалента + якорная дата,
+флаги без требований) и `tz_005` (`depth`/`power`/`country EQ` как файлы).
+Словарь стран (12 форм → 6 стран, нормализация ё, неизвестное — в unmapped)
+закрывает `country NE`; R2 терпит двоеточие/тире после якоря
+(«Срок поставки: до ...»).

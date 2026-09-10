@@ -1,0 +1,48 @@
+{
+  "requirements": [
+    {
+      "property": "warranty",
+      "operator": ">=",
+      "value": 24,
+      "unit": "мес",
+      "mandatory": true,
+      "weight": 1,
+      "raw_text": "Гарантия не менее 24 мес.",
+      "provenance": {
+        "document_id": "goldenset-tz-001",
+        "locator": "paragraph 1",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      }
+    },
+    {
+      "property": "ethernet_ports",
+      "operator": ">=",
+      "value": 24,
+      "unit": "шт",
+      "mandatory": true,
+      "weight": 1,
+      "raw_text": "Количество портов не менее 24 шт.",
+      "provenance": {
+        "document_id": "goldenset-tz-001",
+        "locator": "paragraph 2",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      }
+    }
+  ],
+  "unmapped": [
+    {
+      "text": "Поставка осуществляется в течение 30 дней с момента подписания контракта.",
+      "provenance": {
+        "document_id": "goldenset-tz-001",
+        "locator": "paragraph 3",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      },
+      "reason": "NO_PATTERN_MATCH"
+    }
+  ],
+  "blocks_total": 3,
+  "blocks_mapped": 2
+}

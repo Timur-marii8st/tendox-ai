@@ -85,7 +85,7 @@ Edge через реальный BFF → FastAPI → PostgreSQL workflow.
 
 ## S4 — документы и разрешённый мониторинг
 
-Статус: **в работе; первый document-pipeline slice завершён 2026-09-09**.
+Статус: **в работе; три среза завершены 2026-09-10 (pipeline, OCR-версии, факты+v0)**.
 
 Immutable snapshots, native parsing/OCR, извлечение в строгую схему, полнота ТЗ,
 золотой набор. Затем один согласованный источник с checkpoint, rate limit,
@@ -103,6 +103,37 @@ trigger, конкурентный replay и полный HTTP → PostgreSQL п�
 Следующий ограниченный срез S4: OCR как отдельная производная версия с confidence,
 затем строгая схема фактов и золотой набор. Мониторинг источника начинается после
 устойчивого document pipeline; S4 ещё не завершён.
+
+Второй срез S4 завершён 2026-09-09: immutable OCR-производные версии
+(`document_ocr_derivatives`, миграция `20260909_02`) с FK на исходник, RLS,
+append-only trigger, audit `document.ocr_stored` и idempotency; домен
+`procurement.documents.ocr` с порогом `0.75` и provenance `extractor=ocr`;
+API `POST /v1/documents/{id}/ocr`, `GET .../ocr/latest`,
+`GET /v1/document-ocr/{ocr_id}`. Пилотный engine честно возвращает
+`UNKNOWN/OCR_REQUIRED` без синтеза фактов. Проверки: 333 unit/API-теста
+(12 доменных OCR + 5 API OCR), doctests, ruff и mypy домена проходят;
+Alembic имеет единственный head `20260909_02`; PostgreSQL integration-тесты
+требуют `DATABASE_URL` и в этой среде пропускаются.
+
+Третий срез S4 завершён 2026-09-10: детерминированный маппер блоков в строгие
+факты (`procurement.documents.facts`, правила `warranty`/`ethernet_ports`,
+порог `0.75`, непокрытое — честный `unmapped` без синтеза) и золотой набор v0
+(`data/goldenset/v1/tz_001.docx` + ручной эталон `tz_001.expected.json`,
+тест `tests/test_goldenset_v1.py` запрещает ложный PASS). Проверки: 344
+unit/API-теста (9 маппера + 2 golden), doctests, ruff и mypy проходят; миграций
+не требовалось, head прежний. Золотой набор v1 (2026-09-10): негативные пути
+`tz_002` (скан → `UNKNOWN/OCR_REQUIRED`, пустой маппинг) и `tz_003` (XLSX:
+литерал `Spec!A1` → `warranty >= 12`, формула исключена,
+`UNKNOWN/FORMULAS_IGNORED`); набор версионируется через исключение
+`!/data/goldenset/` в `.gitignore`. Проверки: 346 unit/API-тестов. Четвёртый срез
+S4 (2026-09-10): правила R1–R4 и e2e `факты tz_001 → evaluate`
+(`tests/test_tz001_e2e.py`, 6 вердиктов, флаг эквивалента всегда явно).
+Проверки: 363 unit/API-теста, ruff и mypy проходят. Пятый срез S4 (2026-09-10):
+словарь стран + `country NE` (неизвестное — в unmapped), R2 терпит двоеточие,
+золотой набор v2 (`tz_004` бан+дата, `tz_005` числовые+страна как файлы).
+Проверки: 372 unit/API-теста, ruff и mypy проходят. Остаток S4: расширение золотого набора
+(сканы, XLSX с формулами, КП-ловушки, сертификаты) и только потом мониторинг
+источника; S4 ещё не завершён.
 
 ## S5 — поставщики, логистика и финансовый график
 

@@ -12,16 +12,19 @@ from procurement.api.contracts import (
     DocumentRecord,
     EvaluationRecord,
     InvalidCursor,
+    OcrDerivativeRecord,
     Principal,
     VersionConflict,
 )
 from procurement.documents import ExtractionResult
+from procurement.documents.ocr import OcrDerivative
 from procurement.domain.cases import ProcurementCase
 from procurement.domain.decisions import Recommendation
 from procurement.storage import (
     CaseVersionConflict,
     DocumentConflict,
     IdempotencyConflict,
+    OcrDerivativeConflict,
     PostgresStorage,
 )
 
@@ -211,5 +214,76 @@ class PostgresCaseService:
             byte_size=checked.byte_size,
             sha256=checked.sha256,
             extraction=ExtractionResult.model_validate(checked.extraction),
+            created_at=checked.created_at,
+        )
+
+    async def store_ocr_derivative(
+        self,
+        *,
+        company_id: str,
+        actor_id: str,
+        ocr_id: str,
+        source_document_id: str,
+        engine: str,
+        threshold: float,
+        result: OcrDerivative,
+        mean_confidence: float | None,
+        idempotency_key: str,
+        request_digest: str,
+    ) -> OcrDerivativeRecord:
+        operation = partial(
+            self._storage.store_ocr_derivative,
+            company_id,
+            actor_id,
+            source_document_id,
+            engine=engine,
+            threshold=threshold,
+            status=result.status.value,
+            result=result.model_dump(mode="json"),
+            mean_confidence=mean_confidence,
+            idempotency_key=idempotency_key,
+            request_sha256=request_digest,
+            ocr_id=ocr_id,
+        )
+        try:
+            stored = await to_thread.run_sync(operation)
+        except (OcrDerivativeConflict, IdempotencyConflict) as error:
+            raise VersionConflict from error
+        return self._ocr_record(stored)
+
+    async def get_ocr_derivative(
+        self,
+        *,
+        company_id: str,
+        ocr_id: str,
+    ) -> OcrDerivativeRecord | None:
+        stored = await to_thread.run_sync(
+            partial(self._storage.get_ocr_derivative, company_id, ocr_id)
+        )
+        return None if stored is None else self._ocr_record(stored)
+
+    async def get_latest_ocr_for_document(
+        self,
+        *,
+        company_id: str,
+        source_document_id: str,
+    ) -> OcrDerivativeRecord | None:
+        stored = await to_thread.run_sync(
+            partial(self._storage.get_latest_ocr_for_document, company_id, source_document_id)
+        )
+        return None if stored is None else self._ocr_record(stored)
+
+    @staticmethod
+    def _ocr_record(stored: object) -> OcrDerivativeRecord:
+        from procurement.storage import OcrDerivativeRecord as StoredOcrRecord
+
+        checked = StoredOcrRecord.model_validate(stored)
+        return OcrDerivativeRecord(
+            ocr_id=checked.ocr_id,
+            source_document_id=checked.source_document_id,
+            engine=checked.engine,
+            threshold=checked.threshold,
+            result=OcrDerivative.model_validate(checked.result),
+            mean_confidence=checked.mean_confidence,
             created_at=checked.created_at,
         )

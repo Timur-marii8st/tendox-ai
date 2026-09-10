@@ -25,6 +25,7 @@ from procurement.storage.models import (
     api_keys,
     audit_events,
     case_versions,
+    document_ocr_derivatives,
     documents,
     evaluations,
     write_receipts,
@@ -41,6 +42,10 @@ class CaseVersionConflict(StorageError):
 
 class DocumentConflict(StorageError):
     """The tenant already has an immutable document with this identity."""
+
+
+class OcrDerivativeConflict(StorageError):
+    """The tenant already has an immutable OCR derivative with this identity."""
 
 
 class AuditEventConflict(StorageError):
@@ -189,6 +194,43 @@ class DocumentRecord(BaseModel):
         if hashlib.sha256(self.content).hexdigest() != self.sha256:
             raise ValueError("sha256 does not match document content")
         return self
+
+
+class OcrDerivativeRecord(BaseModel):
+    """Immutable OCR derivative of one exact source document version."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    company_id: str = Field(min_length=1)
+    ocr_id: str = Field(min_length=1)
+    source_document_id: str = Field(min_length=1)
+    engine: str = Field(min_length=1)
+    threshold: float = Field(ge=0.0, le=1.0)
+    status: str = Field(min_length=1)
+    result: dict[str, Any]
+    mean_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    created_at: datetime
+
+    @field_validator("company_id", "ocr_id", "source_document_id", "engine")
+    @classmethod
+    def _text_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("ocr text fields must not be blank")
+        return value
+
+    @field_validator("created_at")
+    @classmethod
+    def _created_at_is_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("created_at must include a timezone")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def _status_is_allowed(cls, value: str) -> str:
+        if value not in ("PASS", "FAIL", "UNKNOWN"):
+            raise ValueError("ocr status must be PASS, FAIL, or UNKNOWN")
+        return value
 
 
 class CasePage(BaseModel):
@@ -566,6 +608,204 @@ class PostgresStorage:
                 )
             ).mappings().one_or_none()
         return None if row is None else DocumentRecord.model_validate(dict(row))
+
+    @staticmethod
+    def _ocr_record(row: Any) -> OcrDerivativeRecord:
+        payload = dict(row)
+        threshold = payload.get("threshold")
+        if threshold is not None:
+            payload["threshold"] = float(threshold)
+        confidence = payload.get("mean_confidence")
+        if confidence is not None:
+            payload["mean_confidence"] = float(confidence)
+        return OcrDerivativeRecord.model_validate(payload)
+
+    def store_ocr_derivative(
+        self,
+        company_id: str,
+        actor_id: str,
+        source_document_id: str,
+        *,
+        engine: str,
+        threshold: float,
+        status: str,
+        result: dict[str, Any],
+        mean_confidence: float | None,
+        idempotency_key: str,
+        request_sha256: str,
+        ocr_id: str | None = None,
+    ) -> OcrDerivativeRecord:
+        """Atomically store one immutable OCR derivative, audit fact, and receipt."""
+        from procurement.documents.ocr import OcrDerivative
+
+        tenant = _require_tenant(company_id)
+        if not actor_id.strip():
+            raise ValueError("actor_id must not be empty")
+        if not source_document_id.strip():
+            raise ValueError("source_document_id must not be empty")
+        if not engine.strip():
+            raise ValueError("engine must not be empty")
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("threshold must be within [0, 1]")
+        if status not in ("PASS", "FAIL", "UNKNOWN"):
+            raise ValueError("ocr status must be PASS, FAIL, or UNKNOWN")
+        if not isinstance(result, dict):
+            raise ValueError("ocr result must be a JSON object")
+        if mean_confidence is not None and not 0.0 <= mean_confidence <= 1.0:
+            raise ValueError("mean_confidence must be within [0, 1]")
+        _require_sha256(request_sha256, field="request_sha256")
+        try:
+            checked_result = OcrDerivative.model_validate(result)
+            normalized_result = checked_result.model_dump(mode="json")
+        except (TypeError, ValueError) as error:
+            raise ValueError("ocr result must match the typed OCR derivative schema") from error
+        if checked_result.status.value != status:
+            raise ValueError("ocr status does not match the typed OCR derivative")
+        chosen_id = ocr_id or str(uuid.uuid4())
+        if not chosen_id.strip():
+            raise ValueError("ocr_id must not be empty")
+        created_at = datetime.now(UTC)
+        result_sha256 = hashlib.sha256(
+            json.dumps(
+                normalized_result,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        try:
+            with self.transaction(tenant) as connection:
+                self._lock_idempotency(
+                    connection, tenant, "store_ocr_derivative", idempotency_key
+                )
+                replay = self._existing_receipt(
+                    connection, tenant, "store_ocr_derivative", idempotency_key, request_sha256
+                )
+                if replay is not None:
+                    replay_id = replay.get("ocr_id")
+                    row = connection.execute(
+                        select(document_ocr_derivatives).where(
+                            and_(
+                                document_ocr_derivatives.c.company_id == tenant,
+                                document_ocr_derivatives.c.ocr_id == replay_id,
+                            )
+                        )
+                    ).mappings().one_or_none()
+                    if row is None:
+                        raise StorageError(
+                            "stored ocr receipt points to a missing record"
+                        )
+                    return self._ocr_record(row)
+                parent = connection.execute(
+                    select(documents.c.document_id).where(
+                        and_(
+                            documents.c.company_id == tenant,
+                            documents.c.document_id == source_document_id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if parent is None:
+                    raise StorageError("source document does not exist in the tenant")
+                row = (
+                    connection.execute(
+                        insert(document_ocr_derivatives)
+                        .values(
+                            company_id=tenant,
+                            ocr_id=chosen_id,
+                            source_document_id=source_document_id,
+                            engine=engine,
+                            threshold=threshold,
+                            status=status,
+                            result=normalized_result,
+                            mean_confidence=mean_confidence,
+                            created_at=created_at,
+                        )
+                        .returning(document_ocr_derivatives)
+                    )
+                    .mappings()
+                    .one()
+                )
+                event = AuditEventRecord(
+                    event_id=str(uuid.uuid4()),
+                    company_id=tenant,
+                    actor_id=actor_id,
+                    event_type="document.ocr_stored",
+                    object_type="source_document",
+                    object_id=source_document_id,
+                    basis={
+                        "ocr_id": chosen_id,
+                        "source_document_id": source_document_id,
+                        "engine": engine,
+                        "threshold": threshold,
+                        "status": status,
+                        "result_sha256": result_sha256,
+                        "mean_confidence": mean_confidence,
+                    },
+                    occurred_at=created_at,
+                )
+                connection.execute(
+                    insert(audit_events).values(**event.model_dump(mode="python"))
+                )
+                self._insert_receipt(
+                    connection,
+                    tenant=tenant,
+                    operation="store_ocr_derivative",
+                    idempotency_key=idempotency_key,
+                    request_sha256=request_sha256,
+                    response={"ocr_id": chosen_id},
+                )
+        except Exception as error:
+            if getattr(getattr(error, "orig", None), "sqlstate", None) == "23505":
+                raise OcrDerivativeConflict(
+                    f"ocr derivative {chosen_id!r} already exists for tenant"
+                ) from error
+            raise
+        return self._ocr_record(dict(row))
+
+    def get_ocr_derivative(self, company_id: str, ocr_id: str) -> OcrDerivativeRecord | None:
+        """Load one visible immutable OCR derivative by its identity."""
+        tenant = _require_tenant(company_id)
+        if not ocr_id:
+            raise ValueError("ocr_id must not be empty")
+        with self.transaction(tenant) as connection:
+            row = connection.execute(
+                select(document_ocr_derivatives).where(
+                    and_(
+                        document_ocr_derivatives.c.company_id == tenant,
+                        document_ocr_derivatives.c.ocr_id == ocr_id,
+                    )
+                )
+            ).mappings().one_or_none()
+        return None if row is None else self._ocr_record(row)
+
+    def get_latest_ocr_for_document(
+        self, company_id: str, source_document_id: str
+    ) -> OcrDerivativeRecord | None:
+        """Load the latest visible OCR derivative for one source document."""
+        tenant = _require_tenant(company_id)
+        if not source_document_id:
+            raise ValueError("source_document_id must not be empty")
+        with self.transaction(tenant) as connection:
+            row = (
+                connection.execute(
+                    select(document_ocr_derivatives)
+                    .where(
+                        and_(
+                            document_ocr_derivatives.c.company_id == tenant,
+                            document_ocr_derivatives.c.source_document_id
+                            == source_document_id,
+                        )
+                    )
+                    .order_by(
+                        document_ocr_derivatives.c.created_at.desc(),
+                        document_ocr_derivatives.c.ocr_id.desc(),
+                    )
+                    .limit(1)
+                )
+                .mappings()
+                .one_or_none()
+            )
+        return None if row is None else self._ocr_record(row)
 
     def get_case(
         self,

@@ -13,7 +13,9 @@ build/
 *.egg-info/
 node_modules/
 .DS_Store
-/data/
+/data/*
+!/data/goldenset/
+# Золотой набор S4 синтетический и версионируется; остальное в data/ — локальные артефакты
 /postgres-data/
 /tmp/
 # Никогда не коммитим клиентские ТЗ, КП и сертификаты

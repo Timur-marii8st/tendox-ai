@@ -1,0 +1,51 @@
+{
+  "requirements": [
+    {
+      "property": "depth",
+      "operator": "<=",
+      "value": 400,
+      "unit": "мм",
+      "mandatory": true,
+      "weight": 1,
+      "raw_text": "Глубина не более 400 мм.",
+      "provenance": {
+        "document_id": "goldenset-tz-005",
+        "locator": "paragraph 1",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      }
+    },
+    {
+      "property": "power",
+      "operator": ">=",
+      "value": 1.5,
+      "unit": "кВт",
+      "mandatory": true,
+      "weight": 1,
+      "raw_text": "Мощность не менее 1,5 кВт.",
+      "provenance": {
+        "document_id": "goldenset-tz-005",
+        "locator": "paragraph 2",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      }
+    },
+    {
+      "property": "country_of_origin",
+      "operator": "==",
+      "value": "Россия",
+      "mandatory": true,
+      "weight": 1,
+      "raw_text": "Страна происхождения: Россия.",
+      "provenance": {
+        "document_id": "goldenset-tz-005",
+        "locator": "paragraph 3",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      }
+    }
+  ],
+  "unmapped": [],
+  "blocks_total": 3,
+  "blocks_mapped": 3
+}

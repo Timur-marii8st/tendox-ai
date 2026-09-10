@@ -7,11 +7,13 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    Float,
     ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
     MetaData,
+    Numeric,
     PrimaryKeyConstraint,
     String,
     Table,
@@ -98,6 +100,55 @@ Index(
     "ix_documents_company_sha256",
     documents.c.company_id,
     documents.c.sha256,
+)
+
+document_ocr_derivatives = Table(
+    "document_ocr_derivatives",
+    metadata,
+    Column("company_id", Text, nullable=False),
+    Column("ocr_id", Text, nullable=False),
+    Column("source_document_id", Text, nullable=False),
+    Column("engine", Text, nullable=False),
+    Column("threshold", Numeric(3, 2), nullable=False),
+    Column("status", Text, nullable=False),
+    Column("result", JSONB, nullable=False),
+    Column("mean_confidence", Float, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    PrimaryKeyConstraint("company_id", "ocr_id", name="pk_document_ocr_derivatives"),
+    ForeignKeyConstraint(
+        ["company_id", "source_document_id"],
+        ["documents.company_id", "documents.document_id"],
+        name="fk_ocr_derivatives_source_document",
+    ),
+    CheckConstraint("company_id <> ''", name="ck_ocr_company_id_nonempty"),
+    CheckConstraint("ocr_id <> ''", name="ck_ocr_ocr_id_nonempty"),
+    CheckConstraint("source_document_id <> ''", name="ck_ocr_source_document_id_nonempty"),
+    CheckConstraint("engine <> ''", name="ck_ocr_engine_nonempty"),
+    CheckConstraint("threshold BETWEEN 0 AND 1", name="ck_ocr_threshold_range"),
+    CheckConstraint(
+        "status IN ('PASS', 'FAIL', 'UNKNOWN')",
+        name="ck_ocr_status_allowed",
+    ),
+    CheckConstraint(
+        "jsonb_typeof(result) = 'object'",
+        name="ck_ocr_result_object",
+    ),
+    CheckConstraint(
+        "mean_confidence IS NULL OR (mean_confidence BETWEEN 0 AND 1)",
+        name="ck_ocr_mean_confidence_range",
+    ),
+)
+Index(
+    "ix_ocr_company_source_created",
+    document_ocr_derivatives.c.company_id,
+    document_ocr_derivatives.c.source_document_id,
+    document_ocr_derivatives.c.created_at,
+    document_ocr_derivatives.c.ocr_id,
+)
+Index(
+    "ix_ocr_company_created",
+    document_ocr_derivatives.c.company_id,
+    document_ocr_derivatives.c.created_at,
 )
 
 audit_events = Table(
