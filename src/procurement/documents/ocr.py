@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,6 +21,31 @@ from procurement.domain.provenance import Extractor, Provenance
 
 DEFAULT_OCR_CONFIDENCE_THRESHOLD = 0.75
 """Порог уверенности OCR: слабые распознавания фактами не становятся."""
+
+MAX_OCR_PAGES = 200
+"""Отдельный CPU-лимит OCR; нативный парсер допускает более крупные PDF."""
+
+
+class OcrEngineError(RuntimeError):
+    """Локальный OCR-движок не смог выдать проверяемый типизированный результат."""
+
+
+class OcrSourceRejected(ValueError):
+    """Исходник нельзя безопасно передать настроенному OCR-движку."""
+
+
+class OcrRunner(Protocol):
+    """Локальная синхронная граница OCR; API запускает её вне event loop."""
+
+    engine: str
+
+    def recognize(
+        self,
+        source: OcrEngineInput,
+        *,
+        content: bytes,
+        media_type: str,
+    ) -> tuple[OcrCandidate, ...]: ...
 
 
 class OcrEngineInput(BaseModel):
@@ -43,6 +68,22 @@ class OcrCandidate(BaseModel):
     text: str = Field(min_length=1)
     confidence: float = Field(ge=0.0, le=1.0)
     locator: str = Field(min_length=1)
+
+
+class NoopOcrRunner:
+    """Детерминированный runner для тестов API без тяжёлого optional runtime."""
+
+    engine = "local-stub/0.1"
+
+    def recognize(
+        self,
+        source: OcrEngineInput,
+        *,
+        content: bytes,
+        media_type: str,
+    ) -> tuple[OcrCandidate, ...]:
+        _ = (source, content, media_type)
+        return ()
 
 
 class OcrDerivative(BaseModel):

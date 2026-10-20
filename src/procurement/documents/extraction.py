@@ -42,7 +42,11 @@ class ExtractionReason(StrEnum):
     OCR_REQUIRED = "OCR_REQUIRED"
     UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
     EXTERNAL_LINKS_IGNORED = "EXTERNAL_LINKS_IGNORED"
+    EMBEDDED_MEDIA_IGNORED = "EMBEDDED_MEDIA_IGNORED"
     FORMULAS_IGNORED = "FORMULAS_IGNORED"
+    UNSUPPORTED_SOURCE_UNITS = "UNSUPPORTED_SOURCE_UNITS"
+    LAYOUT_NOT_VERIFIED = "LAYOUT_NOT_VERIFIED"
+    CONVERTER_UNAVAILABLE = "CONVERTER_UNAVAILABLE"
 
 
 class DocumentRejectionCode(StrEnum):
@@ -60,6 +64,9 @@ class DocumentRejectionCode(StrEnum):
     SOURCE_UNIT_LIMIT = "SOURCE_UNIT_LIMIT"
     EXTRACTED_TEXT_LIMIT = "EXTRACTED_TEXT_LIMIT"
     PARSE_FAILED = "PARSE_FAILED"
+    UNSUPPORTED_BIFF_VERSION = "UNSUPPORTED_BIFF_VERSION"
+    UNSUPPORTED_DOC_VERSION = "UNSUPPORTED_DOC_VERSION"
+    CONVERTER_RESOURCE_LIMIT = "CONVERTER_RESOURCE_LIMIT"
 
 
 class DocumentRejected(ValueError):
@@ -152,12 +159,15 @@ class _DocumentKind(StrEnum):
     PDF = "pdf"
     DOCX = "docx"
     XLSX = "xlsx"
+    XLS = "xls"
+    DOC = "doc"
 
 
 @dataclass(frozen=True)
 class _ZipInspection:
     names: frozenset[str]
     has_external_links: bool
+    has_embedded_media: bool
     has_formulas: bool
 
 
@@ -169,11 +179,15 @@ _MEDIA_TYPES: dict[_DocumentKind, frozenset[str]] = {
     _DocumentKind.XLSX: frozenset(
         {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
     ),
+    _DocumentKind.XLS: frozenset({"application/vnd.ms-excel"}),
+    _DocumentKind.DOC: frozenset({"application/msword"}),
 }
 _EXTENSIONS: dict[str, _DocumentKind] = {
     ".pdf": _DocumentKind.PDF,
     ".docx": _DocumentKind.DOCX,
     ".xlsx": _DocumentKind.XLSX,
+    ".xls": _DocumentKind.XLS,
+    ".doc": _DocumentKind.DOC,
 }
 _MACRO_EXTENSIONS = frozenset({".docm", ".xlsm", ".xltm"})
 _ZIP_MAGIC = b"PK\x03\x04"
@@ -205,6 +219,14 @@ def extract_document(
         return _unknown_unsupported()
     if kind is _DocumentKind.PDF:
         return _extract_pdf(document, active_limits)
+    if kind is _DocumentKind.XLS:
+        from procurement.documents.legacy_xls import extract_legacy_xls
+
+        return extract_legacy_xls(document, active_limits)
+    if kind is _DocumentKind.DOC:
+        from procurement.documents.legacy_doc import extract_legacy_doc
+
+        return extract_legacy_doc(document, active_limits)
 
     inspection = _inspect_zip(document.content, kind, active_limits)
     if kind is _DocumentKind.DOCX:
@@ -228,6 +250,10 @@ def _classify(document: DocumentInput) -> _DocumentKind | None:
     if document.declared_media_type.strip().lower() not in _MEDIA_TYPES[kind]:
         raise DocumentRejected(DocumentRejectionCode.MEDIA_TYPE_MISMATCH)
     if kind is _DocumentKind.PDF and not document.content.startswith(_PDF_MAGIC):
+        raise DocumentRejected(DocumentRejectionCode.MAGIC_MISMATCH)
+    if kind in (_DocumentKind.XLS, _DocumentKind.DOC) and not document.content.startswith(
+        b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+    ):
         raise DocumentRejected(DocumentRejectionCode.MAGIC_MISMATCH)
     if kind in (_DocumentKind.DOCX, _DocumentKind.XLSX) and not document.content.startswith(
         _ZIP_MAGIC
@@ -260,6 +286,9 @@ def _inspect_zip(content: bytes, kind: _DocumentKind, limits: ExtractionLimits) 
                 for name in names
                 if name.startswith("word/_rels/") and name.endswith(".rels")
             )
+            has_embedded_media = kind is _DocumentKind.DOCX and any(
+                name.startswith("word/media/") and not name.endswith("/") for name in names
+            )
             has_formulas = False
             if kind is _DocumentKind.XLSX:
                 has_formulas = any(
@@ -270,6 +299,7 @@ def _inspect_zip(content: bytes, kind: _DocumentKind, limits: ExtractionLimits) 
             return _ZipInspection(
                 names=names,
                 has_external_links=has_external_links,
+                has_embedded_media=has_embedded_media,
                 has_formulas=has_formulas,
             )
     except DocumentRejected:
@@ -324,6 +354,7 @@ def _extract_docx(
 ) -> ExtractionResult:
     try:
         from docx import Document
+        from docx.table import Table, _Cell
 
         parsed = Document(BytesIO(document.content))
         units: list[tuple[str, str]] = []
@@ -331,15 +362,36 @@ def _extract_docx(
             (f"paragraph {number}", paragraph.text)
             for number, paragraph in enumerate(parsed.paragraphs, start=1)
         )
-        seen_cells: set[int] = set()
-        for table_number, table in enumerate(parsed.tables, start=1):
+        # Retain the XML cell objects themselves. Keeping only ``id(_tc)`` lets
+        # CPython reuse an address after a transient wrapper is collected and
+        # can therefore skip an unrelated later cell nondeterministically.
+        seen_cells: set[object] = set()
+
+        def table_cells(table: Table, prefix: str) -> Iterable[tuple[str, _Cell]]:
             for row_number, row in enumerate(table.rows, start=1):
                 for cell_number, cell in enumerate(row.cells, start=1):
-                    if id(cell._tc) in seen_cells:
-                        continue
-                    seen_cells.add(id(cell._tc))
-                    units.append(
-                        (f"table {table_number} row {row_number} cell {cell_number}", cell.text)
+                    yield f"{prefix} row {row_number} cell {cell_number}", cell
+
+        for table_number, table in enumerate(parsed.tables, start=1):
+            # ``Document.tables`` only includes top-level tables. A cell can
+            # contain further tables, and ``cell.text`` excludes their text.
+            # An iterator stack keeps nested tables in reading order without
+            # unbounded Python recursion on an untrusted DOCX.
+            stack = [iter(table_cells(table, f"table {table_number}"))]
+            while stack:
+                try:
+                    locator, cell = next(stack[-1])
+                except StopIteration:
+                    stack.pop()
+                    continue
+                if cell._tc in seen_cells:
+                    continue
+                seen_cells.add(cell._tc)
+                units.append((locator, cell.text))
+                _check_source_units(len(units), limits)
+                for nested_number, nested_table in reversed(list(enumerate(cell.tables, start=1))):
+                    stack.append(
+                        iter(table_cells(nested_table, f"{locator} nested table {nested_number}"))
                     )
         _check_source_units(len(units), limits)
     except DocumentRejected:
@@ -353,8 +405,12 @@ def _extract_docx(
         units,
         max_characters=limits.max_extracted_characters,
     )
-    warnings = _link_warning(inspection)
-    return _result_or_unknown(blocks, len(units), warnings)
+    warnings = _docx_warnings(inspection)
+    # Blank paragraphs and cells were inspected and contain no native text.
+    # They remain part of the resource-limit accounting above, but are not
+    # evidence-bearing source units and must not look like extraction loss.
+    source_units_total = sum(bool(text.strip()) for _, text in units)
+    return _result_or_unknown(blocks, source_units_total, warnings)
 
 
 def _extract_xlsx(
@@ -386,19 +442,28 @@ def _extract_xlsx(
                             formula_cells.add((formula_sheet.title, cell.coordinate))
             formula_workbook.close()
         units: list[tuple[str, str]] = []
+        examined_capacity = 0
         source_units_total = 0
         for worksheet in workbook.worksheets:
             capacity = worksheet.max_row * worksheet.max_column
-            if capacity > limits.max_source_units - source_units_total:
+            if capacity > limits.max_source_units - examined_capacity:
                 raise DocumentRejected(DocumentRejectionCode.SOURCE_UNIT_LIMIT)
-            source_units_total += capacity
+            examined_capacity += capacity
             for row in worksheet.iter_rows():
                 for cell in row:
-                    if cell.value is None:
+                    coordinate = getattr(cell, "coordinate", None)
+                    if coordinate is None:
                         continue
-                    is_formula = (worksheet.title, cell.coordinate) in formula_cells
-                    if not is_formula:
-                        units.append((f"{worksheet.title}!{cell.coordinate}", str(cell.value)))
+                    is_formula = (worksheet.title, coordinate) in formula_cells
+                    if is_formula:
+                        # Formula text is a real source unit, but is deliberately
+                        # excluded from facts and forces UNKNOWN below.
+                        source_units_total += 1
+                        continue
+                    if cell.value is None or not str(cell.value).strip():
+                        continue
+                    source_units_total += 1
+                    units.append((f"{worksheet.title}!{coordinate}", str(cell.value)))
         workbook.close()
     except DocumentRejected:
         raise
@@ -513,3 +578,10 @@ def _link_warning(inspection: _ZipInspection) -> tuple[ExtractionReason, ...]:
     if inspection.has_external_links:
         return (ExtractionReason.EXTERNAL_LINKS_IGNORED,)
     return ()
+
+
+def _docx_warnings(inspection: _ZipInspection) -> tuple[ExtractionReason, ...]:
+    reasons = list(_link_warning(inspection))
+    if inspection.has_embedded_media:
+        reasons.append(ExtractionReason.EMBEDDED_MEDIA_IGNORED)
+    return tuple(reasons)

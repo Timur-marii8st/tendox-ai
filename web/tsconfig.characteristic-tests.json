@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2020", "lib": ["ES2022", "DOM"], "module": "CommonJS",
+    "moduleResolution": "Node", "strict": true, "skipLibCheck": true,
+    "esModuleInterop": true, "jsx": "react-jsx", "resolveJsonModule": true,
+    "rootDir": ".", "outDir": "build/characteristic-tests", "noEmitOnError": true
+  },
+  "include": ["tests/eis-characteristics.test.ts", "tests/eis-characteristic-render.test.tsx",
+    "src/lib/eis-characteristics.ts", "src/app/tender-discovery/characteristic-pair-report.tsx"]
+}

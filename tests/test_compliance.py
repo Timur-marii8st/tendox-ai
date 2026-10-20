@@ -85,6 +85,74 @@ class TestUnitNormalization:
         assert check_requirement(r, outside).verdict is Verdict.FAIL
 
 
+class TestNumericEquality:
+    """Числовые EQ/NE соблюдают те же правила единиц, что и сравнения диапазонов."""
+
+    def test_equal_calendar_durations_are_normalized(self) -> None:
+        r = req("warranty", Operator.EQ, Decimal(24), unit="мес")
+        check = check_requirement(r, candidate(attr("warranty", Decimal(2), unit="года")))
+        assert check.verdict is Verdict.PASS
+
+    def test_different_calendar_durations_fail(self) -> None:
+        r = req("warranty", Operator.EQ, Decimal(24), unit="мес")
+        check = check_requirement(r, candidate(attr("warranty", Decimal(1), unit="год")))
+        assert check.verdict is Verdict.FAIL
+
+    def test_incompatible_units_are_unknown(self) -> None:
+        r = req("warranty", Operator.EQ, Decimal(24), unit="мес")
+        check = check_requirement(r, candidate(attr("warranty", Decimal(24), unit="дн")))
+        assert check.verdict is Verdict.UNKNOWN
+        assert "несопоставимы" in check.reason
+
+    def test_missing_fact_unit_is_unknown(self) -> None:
+        r = req("warranty", Operator.EQ, Decimal(24), unit="мес")
+        check = check_requirement(r, candidate(attr("warranty", Decimal(24))))
+        assert check.verdict is Verdict.UNKNOWN
+
+    def test_unknown_fact_unit_is_unknown(self) -> None:
+        r = req("warranty", Operator.EQ, Decimal(24), unit="мес")
+        check = check_requirement(
+            r,
+            candidate(attr("warranty", Decimal(24), unit="попугаев")),
+        )
+        assert check.verdict is Verdict.UNKNOWN
+
+    def test_dimensionless_requirement_does_not_accept_physical_unit(self) -> None:
+        r = req("ethernet_ports", Operator.EQ, Decimal(24))
+        check = check_requirement(
+            r,
+            candidate(attr("ethernet_ports", Decimal(24), unit="В")),
+        )
+        assert check.verdict is Verdict.UNKNOWN
+
+    def test_power_units_are_normalized(self) -> None:
+        r = req("power", Operator.EQ, Decimal(1000), unit="Вт")
+        check = check_requirement(r, candidate(attr("power", Decimal(1), unit="кВт")))
+        assert check.verdict is Verdict.PASS
+
+    def test_same_number_in_different_dimensions_is_unknown(self) -> None:
+        r = req("power", Operator.EQ, Decimal(1000), unit="Вт")
+        check = check_requirement(r, candidate(attr("power", Decimal(1000), unit="В")))
+        assert check.verdict is Verdict.UNKNOWN
+
+    def test_not_equal_does_not_invert_unknown(self) -> None:
+        r = req("warranty", Operator.NE, Decimal(24), unit="мес")
+        check = check_requirement(r, candidate(attr("warranty", Decimal(24), unit="дн")))
+        assert check.verdict is Verdict.UNKNOWN
+
+    def test_not_equal_uses_normalized_values(self) -> None:
+        r = req("warranty", Operator.NE, Decimal(24), unit="мес")
+        same = check_requirement(r, candidate(attr("warranty", Decimal(2), unit="года")))
+        different = check_requirement(r, candidate(attr("warranty", Decimal(1), unit="год")))
+        assert same.verdict is Verdict.FAIL
+        assert different.verdict is Verdict.PASS
+
+    def test_numeric_requirement_with_text_fact_is_unknown(self) -> None:
+        r = req("warranty", Operator.EQ, Decimal(24), unit="мес")
+        check = check_requirement(r, candidate(attr("warranty", "24", unit="мес")))
+        assert check.verdict is Verdict.UNKNOWN
+
+
 class TestHardGate:
     """Инвариант №3: провал обязательного требования убивает кандидата целиком."""
 
@@ -182,21 +250,38 @@ class TestEquivalentGate:
         assert evaluate(item, c).verdict is CandidateVerdict.COMPLIANT
 
 
-def _cert(valid_until: date | None, valid_from: date | None = None) -> Certificate:
+def _cert(
+    valid_until: date | None,
+    valid_from: date | None = None,
+    *,
+    confidence: float = 1.0,
+    kind: str = "Декларация соответствия ТР ТС",
+) -> Certificate:
     return Certificate(
-        kind="Декларация соответствия ТР ТС",
+        kind=kind,
         number="ЕАЭС N RU Д-RU.XX.00.000",
         valid_from=valid_from,
         valid_until=valid_until,
-        provenance=DATASHEET,
+        provenance=DATASHEET.model_copy(update={"confidence": confidence}),
     )
 
 
 class TestCertificateGate:
-    """Документы проверяются на дату поставки, а не на «сегодня»."""
+    """Требуемые документы проверяются на дату поставки, а не на «сегодня»."""
+
+    @staticmethod
+    def _requirement() -> Requirement:
+        return req(
+            "certificate:Декларация соответствия ТР ТС",
+            Operator.EXISTS,
+        )
 
     def test_expired_before_delivery_fails(self, warranty_24: Requirement) -> None:
-        item = line_item(warranty_24, delivery_deadline=date(2026, 12, 1))
+        item = line_item(
+            warranty_24,
+            self._requirement(),
+            delivery_deadline=date(2026, 12, 1),
+        )
         c = candidate(
             attr("warranty", Decimal(36), unit="мес"),
             certificates=(_cert(date(2026, 6, 30)),),
@@ -206,22 +291,92 @@ class TestCertificateGate:
         assert "недействителен на 2026-12-01" in result.blocking[0].actual
 
     def test_valid_on_delivery_date_passes(self, warranty_24: Requirement) -> None:
-        item = line_item(warranty_24, delivery_deadline=date(2026, 12, 1))
+        item = line_item(
+            warranty_24,
+            self._requirement(),
+            delivery_deadline=date(2026, 12, 1),
+        )
         c = candidate(
             attr("warranty", Decimal(36), unit="мес"),
             certificates=(_cert(date(2027, 1, 1)),),
         )
         assert evaluate(item, c).verdict is CandidateVerdict.COMPLIANT
 
-    def test_unknown_validity_is_not_a_fail(self, warranty_24: Requirement) -> None:
-        """Срок действия неизвестен — это не повод придумывать FAIL."""
-        item = line_item(warranty_24, delivery_deadline=date(2026, 12, 1))
+    def test_unknown_validity_needs_clarification(self, warranty_24: Requirement) -> None:
+        """Срок действия неизвестен — это UNKNOWN, а не допуск или выдуманный FAIL."""
+        item = line_item(
+            warranty_24,
+            self._requirement(),
+            delivery_deadline=date(2026, 12, 1),
+        )
         c = candidate(attr("warranty", Decimal(36), unit="мес"), certificates=(_cert(None),))
-        assert evaluate(item, c).verdict is CandidateVerdict.COMPLIANT
+        result = evaluate(item, c)
+        assert result.verdict is CandidateVerdict.NEEDS_CLARIFICATION
+        assert result.open_questions[0].verdict is Verdict.UNKNOWN
 
-    def test_no_deadline_means_no_check(self, warranty_24: Requirement) -> None:
-        """Без даты поставки проверять документ не на что — вердикт не выдумываем."""
-        item = line_item(warranty_24, delivery_deadline=None)
+    def test_no_deadline_needs_clarification(self, warranty_24: Requirement) -> None:
+        """Без даты поставки действительность документа остаётся UNKNOWN."""
+        item = line_item(warranty_24, self._requirement(), delivery_deadline=None)
+        c = candidate(
+            attr("warranty", Decimal(36), unit="мес"),
+            certificates=(_cert(date(2020, 1, 1)),),
+        )
+        result = evaluate(item, c)
+        assert result.verdict is CandidateVerdict.NEEDS_CLARIFICATION
+        assert "дата поставки" in result.open_questions[0].reason
+
+    def test_missing_required_certificate_needs_clarification(
+        self, warranty_24: Requirement
+    ) -> None:
+        item = line_item(
+            warranty_24,
+            self._requirement(),
+            delivery_deadline=date(2026, 12, 1),
+        )
+        result = evaluate(item, candidate(attr("warranty", Decimal(36), unit="мес")))
+        assert result.verdict is CandidateVerdict.NEEDS_CLARIFICATION
+        assert "certificate:" in result.open_questions[0].requirement.property
+
+    def test_low_confidence_certificate_needs_clarification(self, warranty_24: Requirement) -> None:
+        item = line_item(
+            warranty_24,
+            self._requirement(),
+            delivery_deadline=date(2026, 12, 1),
+        )
+        c = candidate(
+            attr("warranty", Decimal(36), unit="мес"),
+            certificates=(_cert(date(2027, 1, 1), confidence=0.5),),
+        )
+        result = evaluate(item, c)
+        assert result.verdict is CandidateVerdict.NEEDS_CLARIFICATION
+        assert "ниже порога" in result.open_questions[0].reason
+
+    def test_other_certificate_kind_does_not_satisfy_requirement(
+        self, warranty_24: Requirement
+    ) -> None:
+        item = line_item(
+            warranty_24,
+            self._requirement(),
+            delivery_deadline=date(2026, 12, 1),
+        )
+        c = candidate(
+            attr("warranty", Decimal(36), unit="мес"),
+            certificates=(
+                _cert(
+                    date(2027, 1, 1),
+                    kind="Сертификат соответствия ЕАЭС",
+                ),
+            ),
+        )
+        result = evaluate(item, c)
+        assert result.verdict is CandidateVerdict.NEEDS_CLARIFICATION
+        assert result.open_questions[0].actual == "документ не представлен"
+
+    def test_unrequired_expired_certificate_does_not_create_gate(
+        self, warranty_24: Requirement
+    ) -> None:
+        """Просроченный нерелевантный документ не создаёт требование сам по себе."""
+        item = line_item(warranty_24, delivery_deadline=date(2026, 12, 1))
         c = candidate(
             attr("warranty", Decimal(36), unit="мес"),
             certificates=(_cert(date(2020, 1, 1)),),

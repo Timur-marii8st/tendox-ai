@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "rootDir": ".",
+    "outDir": "build/supplier-product-tests",
+    "noEmitOnError": true
+  },
+  "include": [
+    "tests/eis-supplier-product.test.ts",
+    "tests/eis-supplier-product-render.test.tsx",
+    "src/lib/eis-supplier-product.ts",
+    "src/app/tender-discovery/supplier-product-report.tsx"
+  ]
+}

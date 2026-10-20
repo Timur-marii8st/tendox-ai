@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 from sqlalchemy import create_engine
 
+from procurement.access import AccessRole
 from procurement.storage import ApiKeyRecord, PostgresStorage, api_key_digest
 
 
@@ -18,6 +19,11 @@ def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create a local development API key")
     parser.add_argument("--company-id", required=True)
     parser.add_argument("--actor-id", required=True)
+    parser.add_argument(
+        "--access-role",
+        choices=[role.value for role in AccessRole],
+        default=AccessRole.OPERATOR.value,
+    )
     return parser
 
 
@@ -31,6 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         key_id=str(uuid.uuid4()),
         company_id=args.company_id,
         actor_id=args.actor_id,
+        access_role=AccessRole(args.access_role),
         key_digest=api_key_digest(secret),
     )
     engine = create_engine(database_url, pool_pre_ping=True)
@@ -43,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             {
                 "company_id": created.company_id,
                 "actor_id": created.actor_id,
+                "access_role": created.access_role.value,
                 "key_id": created.key_id,
                 "bearer_secret": secret,
             },

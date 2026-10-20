@@ -1,10 +1,18 @@
-"""Запуск: uv run python -m procurement evaluate case.json --actor local-user."""
+"""Запуск локальных CLI-команд Syurai Procurement."""
 
 import sys
+from typing import TextIO
 
 from procurement.cli import main
 
-sys.stdout.reconfigure(encoding="utf-8")
-sys.stderr.reconfigure(encoding="utf-8")
+
+def _configure_utf8(stream: TextIO) -> None:
+    reconfigure = getattr(stream, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8")
+
+
+_configure_utf8(sys.stdout)
+_configure_utf8(sys.stderr)
 
 raise SystemExit(main())

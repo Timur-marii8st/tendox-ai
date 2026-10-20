@@ -18,6 +18,8 @@ class Extractor(str, Enum):
     NATIVE_PDF = "native_pdf"
     NATIVE_DOCX = "native_docx"
     NATIVE_XLSX = "native_xlsx"
+    NATIVE_XLS = "native_xls"
+    LEGACY_DOC_TEXT = "legacy_doc_text"
     OCR = "ocr"
     LLM = "llm"
     API = "api"
@@ -26,7 +28,7 @@ class Extractor(str, Enum):
     @property
     def is_lossy(self) -> bool:
         """OCR и LLM могут искажать значение — их результат требует осторожности."""
-        return self in (Extractor.OCR, Extractor.LLM)
+        return self in (Extractor.OCR, Extractor.LLM, Extractor.LEGACY_DOC_TEXT)
 
 
 class Provenance(BaseModel):

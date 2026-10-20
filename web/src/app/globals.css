@@ -97,6 +97,20 @@ button:disabled { cursor: wait; opacity: .55; }
 
 .next-step { margin-top: 1rem; border-left: 3px solid var(--blue); background: #eff5ff; padding: .7rem .8rem; font-size: .82rem; }
 .next-step p { margin: .25rem 0 0; }
+.sourcing-panel { margin-top: 1rem; border: 1px solid var(--line); border-radius: .75rem; background: #f8fafc; padding: .85rem; }
+.sourcing-panel h4 { margin: 0; font-size: .9rem; }
+.sourcing-scope { margin: .3rem 0 .7rem; color: var(--muted); font-size: .75rem; }
+.sourcing-result > p { margin: .35rem 0; font-size: .78rem; }
+.sourcing-result small { display: block; overflow-wrap: anywhere; color: var(--muted); font-size: .67rem; }
+.sourcing-leads { display: grid; gap: .45rem; margin: .65rem 0; padding: 0; list-style: none; }
+.sourcing-leads li { display: flex; justify-content: space-between; gap: .75rem; border-radius: .5rem; background: white; padding: .55rem; font-size: .76rem; }
+.sourcing-leads a { color: var(--blue-dark); font-weight: 750; }
+.sourcing-leads span { color: var(--muted); text-align: right; }
+.sourcing-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; margin-top: .8rem; }
+.sourcing-form label { grid-column: 1 / -1; font-size: .72rem; font-weight: 750; }
+.sourcing-form input { min-width: 0; border: 1px solid #aebed4; border-radius: .6rem; background: white; padding: .65rem; }
+.sourcing-form p { grid-column: 1 / -1; margin: 0; color: #9b2c2c; font-size: .78rem; }
+.sourcing-form p[role="status"] { color: #08704b; }
 .evaluate-form { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; margin-top: 1rem; }
 .evaluate-form span { flex: 1 1 14rem; color: var(--muted); font-size: .72rem; }
 .evaluate-form p, .import-section form p { width: 100%; margin: 0; color: #9b2c2c; font-size: .8rem; }
@@ -124,4 +138,6 @@ button:disabled { cursor: wait; opacity: .55; }
   .facts { grid-template-columns: 1fr; }
   .scenario { grid-template-columns: 1fr; }
   .scenario small { grid-column: auto; }
+  .sourcing-form { grid-template-columns: 1fr; }
+  .sourcing-form label { grid-column: auto; }
 }

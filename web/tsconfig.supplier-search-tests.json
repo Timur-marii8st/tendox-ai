@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM"], "module": "CommonJS",
+    "moduleResolution": "Node", "strict": true, "skipLibCheck": true,
+    "esModuleInterop": true, "jsx": "react-jsx", "resolveJsonModule": true,
+    "paths": { "@/*": ["./src/*"] },
+    "rootDir": ".", "outDir": "build/supplier-search-tests", "noEmitOnError": true
+  },
+  "include": ["tests/eis-supplier-search.test.ts", "tests/eis-supplier-search-render.test.tsx",
+    "src/lib/eis-supplier-search.ts", "src/app/tender-discovery/supplier-search-report.tsx"]
+}

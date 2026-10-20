@@ -1,0 +1,60 @@
+{
+  "document_role": "SUPPLIER_QUOTE",
+  "requirements": [],
+  "unmapped": [
+    {
+      "text": "Коммерческое предложение поставщика ООО «Синтетика».",
+      "provenance": {
+        "document_id": "goldenset-quote-001",
+        "locator": "paragraph 1",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      },
+      "reason": "NON_REQUIREMENT_DOCUMENT"
+    },
+    {
+      "text": "Гарантия не менее 36 мес.",
+      "provenance": {
+        "document_id": "goldenset-quote-001",
+        "locator": "paragraph 2",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      },
+      "reason": "NON_REQUIREMENT_DOCUMENT"
+    },
+    {
+      "text": "Количество портов не менее 48 шт.",
+      "provenance": {
+        "document_id": "goldenset-quote-001",
+        "locator": "paragraph 3",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      },
+      "reason": "NON_REQUIREMENT_DOCUMENT"
+    },
+    {
+      "text": "Требуется действующая декларация соответствия ТР ТС.",
+      "provenance": {
+        "document_id": "goldenset-quote-001",
+        "locator": "paragraph 4",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      },
+      "reason": "NON_REQUIREMENT_DOCUMENT"
+    },
+    {
+      "text": "Эквивалент не допускается. Срок поставки: до 01.12.2026.",
+      "provenance": {
+        "document_id": "goldenset-quote-001",
+        "locator": "paragraph 5",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      },
+      "reason": "NON_REQUIREMENT_DOCUMENT"
+    }
+  ],
+  "blocks_total": 5,
+  "blocks_mapped": 0,
+  "equivalent_allowed": null,
+  "delivery_deadline": null
+}

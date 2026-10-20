@@ -1,0 +1,22 @@
+.git
+.github
+.venv
+.env
+.env.*
+.mypy_cache
+.pytest_cache
+.ruff_cache
+data
+docs
+examples
+картинки с текстом
+output
+samples
+tests
+tmp
+tz_files_for_tests
+web/.next
+web/node_modules
+web/.env*
+*.pyc
+__pycache__

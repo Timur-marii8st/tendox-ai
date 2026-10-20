@@ -1,0 +1,291 @@
+{
+  "report": {
+    "policy_version": "eis-position-supplier-product-v1",
+    "scope": "PUBLIC_POSITION_AND_SAVED_PRODUCT",
+    "run_id": "55555555-5555-4555-8555-555555555555",
+    "request": {
+      "catalog": {
+        "page": {
+          "position": {
+            "selection": {
+              "notice": {
+                "purchase_number": "0000000000000000000",
+                "version_number": 1,
+                "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "source_index": 1
+            }
+          },
+          "serp_run_id": "11111111-1111-4111-8111-111111111111",
+          "engine": "BING",
+          "rank": 1
+        },
+        "page_run_id": "22222222-2222-4222-8222-222222222222",
+        "search_run_id": "33333333-3333-4333-8333-333333333333",
+        "product_index": 1
+      },
+      "product_run_id": "44444444-4444-4444-8444-444444444444"
+    },
+    "parent_product_report_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "position_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "source_body_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "created_at": "2026-10-06T00:00:00Z",
+    "position": {
+      "selection": {
+        "notice": {
+          "purchase_number": "0000000000000000000",
+          "version_number": 1,
+          "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "source_index": 1
+      },
+      "position": {
+        "source_index": 1,
+        "lot_index": null,
+        "lot_ordinal": null,
+        "name": {
+          "value": "Товар",
+          "raw": "Товар",
+          "provenance": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "locator": "fact",
+            "extractor": "api",
+            "confidence": 1.0
+          }
+        },
+        "quantity": {
+          "value": null,
+          "raw": null,
+          "provenance": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "locator": "notice.xml :: item[1]",
+            "extractor": "api",
+            "confidence": 1.0
+          }
+        },
+        "unit": {
+          "value": null,
+          "raw": null,
+          "provenance": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "locator": "fact",
+            "extractor": "api",
+            "confidence": 1.0
+          }
+        },
+        "classification_code": {
+          "value": null,
+          "raw": null,
+          "provenance": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "locator": "fact",
+            "extractor": "api",
+            "confidence": 1.0
+          }
+        },
+        "ktru_code": {
+          "value": "17.12.14.110-00000001",
+          "raw": "17.12.14.110-00000001",
+          "provenance": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "locator": "fact",
+            "extractor": "api",
+            "confidence": 1.0
+          }
+        },
+        "unit_price": {
+          "value": null,
+          "raw": null,
+          "provenance": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "locator": "notice.xml :: item[1]",
+            "extractor": "api",
+            "confidence": 1.0
+          }
+        },
+        "line_sum": {
+          "value": null,
+          "raw": null,
+          "provenance": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "locator": "notice.xml :: item[1]",
+            "extractor": "api",
+            "confidence": 1.0
+          }
+        },
+        "currency": {
+          "value": null,
+          "raw": null,
+          "provenance": {
+            "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "locator": "fact",
+            "extractor": "api",
+            "confidence": 1.0
+          }
+        },
+        "characteristics": [
+          {
+            "name": {
+              "value": "Плотность",
+              "raw": "Плотность",
+              "provenance": {
+                "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "locator": "characteristic/name",
+                "extractor": "api",
+                "confidence": 1.0
+              }
+            },
+            "instruction_code": {
+              "value": "2",
+              "raw": "2",
+              "provenance": {
+                "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "locator": "characteristic/instruction",
+                "extractor": "api",
+                "confidence": 1.0
+              }
+            },
+            "values": [
+              {
+                "description": {
+                  "value": "Белый",
+                  "raw": "Белый",
+                  "provenance": {
+                    "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "locator": "fact",
+                    "extractor": "api",
+                    "confidence": 1.0
+                  }
+                },
+                "minimum": {
+                  "value": null,
+                  "raw": null,
+                  "raw_truncated": false,
+                  "provenance": {
+                    "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "locator": "number",
+                    "extractor": "api",
+                    "confidence": 1.0
+                  }
+                },
+                "minimum_operator": {
+                  "value": null,
+                  "raw": null,
+                  "provenance": {
+                    "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "locator": "fact",
+                    "extractor": "api",
+                    "confidence": 1.0
+                  }
+                },
+                "maximum": {
+                  "value": null,
+                  "raw": null,
+                  "raw_truncated": false,
+                  "provenance": {
+                    "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "locator": "number",
+                    "extractor": "api",
+                    "confidence": 1.0
+                  }
+                },
+                "maximum_operator": {
+                  "value": null,
+                  "raw": null,
+                  "provenance": {
+                    "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "locator": "fact",
+                    "extractor": "api",
+                    "confidence": 1.0
+                  }
+                },
+                "unit": {
+                  "value": "шт",
+                  "raw": "шт",
+                  "provenance": {
+                    "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "locator": "fact",
+                    "extractor": "api",
+                    "confidence": 1.0
+                  }
+                },
+                "concrete_values": [],
+                "concrete_values_total": 0,
+                "concrete_values_truncated": false,
+                "range_source_complete": false
+              }
+            ],
+            "values_total": 1,
+            "truncated": false,
+            "review_status": "UNKNOWN"
+          }
+        ],
+        "characteristics_total": 1,
+        "characteristics_truncated": false,
+        "characteristics_status": "SOURCE_VALUES",
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "notice.xml :: item[1]",
+          "extractor": "api",
+          "confidence": 1.0
+        },
+        "review_status": "UNKNOWN"
+      },
+      "storage_kind": "SAVED_PROJECTION",
+      "legacy_values_unknown": false
+    },
+    "details": {
+      "revision": "bumaga-s-details-v1",
+      "source_url": "https://bumaga-s.ru/товар/1",
+      "html_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "EXTRACTED",
+      "product_name": {
+        "value": "Бумага",
+        "html_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "locator": "product"
+      },
+      "characteristics": [
+        {
+          "label_raw": "Плотность бумаги",
+          "value_raw": "raw-1",
+          "label_locator": "label[1]",
+          "value_locator": "value[1]",
+          "html_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "packaging_raw": null,
+      "contents_raw": null,
+      "price_basis_raw": null,
+      "order_controls": [],
+      "price_basis_status": "UNKNOWN",
+      "MOQ_status": "UNKNOWN",
+      "order_step_status": "UNKNOWN",
+      "technical_status": "UNKNOWN"
+    },
+    "rows": [
+      {
+        "characteristic_index": 1,
+        "name": "Плотность",
+        "supplier_indices": [
+          1
+        ],
+        "observation": "UNKNOWN",
+        "reason": "PUBLIC_LABEL_MATCH_RECORDED"
+      }
+    ],
+    "row_count": 1,
+    "technical": "UNKNOWN",
+    "price_comparability": "UNKNOWN",
+    "unit_cost": "UNKNOWN",
+    "party_total": "UNKNOWN",
+    "quote": "UNKNOWN",
+    "profit": "UNKNOWN",
+    "participation": "UNKNOWN",
+    "specification_completeness": "UNKNOWN",
+    "source_requests": 0,
+    "jobs_created": 0
+  },
+  "created": false,
+  "source_requests": 0,
+  "jobs_created": 0
+}

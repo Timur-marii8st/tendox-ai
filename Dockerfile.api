@@ -1,0 +1,30 @@
+FROM mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0
+
+WORKDIR /app
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH=/opt/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1
+
+RUN python -m pip install --no-cache-dir uv==0.9.12
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libnss3-tools=2:3.98-1ubuntu0.2 libseccomp2=2.5.5-1ubuntu3.1 antiword=0.37-16 \
+    && rm -rf /var/lib/apt/lists/* \
+    && dpkg-query -W -f='${Package}=${Version}\n' | LC_ALL=C sort > /tmp/apt-inventory \
+    && echo "a94c2d704b6e6f6a00ccbf644d34c7fcfcc2fb9d836e8ce15bad6ffff13fdca5  /tmp/apt-inventory" | sha256sum -c - \
+    && rm /tmp/apt-inventory
+COPY docker/certs/russian-trusted-root-ca.crt /usr/local/share/ca-certificates/russian-trusted-root-ca.crt
+RUN echo "aa800ef345422d6158c6fafe1c06c429dbda21c3df4bb1ccb45a920ec1111399  /usr/local/share/ca-certificates/russian-trusted-root-ca.crt" | sha256sum -c - \
+    && update-ca-certificates \
+    && mkdir -p /root/.pki/nssdb \
+    && certutil -N -d sql:/root/.pki/nssdb --empty-password \
+    && certutil -A -d sql:/root/.pki/nssdb -n "Russian Trusted Root CA" -t "C,," -i /usr/local/share/ca-certificates/russian-trusted-root-ca.crt
+COPY pyproject.toml uv.lock README.md ./
+COPY docker/python-build-requirements.lock /opt/python-build-requirements.lock
+RUN uv sync --frozen --no-dev --extra browser --no-install-project \
+    && uv pip install --python /opt/venv/bin/python -r /opt/python-build-requirements.lock
+COPY src ./src
+COPY migrations ./migrations
+COPY alembic.ini ./alembic.ini
+RUN --network=none uv sync --frozen --no-dev --extra browser --offline --no-editable
+
+CMD ["uvicorn", "--factory", "procurement.api.discovery_runtime:create_discovery_app", "--host", "0.0.0.0", "--port", "8000"]

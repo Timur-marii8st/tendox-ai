@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2020", "lib": ["ES2022", "DOM"], "module": "CommonJS",
+    "moduleResolution": "Node", "strict": true, "skipLibCheck": true,
+    "esModuleInterop": true, "rootDir": ".", "outDir": "build/captcha-tests", "noEmitOnError": true
+  },
+  "include": ["tests/supplier-captcha.test.ts", "src/lib/supplier-captcha.ts"]
+}

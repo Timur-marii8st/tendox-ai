@@ -10,6 +10,7 @@
     "characters_extracted": 0
   },
   "mapping": {
+    "document_role": "TENDER_REQUIREMENTS",
     "requirements": [],
     "unmapped": [],
     "blocks_total": 0,

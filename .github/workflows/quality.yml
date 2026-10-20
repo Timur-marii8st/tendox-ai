@@ -1,0 +1,142 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check documentation navigation
+        run: python scripts/check_docs.py
+
+  quality-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      postgres-matrix: ${{ steps.postgres-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check executable and explicitly unavailable test scope
+        run: python scripts/check_quality_scope.py --check
+      - name: Build isolated PostgreSQL matrix
+        id: postgres-matrix
+        shell: bash
+        run: |
+          matrix="$(python scripts/check_quality_scope.py --postgres-matrix)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  python-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
+      - name: Verify lockfile
+        run: uv lock --check
+      - name: Lint
+        run: uv run ruff check .
+      - name: Type-check domain
+        run: uv run mypy src/procurement/domain
+      - name: Run unit and API tests
+        run: uv run pytest tests --ignore=tests/integration -q
+      - name: Run domain doctests
+        run: uv run python -m pytest --doctest-modules src/procurement/domain -q
+
+  web-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - name: Run all compiled Node wire/render tests
+        run: npm test
+      - run: npm run build
+
+  postgres-gate:
+    needs: quality-scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.quality-scope.outputs.postgres-matrix) }}
+    name: PostgreSQL gate (${{ matrix.group }})
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ${{ matrix.database }}
+          POSTGRES_USER: procurement_owner
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U procurement_owner -d ${{ matrix.database }}"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Provision runtime role
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+          runtime_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$runtime_password"
+          psql \
+            --set=ON_ERROR_STOP=1 \
+            --host=127.0.0.1 \
+            --username=procurement_owner \
+            --dbname="${{ matrix.database }}" \
+            --set=app_password="$runtime_password" <<'SQL'
+          CREATE ROLE procurement_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+          ALTER ROLE procurement_app PASSWORD :'app_password';
+          GRANT CONNECT ON DATABASE "${{ matrix.database }}" TO procurement_app;
+          GRANT USAGE ON SCHEMA public TO procurement_app;
+          SQL
+          echo "DATABASE_ADMIN_URL=postgresql+psycopg://procurement_owner@127.0.0.1:5432/${{ matrix.database }}" >> "$GITHUB_ENV"
+          echo "DATABASE_URL=postgresql+psycopg://procurement_app:$runtime_password@127.0.0.1:5432/${{ matrix.database }}" >> "$GITHUB_ENV"
+          echo "QUALITY_GATE_DISPOSABLE_POSTGRES=1" >> "$GITHUB_ENV"
+
+      - name: Apply migrations from scratch
+        run: uv run alembic upgrade head
+
+      - name: Run complete PostgreSQL group
+        run: uv run python scripts/check_quality_scope.py --run-postgres-group "${{ matrix.group }}"

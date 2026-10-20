@@ -1,0 +1,62 @@
+{
+  "files": [
+    {
+      "archiveSha256": "76510b6cf4ef660a1e49c0c13849e879bb867b654223c233cbdf3bf15f6661b9",
+      "bytes": 9615,
+      "capturedAt": "2026-10-05T18:58:59Z",
+      "filename": "s205_eis_analogs.py",
+      "memberPath": "src/procurement/storage/eis_analogs.py",
+      "originBackupPath": "/home/syurai/vibe-seller-state/backups/s206-before-20261005T185859Z-code.tar.gz",
+      "provenance": "Exact regular Python member from the timestamped owned release code backup; archive and member SHA-256 independently verified before writing; release identity cross-checked against docs/operations history and M1 review inventory.",
+      "releaseVersion": "S205",
+      "sha256": "b94a0c850223006787457bad239f7bb77fa0ae2dd06e584f179839f4810be84b",
+      "testBindings": [
+        "S206_BASELINE_ANALOGS_PATH"
+      ]
+    },
+    {
+      "archiveSha256": "23f32df1a56a38e7ad5e4fe502f6bf8eed07025593fc0ae184d5a6dbe73d7213",
+      "bytes": 9884,
+      "capturedAt": "2026-10-05T20:25:36Z",
+      "filename": "s206_eis_analogs.py",
+      "memberPath": "src/procurement/storage/eis_analogs.py",
+      "originBackupPath": "/home/syurai/vibe-seller-state/backups/s208-before-20261005T202536Z-code.tar.gz",
+      "provenance": "Exact regular Python member from the timestamped owned release code backup; archive and member SHA-256 independently verified before writing; release identity cross-checked against docs/operations history and M1 review inventory.",
+      "releaseVersion": "S206",
+      "sha256": "12e41b09bf4c415549aaef265543d615b4f614d8a901f7bd707c36ebc52fc0b5",
+      "testBindings": [
+        "S208_BASELINE_ANALOGS_PATH"
+      ]
+    },
+    {
+      "archiveSha256": "7532499e641511c7c2745f223fea2c8dc40cd489842e93512e0e29fc1e092f57",
+      "bytes": 11025,
+      "capturedAt": "2026-10-05T20:43:37Z",
+      "filename": "s208_eis_analogs.py",
+      "memberPath": "src/procurement/storage/eis_analogs.py",
+      "originBackupPath": "/home/syurai/vibe-seller-state/backups/s209-before-20261005T204337Z-code.tar.gz",
+      "provenance": "Exact regular Python member from the timestamped owned release code backup; archive and member SHA-256 independently verified before writing; release identity cross-checked against docs/operations history and M1 review inventory.",
+      "releaseVersion": "S208",
+      "sha256": "3b43638c735e443423d923a0fbb48a6f4cad56906c7448edb3fb46e7bd64b619",
+      "testBindings": [
+        "S209_BASELINE_ANALOGS_PATH"
+      ]
+    },
+    {
+      "archiveSha256": "7532499e641511c7c2745f223fea2c8dc40cd489842e93512e0e29fc1e092f57",
+      "bytes": 14631,
+      "capturedAt": "2026-10-05T20:43:37Z",
+      "filename": "s208_eis_notice_hold.py",
+      "memberPath": "src/procurement/storage/eis_notice_hold.py",
+      "originBackupPath": "/home/syurai/vibe-seller-state/backups/s209-before-20261005T204337Z-code.tar.gz",
+      "provenance": "Exact regular Python member from the timestamped owned release code backup; archive and member SHA-256 independently verified before writing; release identity cross-checked against docs/operations history and M1 review inventory.",
+      "releaseVersion": "S208",
+      "sha256": "b044241cc52de3cc742d13f597060cb76d0268072e78879b0680d6d80e6cf570",
+      "testBindings": [
+        "S209_BASELINE_HOLD_PATH"
+      ]
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceKind": "OWN_RELEASE_CODE_REGRESSION_ORACLE"
+}

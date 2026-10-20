@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM"], "module": "CommonJS",
+    "moduleResolution": "Node", "strict": true, "skipLibCheck": true,
+    "esModuleInterop": true, "jsx": "react-jsx", "resolveJsonModule": true,
+    "paths": { "@/*": ["./src/*"] }, "rootDir": ".",
+    "outDir": "build/position-association-tests", "noEmitOnError": true
+  },
+  "include": ["tests/eis-position-association.test.ts", "tests/eis-position-association-render.test.tsx",
+    "src/lib/eis-position-association.ts", "src/app/tender-discovery/position-association-report.tsx",
+    "src/app/tender-discovery/position-association-list.tsx"]
+}

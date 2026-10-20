@@ -1,0 +1,132 @@
+{
+  "saved": {
+    "draft": {
+      "schema_version": "manufacturer-rfq-draft-v1",
+      "draft_id": "aa6d1d09-e907-45bd-b1b7-7cf67e811f17",
+      "command_id": "99737ed9-da4c-470d-b5aa-193ac689d483",
+      "status": "DRAFT_NO_DISPATCH",
+      "run_id": "d938e024-17ad-47de-90b7-f22088b9cee0",
+      "proposal_id": "aa18c615-62bc-4dd1-ab71-ba2391c0f721",
+      "decision_id": "fa4542b1-fa19-4011-a857-7d7f39137711",
+      "manufacturer_identity": {
+        "legal_name": "Factory LLC",
+        "country_code": "RU",
+        "identifier_scheme": "INN",
+        "registration_id": "123"
+      },
+      "registry_snapshot": {
+        "record_id": "6582fb75a4a4b05007bb2d05",
+        "registry_number": "0001",
+        "product_name": "Pump",
+        "source_manufacturer_name": "Factory",
+        "record_url": "https://goszakupki.eaeunion.org/erpt/ru/registers/products/list/card/6582fb75a4a4b05007bb2d05",
+        "document_expires_on": "2027-01-01"
+      },
+      "quantity_input": {
+        "value": "12.500",
+        "provenance": {
+          "document_id": "aa6d1d09-e907-45bd-b1b7-7cf67e811f17",
+          "locator": "quantity",
+          "extractor": "manual",
+          "actor_id": "operator",
+          "recorded_at": "2026-10-06T17:58:05.315668Z"
+        }
+      },
+      "quantity": "12.5",
+      "unit": {
+        "value": "комплект",
+        "provenance": {
+          "document_id": "aa6d1d09-e907-45bd-b1b7-7cf67e811f17",
+          "locator": "unit_raw",
+          "extractor": "manual",
+          "actor_id": "operator",
+          "recorded_at": "2026-10-06T17:58:05.315668Z"
+        }
+      },
+      "quantity_basis": {
+        "value": "Тестовый ручной расчёт",
+        "provenance": {
+          "document_id": "aa6d1d09-e907-45bd-b1b7-7cf67e811f17",
+          "locator": "quantity_basis_raw",
+          "extractor": "manual",
+          "actor_id": "operator",
+          "recorded_at": "2026-10-06T17:58:05.315668Z"
+        }
+      },
+      "requirements": [
+        {
+          "value": "Приложить паспорт изделия",
+          "provenance": {
+            "document_id": "aa6d1d09-e907-45bd-b1b7-7cf67e811f17",
+            "locator": "requirements[0]",
+            "extractor": "manual",
+            "actor_id": "operator",
+            "recorded_at": "2026-10-06T17:58:05.315668Z"
+          }
+        }
+      ],
+      "delivery_address": {
+        "value": "Тестовый адрес",
+        "provenance": {
+          "document_id": "aa6d1d09-e907-45bd-b1b7-7cf67e811f17",
+          "locator": "delivery_address_raw",
+          "extractor": "manual",
+          "actor_id": "operator",
+          "recorded_at": "2026-10-06T17:58:05.315668Z"
+        }
+      },
+      "desired_delivery": {
+        "value": "В течение 30 дней",
+        "provenance": {
+          "document_id": "aa6d1d09-e907-45bd-b1b7-7cf67e811f17",
+          "locator": "desired_delivery_raw",
+          "extractor": "manual",
+          "actor_id": "operator",
+          "recorded_at": "2026-10-06T17:58:05.315668Z"
+        }
+      },
+      "reply_due_at": "2026-10-07T17:58:05.065442Z",
+      "reply_due_provenance": {
+        "document_id": "aa6d1d09-e907-45bd-b1b7-7cf67e811f17",
+        "locator": "reply_due_at",
+        "extractor": "manual",
+        "actor_id": "operator",
+        "recorded_at": "2026-10-06T17:58:05.315668Z"
+      },
+      "source_response_sha256": "7b0fd4ffa2d8730039b15293d410d9c8d1c5754eca8e022798a6aedaaca91393",
+      "dossier_sha256": "02a0a85d017a090c2b1ee9adeee4f7a523359de3744f19dd6b44abf2e45f9651",
+      "proposal_sha256": "91cc06f7891109c0afba8e9bee608046bed78e9258cf817826972a1c0ca7ee10",
+      "decision_sha256": "a49671b28aeabbec65b126ab735ec5da0e50f5857e3aae5c8acf742ae549a3e0",
+      "manual_inputs_sha256": "51b673ba25847ef3939a90cc000154169404a2d3c44285562acc594096723b98",
+      "text": "Черновик запроса коммерческого предложения\n\nЮридическое лицо: Factory LLC (RU, INN: 123)\nТовар из реестра: Pump\nРеестровая запись: 0001; https://goszakupki.eaeunion.org/erpt/ru/registers/products/list/card/6582fb75a4a4b05007bb2d05\nКоличество: 12.5 комплект\nОснование количества: Тестовый ручной расчёт\n\nТребования, введённые оператором (не являются полностью проверенным ТЗ):\n1. Приложить паспорт изделия\n\nАдрес поставки: Тестовый адрес\nЖелаемый срок поставки: В течение 30 дней\nПросим ответить до: 2026-10-07T17:58:05.065442+00:00\n\nПросим указать цену за единицу, НДС, MOQ и шаг партии, наличие или срок производства, упаковку, условия оплаты и доставки, гарантию и полный срок действия коммерческого предложения.\n\nСтатус: DRAFT_NO_DISPATCH. Получатель и отправка не определены.",
+      "text_sha256": "c3d5d5a456d29db2dcb57d7a1c203577e8ed9e726fb3f0c804f56b5f3010f69d",
+      "created_by": "operator",
+      "created_at": "2026-10-06T17:58:05.315668Z",
+      "draft_sha256": "7c9eccb0c98eeae1b01e9ae159990fb7544aeb790b5bf344711b499bd35c8f24",
+      "contact": "UNKNOWN",
+      "website": "UNKNOWN",
+      "price": "UNKNOWN",
+      "quote": "UNKNOWN",
+      "technical": "UNKNOWN",
+      "participation": "UNKNOWN"
+    },
+    "current_status": "PASS",
+    "created": false
+  },
+  "command": {
+    "command_id": "99737ed9-da4c-470d-b5aa-193ac689d483",
+    "run_id": "d938e024-17ad-47de-90b7-f22088b9cee0",
+    "record_id": "6582fb75a4a4b05007bb2d05",
+    "proposal_id": "aa18c615-62bc-4dd1-ab71-ba2391c0f721",
+    "decision_id": "fa4542b1-fa19-4011-a857-7d7f39137711",
+    "quantity": "12.500",
+    "unit_raw": "комплект",
+    "quantity_basis_raw": "Тестовый ручной расчёт",
+    "requirements": [
+      "Приложить паспорт изделия"
+    ],
+    "delivery_address_raw": "Тестовый адрес",
+    "desired_delivery_raw": "В течение 30 дней",
+    "reply_due_at": "2026-10-07T17:58:05.065442+00:00"
+  }
+}

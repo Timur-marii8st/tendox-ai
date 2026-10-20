@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2020", "lib": ["ES2022", "DOM"], "module": "CommonJS",
+    "moduleResolution": "Node", "strict": true, "skipLibCheck": true,
+    "esModuleInterop": true, "jsx": "react-jsx", "rootDir": ".",
+    "outDir": "build/discovery-tests", "noEmitOnError": true
+  },
+  "include": ["tests/eis-discovery-overview.test.tsx", "tests/eis-search-pages.test.tsx", "src/app/tender-discovery/result-explorer.tsx", "src/app/tender-discovery/paged-results.tsx"]
+}

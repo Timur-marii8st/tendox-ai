@@ -19,8 +19,14 @@ from procurement.api.contracts import (
     Principal,
     VersionConflict,
 )
-from procurement.documents import ExtractionResult
-from procurement.documents.ocr import OcrDerivative
+from procurement.documents import DocumentRole, ExtractionResult
+from procurement.documents.ocr import (
+    OcrCandidate,
+    OcrDerivative,
+    OcrEngineError,
+    OcrEngineInput,
+    OcrSourceRejected,
+)
 from procurement.domain.cases import ProcurementCase
 
 
@@ -38,6 +44,7 @@ class FakeOcrService:
     def __init__(self) -> None:
         self.cases: dict[tuple[str, str, int], ProcurementCase] = {}
         self.documents: dict[tuple[str, str], DocumentRecord] = {}
+        self.document_contents: dict[tuple[str, str], bytes] = {}
         self.ocr: dict[tuple[str, str], OcrDerivativeRecord] = {}
         self.ocr_receipts: dict[tuple[str, str], tuple[str, OcrDerivativeRecord]] = {}
 
@@ -64,6 +71,7 @@ class FakeOcrService:
         document_id: str,
         original_filename: str,
         media_type: str,
+        document_role: DocumentRole,
         content: bytes,
         extraction: ExtractionResult,
         idempotency_key: str,
@@ -73,18 +81,25 @@ class FakeOcrService:
             document_id=document_id,
             original_filename=original_filename,
             media_type=media_type,
+            document_role=document_role,
             byte_size=len(content),
             sha256=hashlib.sha256(content).hexdigest(),
             extraction=extraction,
             created_at=datetime.now(UTC),
         )
         self.documents[(company_id, document_id)] = record
+        self.document_contents[(company_id, document_id)] = content
         return record
 
     async def get_document(
         self, *, company_id: str, document_id: str
     ) -> DocumentRecord | None:
         return self.documents.get((company_id, document_id))
+
+    async def get_document_content(
+        self, *, company_id: str, document_id: str
+    ) -> bytes | None:
+        return self.document_contents.get((company_id, document_id))
 
     async def store_ocr_derivative(
         self,
@@ -175,6 +190,7 @@ def upload_blank_pdf(app: object, key: str = "doc-001") -> str:
         "/v1/documents",
         headers={**AUTH_A, "Idempotency-Key": key},
         files={"file": ("scan.pdf", blank_pdf_bytes(), "application/pdf")},
+        data={"document_role": DocumentRole.UNKNOWN.value},
     )
     assert response.status_code == 201, response.text
     return response.json()["document_id"]
@@ -208,7 +224,7 @@ def test_ocr_latest_and_direct_get_return_same_record() -> None:
         "POST",
         f"/v1/documents/{document_id}/ocr",
         headers={**AUTH_A, "Idempotency-Key": "ocr-010"},
-        json={"engine": "local-stub/0.1", "threshold": 0.75},
+        json={"threshold": 0.75},
     )
     assert created.status_code == 201, created.text
     ocr_id = created.json()["ocr_id"]
@@ -289,3 +305,121 @@ def test_ocr_invalid_threshold_is_422() -> None:
         json={"threshold": 2.0},
     )
     assert response.status_code == 422, response.text
+
+
+class RecognizingRunner:
+    engine = "test-ocr/1.0"
+
+    def recognize(
+        self,
+        source: OcrEngineInput,
+        *,
+        content: bytes,
+        media_type: str,
+    ) -> tuple[OcrCandidate, ...]:
+        assert source.source_sha256 == hashlib.sha256(content).hexdigest()
+        assert media_type == "application/pdf"
+        return (
+            OcrCandidate(
+                page_number=1,
+                block_index=0,
+                text="Гарантия не менее 24 мес.",
+                confidence=0.96,
+                locator="page 1 bbox 10,20,300,60",
+            ),
+        )
+
+
+def test_configured_runner_receives_source_bytes_and_returns_provenance() -> None:
+    service = FakeOcrService()
+    transport_app = create_app(
+        service,
+        FakeAuthenticator(),
+        ocr_runner=RecognizingRunner(),
+    )  # type: ignore[arg-type]
+    document_id = upload_blank_pdf(transport_app)
+
+    response = call(
+        transport_app,
+        "POST",
+        f"/v1/documents/{document_id}/ocr",
+        headers={**AUTH_A, "Idempotency-Key": "ocr-real-runner"},
+        json={},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["engine"] == "test-ocr/1.0"
+    assert payload["result"]["status"] == "PASS"
+    assert payload["result"]["blocks"][0]["text"] == "Гарантия не менее 24 мес."
+    assert payload["result"]["blocks"][0]["provenance"] == {
+        "document_id": document_id,
+        "locator": "page 1 bbox 10,20,300,60",
+        "extractor": "ocr",
+        "confidence": 0.96,
+    }
+
+
+def test_client_cannot_select_or_spoof_ocr_engine() -> None:
+    transport_app = create_app(FakeOcrService(), FakeAuthenticator())  # type: ignore[arg-type]
+    document_id = upload_blank_pdf(transport_app)
+
+    response = call(
+        transport_app,
+        "POST",
+        f"/v1/documents/{document_id}/ocr",
+        headers={**AUTH_A, "Idempotency-Key": "ocr-engine-spoof"},
+        json={"engine": "external/untrusted"},
+    )
+
+    assert response.status_code == 422
+
+
+class RejectingRunner:
+    engine = "test-ocr/failed"
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def recognize(
+        self,
+        source: OcrEngineInput,
+        *,
+        content: bytes,
+        media_type: str,
+    ) -> tuple[OcrCandidate, ...]:
+        _ = (source, content, media_type)
+        raise self.error
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "detail"),
+    [
+        (OcrSourceRejected("unsupported"), 422, "ocr_source_unsupported"),
+        (OcrEngineError("failed"), 503, "ocr_unavailable"),
+    ],
+)
+def test_ocr_runner_failures_are_safe_api_errors(
+    error: Exception,
+    status_code: int,
+    detail: str,
+) -> None:
+    service = FakeOcrService()
+    transport_app = create_app(
+        service,
+        FakeAuthenticator(),
+        ocr_runner=RejectingRunner(error),
+    )  # type: ignore[arg-type]
+    document_id = upload_blank_pdf(transport_app)
+
+    response = call(
+        transport_app,
+        "POST",
+        f"/v1/documents/{document_id}/ocr",
+        headers={**AUTH_A, "Idempotency-Key": f"ocr-failure-{status_code}"},
+        json={},
+    )
+
+    assert response.status_code == status_code
+    assert response.json() == {"detail": detail}
+    assert service.ocr == {}

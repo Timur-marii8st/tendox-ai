@@ -13,12 +13,17 @@ from decimal import Decimal
 from pathlib import Path
 
 from procurement.documents import DocumentInput, extract_document
-from procurement.documents.extraction import ExtractionResult
+from procurement.documents.extraction import ExtractedBlock, ExtractionResult
 from procurement.documents.facts import (
     DEFAULT_FACT_MIN_CONFIDENCE,
+    DocumentRole,
     FactMappingResult,
-    map_blocks_to_requirements,
+    UnmappedReason,
 )
+from procurement.documents.facts import (
+    map_blocks_to_requirements as _map_blocks_to_requirements,
+)
+from procurement.domain.requirements import Operator
 
 GOLDENSET = Path(__file__).parent.parent / "data" / "goldenset" / "v1"
 DOCUMENT_ID = "goldenset-tz-001"
@@ -29,6 +34,16 @@ DOCUMENT_ID_TZ_002 = "goldenset-tz-002"
 DOCUMENT_ID_TZ_003 = "goldenset-tz-003"
 DOCUMENT_ID_TZ_004 = "goldenset-tz-004"
 DOCUMENT_ID_TZ_005 = "goldenset-tz-005"
+DOCUMENT_ID_TZ_006 = "goldenset-tz-006"
+DOCUMENT_ID_QUOTE_001 = "goldenset-quote-001"
+
+
+def map_blocks_to_requirements(blocks: tuple[ExtractedBlock, ...]) -> FactMappingResult:
+    """Golden-файлы tz_* являются документами требований закупки."""
+    return _map_blocks_to_requirements(
+        blocks,
+        document_role=DocumentRole.TENDER_REQUIREMENTS,
+    )
 
 
 def _mapped() -> FactMappingResult:
@@ -214,3 +229,52 @@ def test_golden_tz_005_numeric_and_country() -> None:
         assert requirement.provenance.locator == locator
         assert requirement.provenance.extractor.value == "native_docx"
         assert requirement.provenance.confidence == 1.0
+
+
+def test_golden_tz_006_certificate_requirement_and_mention_trap() -> None:
+    """Явное требование маппится, простое упоминание сертификата остаётся unmapped."""
+    mapped = _mapped_docx("tz_006", DOCUMENT_ID_TZ_006)
+
+    assert mapped == _expected_mapping("tz_006")
+    assert len(mapped.requirements) == 1
+    requirement = mapped.requirements[0]
+    assert requirement.property == "certificate:Декларация соответствия ТР ТС"
+    assert requirement.operator is Operator.EXISTS
+    assert requirement.value is None
+    assert requirement.provenance.document_id == DOCUMENT_ID_TZ_006
+    assert requirement.provenance.locator == "paragraph 1"
+    assert mapped.delivery_deadline == date(2026, 12, 1)
+    assert (mapped.blocks_total, mapped.blocks_mapped) == (3, 2)
+    assert len(mapped.unmapped) == 1
+    assert "упомянут сертификат" in mapped.unmapped[0].text
+
+
+def test_golden_quote_001_cannot_become_tender_requirements() -> None:
+    """Фразы КП, совпадающие с шаблонами ТЗ, не создают hard gates."""
+    content = (GOLDENSET / "quote_001.docx").read_bytes()
+    extraction = extract_document(
+        DocumentInput(
+            document_id=DOCUMENT_ID_QUOTE_001,
+            filename="quote_001.docx",
+            declared_media_type=DOCX_MEDIA,
+            content=content,
+        )
+    )
+    assert extraction.status.value == "PASS"
+
+    mapped = _map_blocks_to_requirements(
+        extraction.blocks,
+        document_role=DocumentRole.SUPPLIER_QUOTE,
+    )
+    expected = FactMappingResult.model_validate_json(
+        (GOLDENSET / "quote_001.expected.json").read_text(encoding="utf-8")
+    )
+
+    assert mapped == expected
+    assert mapped.document_role is DocumentRole.SUPPLIER_QUOTE
+    assert mapped.requirements == ()
+    assert mapped.blocks_mapped == 0
+    assert mapped.equivalent_allowed is None
+    assert mapped.delivery_deadline is None
+    assert len(mapped.unmapped) == len(extraction.blocks) == 5
+    assert all(block.reason is UnmappedReason.NON_REQUIREMENT_DOCUMENT for block in mapped.unmapped)

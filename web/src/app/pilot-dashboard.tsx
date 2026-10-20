@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import Link from "next/link";
 
-import { evaluateCase, importCase, type FormState } from "@/app/actions";
+import { evaluateCase, importCase, runSourcing, type FormState } from "@/app/actions";
 import type {
   CaseCardData,
   DashboardData,
@@ -265,8 +266,13 @@ function CaseDetails({ card }: { card: CaseCardData }) {
 
 function CaseCard({ card, now }: { card: CaseCardData; now: number }) {
   const [state, action, pending] = useActionState(evaluateCase, emptyState);
+  const [sourcingState, sourcingAction, sourcingPending] = useActionState(
+    runSourcing,
+    emptyState,
+  );
   const status = visualStatus(card, now);
   const { case: item, evaluation } = card;
+  const checks = item.assessment?.checks ?? [];
   const submission = item.tender.submission;
   const geography =
     item.tender.delivery?.addresses
@@ -338,7 +344,114 @@ function CaseCard({ card, now }: { card: CaseCardData; now: number }) {
       <div className="next-step">
         <strong>Следующий шаг</strong>
         <p>{nextStep(status)}</p>
+        {checks.length === 1 && checks[0].kind === "technical" && checks[0].status === "PASS" && (
+          <Link href={`/hard-gate-assessment?case_id=${encodeURIComponent(item.case_id)}&version=${item.version}`}>
+            Заполнить остальные hard gates →
+          </Link>
+        )}
+        {status.color === "green" && !status.stale && evaluation && (
+          <Link href={`/participation-approval?evaluation_id=${encodeURIComponent(evaluation.evaluation_id)}`}>
+            Передать на независимое согласование →
+          </Link>
+        )}
       </div>
+      <section className="sourcing-panel" aria-label="Поиск серверных карточек">
+        <h4>Поиск серверов</h4>
+        <p className="sourcing-scope">
+          Публичные карточки — это кандидаты для проверки, а не подтверждённые КП.
+        </p>
+        {card.sourcing ? (
+          <div className="sourcing-result">
+            <p>
+              <strong>{card.sourcing.source_name}</strong> · запрос «{card.sourcing.query}» · {stamp(card.sourcing.observed_at)}
+            </p>
+            {!!card.sourcing.sources.length && (
+              <ul className="sourcing-leads" aria-label="Источники поиска">
+                {card.sourcing.sources.map((source) => (
+                  <li key={`${source.ordinal}-${source.source_url}`}>
+                    <a href={source.source_url} rel="noreferrer" target="_blank">
+                      {source.source_name}
+                    </a>
+                    <small>
+                      {source.source_kind === "MANUFACTURER_CATALOG"
+                        ? "официальный каталог"
+                        : "каталог поставщика"}
+                      {source.source_sha256 ? ` · ${source.source_sha256}` : ""}
+                    </small>
+                    <span>{source.status === "COMPLETED" ? "снимок сохранён" : "ошибка источника"}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {card.sourcing.status === "SOURCE_ERROR" ? (
+              <p className="stale-warning">Источник недоступен или изменил формат. Пустая выдача не зафиксирована.</p>
+            ) : card.sourcing.shortlist.review_queue.length + card.sourcing.shortlist.rejected.length === 0 ? (
+              <p className="unknown">Снимок получен, совпадений по названию нет.</p>
+            ) : (
+              <ul className="sourcing-leads">
+                {[...card.sourcing.shortlist.review_queue, ...card.sourcing.shortlist.rejected].map((entry) => (
+                  <li key={entry.lead.lead_id}>
+                    <a href={entry.lead.product_url ?? entry.lead.source_url} rel="noreferrer" target="_blank">
+                      {entry.lead.product_name}
+                    </a>
+                    <small>
+                      {entry.lead.source_kind === "MANUFACTURER_CATALOG"
+                        ? `официальный каталог${entry.lead.manufacturer ? ` · ${entry.lead.manufacturer}` : ""}`
+                        : `каталог поставщика · ${entry.lead.supplier}`}
+                    </small>
+                    <span>{entry.status === "REJECTED" ? "отклонено" : "нужна техническая проверка"}</span>
+                    {card.sourcing?.requirement_set_binding_id && card.sourcing.requirement_set_binding_sha256 && (
+                      <Link
+                        href={{
+                          pathname: "/server-offer-proposal",
+                          query: {
+                            case_id: item.case_id,
+                            version: String(item.version),
+                            binding_id: card.sourcing.requirement_set_binding_id,
+                            binding_sha256: card.sourcing.requirement_set_binding_sha256,
+                            run_id: card.sourcing.run_id,
+                            lead_id: entry.lead.lead_id,
+                          },
+                        }}
+                      >
+                        Добавить exact BOM/КП →
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="unknown">{card.sourcing.technical_scope_reason}</p>
+            {card.sourcing.requirement_set_id && (
+              <small>
+                Reviewed set: {card.sourcing.requirement_set_id} · binding {card.sourcing.requirement_set_binding_sha256}
+              </small>
+            )}
+            {card.sourcing.source_sha256 && (
+              <small>Snapshot SHA-256: {card.sourcing.source_sha256}</small>
+            )}
+          </div>
+        ) : (
+          <p className="unknown">Поиск для этой версии кейса ещё не запускался.</p>
+        )}
+        <form action={sourcingAction} className="sourcing-form">
+          <input name="case-id" type="hidden" value={item.case_id} />
+          <input name="version" type="hidden" value={item.version} />
+          <label htmlFor={`sourcing-query-${item.case_id}-${item.version}`}>Модель, 1–5 слов</label>
+          <input
+            id={`sourcing-query-${item.case_id}-${item.version}`}
+            maxLength={80}
+            name="query"
+            placeholder="DL360 Gen12"
+            required
+          />
+          <button disabled={sourcingPending} type="submit">
+            {sourcingPending ? "Ищем…" : "Найти и сохранить"}
+          </button>
+          {sourcingState.error && <p role="alert">{sourcingState.error}</p>}
+          {sourcingState.success && <p role="status">{sourcingState.success}</p>}
+        </form>
+      </section>
       <form action={action} className="evaluate-form">
         <input name="case-id" type="hidden" value={item.case_id} />
         <input name="version" type="hidden" value={item.version} />
@@ -386,10 +499,30 @@ export function PilotDashboard({
           <p className="eyebrow">Внутренний пилот · S3</p>
           <h1>Закупки и решения</h1>
         </div>
-        <p>
-          Первый рабочий экран тендерного отдела. Рекомендации загружаются из
-          детерминированного API и не рассчитываются в браузере.
-        </p>
+        <div>
+          <p>
+            Первый рабочий экран тендерного отдела. Рекомендации загружаются из
+            детерминированного API и не рассчитываются в браузере.
+          </p>
+          <Link className="mt-2 inline-block font-bold text-blue-700 hover:underline" href="/document-search">
+            Поиск по документам →
+          </Link>
+          <Link className="ml-5 mt-2 inline-block font-bold text-blue-700 hover:underline" href="/document-upload">
+            Загрузить ТЗ или КП →
+          </Link>
+          <Link className="ml-5 mt-2 inline-block font-bold text-blue-700 hover:underline" href="/completeness-review">
+            Проверка полноты →
+          </Link>
+          <Link className="ml-5 mt-2 inline-block font-bold text-blue-700 hover:underline" href="/requirement-set-binding">
+            Привязать требования →
+          </Link>
+          <Link className="ml-5 mt-2 inline-block font-bold text-blue-700 hover:underline" href="/supplier-discovery">
+            Источники поставщиков →
+          </Link>
+          <Link className="ml-5 mt-2 inline-block font-bold text-blue-700 hover:underline" href="/tender-discovery">
+            Поиск закупок ЕИС →
+          </Link>
+        </div>
       </header>
 
       {demoMode && (

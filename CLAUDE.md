@@ -1,7 +1,7 @@
 # CLAUDE.md — конвенции разработки
 
 Инструкции для ИИ-агентов и людей, работающих над кодом этого репозитория.
-Реестр *продуктовых* ИИ-агентов — в [docs/14-product-agents.md](docs/14-product-agents.md).
+Реестр *продуктовых* ИИ-агентов — в [docs/product/14-product-agents.md](docs/product/14-product-agents.md).
 
 ## Что это за проект
 
@@ -12,10 +12,10 @@
 Перед задачей читать только релевантные источники: сначала [AGENTS.md](AGENTS.md)
 и этот файл, затем нужный раздел [docs/README.md](docs/README.md) и связанные с
 задачей документы. Полный набор документов читать не требуется; для доменной
-логики обычно нужны [docs/01-domain-model.md](docs/01-domain-model.md),
-[docs/03-compliance-engine.md](docs/03-compliance-engine.md),
-[docs/04-economics.md](docs/04-economics.md) или
-[docs/11-product-requirements.md](docs/11-product-requirements.md) — по области
+логики обычно нужны [docs/architecture/01-domain-model.md](docs/architecture/01-domain-model.md),
+[docs/architecture/03-compliance-engine.md](docs/architecture/03-compliance-engine.md),
+[docs/architecture/04-economics.md](docs/architecture/04-economics.md) или
+[docs/product/11-product-requirements.md](docs/product/11-product-requirements.md) — по области
 изменения.
 
 ## Стек
@@ -122,7 +122,7 @@ src/procurement/
   api/            # FastAPI, тонкий слой над домом
 tests/            # зеркалит структуру src, файлы test_<module>.py
   conftest.py       синтетические фикстуры: req / attr / line_item / candidate
-docs/             # актуальная документация; устаревшее удаляем, не копим
+docs/             # тематические контракты и индексы; history/ — dated evidence
 ```
 
 `domain/` не импортирует ничего из `api/`, не делает сетевых вызовов и не читает
@@ -151,7 +151,7 @@ docs/             # актуальная документация; устаре�
 Последствия / Альтернативы).
 
 Факт о рынке, площадке, законе или конкуренте попадает в
-[docs/07-research-log.md](docs/07-research-log.md) со статусом:
+[docs/research/07-research-log.md](docs/research/07-research-log.md) со статусом:
 `ПРОВЕРЕНО` (есть первичный источник) / `ТРЕБУЕТ ПРОВЕРКИ` / `ГИПОТЕЗА`.
 Непроверенный факт нельзя использовать как основание архитектурного решения.
 
@@ -160,6 +160,10 @@ docs/             # актуальная документация; устаре�
 - Реальные ТЗ и КП клиентов — только в `samples/private/` (в `.gitignore`).
   Для тестов используем синтетические фикстуры.
 - Не добавляем интеграцию с ЭТП без проверки её регламента/договора —
-  см. [docs/06-legal-security.md](docs/06-legal-security.md).
+  см. [docs/architecture/06-legal-security.md](docs/architecture/06-legal-security.md).
 - Browser automation — fallback, а не основной протокол. Обход CAPTCHA,
   anti-bot и rate limits не реализуем.
+
+Проверка навигации документации: `uv run python scripts/check_docs.py`.
+Подробные журналы хранить в docs/history/, текущую задачу — только в коротком
+[плане](docs/15-implementation-plan.md). Историческое evidence сохранять.

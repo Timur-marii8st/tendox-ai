@@ -1,0 +1,5 @@
+*.sh text eol=lf
+docker/certs/*.crt text eol=lf
+
+# Historical regression oracles are identified by their exact byte SHA-256.
+tests/fixtures/eis_release_baselines/*.py -text

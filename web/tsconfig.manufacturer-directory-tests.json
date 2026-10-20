@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM"], "module": "CommonJS",
+    "moduleResolution": "Node", "strict": true, "skipLibCheck": true,
+    "esModuleInterop": true, "rootDir": ".", "outDir": "build/manufacturer-directory-tests",
+    "noEmitOnError": true
+  },
+  "include": ["tests/manufacturer-directory.test.ts", "src/lib/manufacturer-directory.ts", "src/lib/manufacturer-review.ts"]
+}

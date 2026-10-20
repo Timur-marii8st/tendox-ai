@@ -1,0 +1,128 @@
+{
+  "report": {
+    "policy_version": "eis-position-supplier-page-v1",
+    "run_id": "22222222-2222-4222-8222-222222222222",
+    "request": {
+      "position": {
+        "selection": {
+          "notice": {
+            "purchase_number": "0848300054826000154",
+            "version_number": 1,
+            "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "source_index": 1
+        }
+      },
+      "serp_run_id": "11111111-1111-4111-8111-111111111111",
+      "engine": "BING",
+      "rank": 1
+    },
+    "parent_report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "position_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "link": {
+      "rank": 1,
+      "title": "Публичный результат",
+      "snippet": "Непроверенная ссылка",
+      "url": "https://supplier.ru/",
+      "dom_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "locator": "locator(\"li.b_algo\").nth(0)",
+      "role_status": "UNKNOWN",
+      "price_status": "UNKNOWN",
+      "technical_status": "UNKNOWN"
+    },
+    "created_at": "2026-10-06T00:00:00Z",
+    "status": "COMPLETED",
+    "reason_code": "FIXED_PUBLIC_PAGE_OBSERVATION",
+    "observation": {
+      "source_url": "https://supplier.ru/",
+      "final_url": "https://supplier.ru/",
+      "observed_at": "2026-10-06T00:00:00Z",
+      "status": "COMPLETED",
+      "reason_code": "HTML_OBSERVED",
+      "http_status": 200,
+      "extraction_status": "EXTRACTED",
+      "page_kind": "PRODUCT",
+      "html_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+      "byte_count": 543,
+      "hops": [
+        {
+          "url": "https://supplier.ru/",
+          "http_status": 200,
+          "location": null
+        }
+      ],
+      "dispatch_count": 1,
+      "redirect_count": 0,
+      "products": [
+        {
+          "locator": "jsonld[0]$",
+          "name": {
+            "value": "HPE ProLiant DL360 Gen12",
+            "html_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+            "locator": "jsonld[0]$.name"
+          },
+          "brand": {
+            "value": "HPE",
+            "html_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+            "locator": "jsonld[0]$.brand.name"
+          },
+          "manufacturer": {
+            "value": "Hewlett Packard Enterprise",
+            "html_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+            "locator": "jsonld[0]$.manufacturer.name"
+          },
+          "seller": null,
+          "sku": {
+            "value": "P71386-B21",
+            "html_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+            "locator": "jsonld[0]$.sku"
+          },
+          "prices": [
+            {
+              "amount": "562957.00",
+              "raw_amount": "562957.00",
+              "currency": "RUB",
+              "price_kind": "EXACT",
+              "html_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+              "locator": "jsonld[0]$.offers[0].price"
+            },
+            {
+              "amount": "540000.00",
+              "raw_amount": "540000.00",
+              "currency": "RUB",
+              "price_kind": "LOW",
+              "html_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+              "locator": "jsonld[0]$.offers[1].lowPrice"
+            },
+            {
+              "amount": "610000.00",
+              "raw_amount": "610000.00",
+              "currency": "RUB",
+              "price_kind": "HIGH",
+              "html_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+              "locator": "jsonld[0]$.offers[1].highPrice"
+            }
+          ]
+        }
+      ],
+      "technical_status": "UNKNOWN",
+      "quote_status": "UNKNOWN",
+      "configured_cost_status": "UNKNOWN",
+      "identity_status": "UNKNOWN"
+    },
+    "attempted_source_requests": 1,
+    "source_body_sha256": "cb93ef848c0a3fcaa346b193a651c86d9e9a39f76d95b6965096e67e43d2593f",
+    "source_body_byte_count": 543,
+    "supplier_identity": "UNKNOWN",
+    "price_comparability": "UNKNOWN",
+    "tax": "UNKNOWN",
+    "stock": "UNKNOWN",
+    "delivery": "UNKNOWN",
+    "technical": "UNKNOWN",
+    "quote": "UNKNOWN",
+    "participation": "UNKNOWN"
+  },
+  "created": false,
+  "source_requests": 0,
+  "jobs_created": 0
+}

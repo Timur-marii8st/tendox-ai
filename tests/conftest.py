@@ -2,14 +2,63 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 import pytest
 
 from procurement.domain.offers import Attribute, Candidate, Certificate
 from procurement.domain.provenance import Extractor, Provenance
 from procurement.domain.requirements import LineItem, Operator, Requirement
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+_REQUIRED_DATABASE_VARIABLES = ("DATABASE_ADMIN_URL", "DATABASE_URL")
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Добавить fail-closed режим обязательной проверки PostgreSQL."""
+    group = parser.getgroup("postgresql-gate")
+    group.addoption(
+        "--require-postgres",
+        action="store_true",
+        help=(
+            "Require PostgreSQL integration-test configuration and fail if any selected "
+            "integration test is skipped."
+        ),
+    )
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Не разрешать mandatory gate без обеих строк подключения."""
+    if not session.config.getoption("--require-postgres"):
+        return
+    missing = [name for name in _REQUIRED_DATABASE_VARIABLES if not os.environ.get(name)]
+    if missing:
+        raise pytest.UsageError(
+            "mandatory PostgreSQL gate requires non-empty environment variables: "
+            + ", ".join(missing)
+        )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item,
+    call: pytest.CallInfo[object],
+) -> Generator[None, None, None]:
+    """В mandatory gate любой skip является непроверенным результатом и ошибкой."""
+    outcome = yield
+    report = outcome.get_result()
+    if item.config.getoption("--require-postgres") and report.skipped:
+        report.outcome = "failed"
+        report.longrepr = (
+            str(item.path),
+            report.location[1] + 1,
+            f"PostgreSQL gate forbids skipped tests: {report.longrepr}",
+        )
 
 TZ = Provenance(document_id="ТЗ.pdf", locator="стр. 16", extractor=Extractor.NATIVE_PDF)
 DATASHEET = Provenance(document_id="datasheet XXX-24G", locator="стр. 3", extractor=Extractor.LLM)

@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node ../scripts/run-web-tests.mjs",
+    "test:discovery": "tsc -p tsconfig.discovery-tests.json && node --test build/discovery-tests/tests/eis-discovery-overview.test.js build/discovery-tests/tests/eis-search-pages.test.js",
+    "test:protocols": "tsc -p tsconfig.protocol-tests.json && node --test build/protocol-tests/tests/eis-protocols.test.js",
+    "test:analogs": "tsc -p tsconfig.analog-tests.json && node --test build/analog-tests/tests/eis-analogs.test.js",
+    "test:characteristics": "tsc -p tsconfig.characteristic-tests.json && node --test build/characteristic-tests/tests/eis-characteristics.test.js build/characteristic-tests/tests/eis-characteristic-render.test.js",
+    "test:manufacturer-review": "tsc -p tsconfig.manufacturer-review-tests.json && node --test build/manufacturer-review-tests/tests/manufacturer-review.test.js"
   },
   "dependencies": {
     "next": "16.3.4",

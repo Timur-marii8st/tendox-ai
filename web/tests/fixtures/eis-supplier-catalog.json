@@ -1,0 +1,109 @@
+{
+  "report": {
+    "policy_version": "eis-position-supplier-catalog-v1",
+    "run_id": "55555555-5555-4555-8555-555555555555",
+    "request": {
+      "page": {
+        "position": {
+          "selection": {
+            "notice": {
+              "purchase_number": "0848300054826000154",
+              "version_number": 1,
+              "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "source_index": 1
+          }
+        },
+        "serp_run_id": "11111111-1111-4111-8111-111111111111",
+        "engine": "BING",
+        "rank": 1
+      },
+      "page_run_id": "22222222-2222-4222-8222-222222222222",
+      "search_run_id": "44444444-4444-4444-8444-444444444444",
+      "product_index": 1
+    },
+    "parent_page_report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "position_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "created_at": "2026-10-06T00:00:00Z",
+    "stage": "PRODUCT",
+    "search_spec": null,
+    "selected_link": {
+      "index": 1,
+      "dom_ordinal": 7,
+      "title": "Бумага SvetoCopy Eco",
+      "raw_href": "/товар/paper",
+      "url": "https://bumaga-s.ru/товар/paper",
+      "html_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "locator": "a[7]",
+      "technical_status": "UNKNOWN",
+      "price_status": "UNKNOWN"
+    },
+    "parent_search_report_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "status": "COMPLETED",
+    "reason_code": "FIXED_CATALOG_OBSERVATION",
+    "observation": {
+      "source_url": "https://bumaga-s.ru/товар/paper",
+      "final_url": "https://bumaga-s.ru/товар/paper",
+      "observed_at": "2026-10-06T00:00:00Z",
+      "status": "COMPLETED",
+      "reason_code": "HTML_OBSERVED",
+      "http_status": 200,
+      "extraction_status": "EXTRACTED",
+      "page_kind": "PRODUCT",
+      "html_sha256": "99f6bdff49a3dfbe9be98479787ebbb991e73878feda506c9acdbe38bfb1e333",
+      "byte_count": 279,
+      "hops": [
+        {
+          "url": "https://bumaga-s.ru/товар/paper",
+          "http_status": 200,
+          "location": null
+        }
+      ],
+      "dispatch_count": 1,
+      "redirect_count": 0,
+      "products": [
+        {
+          "locator": "locator(\"span[itemscope][itemtype$='/Product']\").nth(0)",
+          "name": {
+            "value": "Бумага SvetoCopy Eco",
+            "html_sha256": "99f6bdff49a3dfbe9be98479787ebbb991e73878feda506c9acdbe38bfb1e333",
+            "locator": "locator(\"meta\").nth(0)@content"
+          },
+          "brand": null,
+          "manufacturer": null,
+          "seller": null,
+          "sku": null,
+          "prices": [
+            {
+              "amount": "299.6",
+              "raw_amount": "299.6",
+              "currency": "RUB",
+              "price_kind": "EXACT",
+              "html_sha256": "99f6bdff49a3dfbe9be98479787ebbb991e73878feda506c9acdbe38bfb1e333",
+              "locator": "locator(\"meta\").nth(1)@content"
+            }
+          ]
+        }
+      ],
+      "technical_status": "UNKNOWN",
+      "quote_status": "UNKNOWN",
+      "configured_cost_status": "UNKNOWN",
+      "identity_status": "UNKNOWN"
+    },
+    "links": null,
+    "attempted_source_requests": 1,
+    "source_body_sha256": "99f6bdff49a3dfbe9be98479787ebbb991e73878feda506c9acdbe38bfb1e333",
+    "source_body_byte_count": 279,
+    "supplier_identity": "UNKNOWN",
+    "price_comparability": "UNKNOWN",
+    "tax": "UNKNOWN",
+    "stock": "UNKNOWN",
+    "delivery": "UNKNOWN",
+    "technical": "UNKNOWN",
+    "quote": "UNKNOWN",
+    "participation": "UNKNOWN"
+  },
+  "created": false,
+  "source_requests": 0,
+  "jobs_created": 0
+}

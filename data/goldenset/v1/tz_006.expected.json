@@ -1,0 +1,36 @@
+{
+  "document_role": "TENDER_REQUIREMENTS",
+  "requirements": [
+    {
+      "property": "certificate:Декларация соответствия ТР ТС",
+      "operator": "exists",
+      "value": null,
+      "unit": null,
+      "mandatory": true,
+      "weight": 1,
+      "raw_text": "Требуется действующая декларация соответствия ТР ТС.",
+      "provenance": {
+        "document_id": "goldenset-tz-006",
+        "locator": "paragraph 1",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      }
+    }
+  ],
+  "unmapped": [
+    {
+      "text": "В описании товара упомянут сертификат соответствия ЕАЭС.",
+      "provenance": {
+        "document_id": "goldenset-tz-006",
+        "locator": "paragraph 3",
+        "extractor": "native_docx",
+        "confidence": 1.0
+      },
+      "reason": "NO_PATTERN_MATCH"
+    }
+  ],
+  "blocks_total": 3,
+  "blocks_mapped": 2,
+  "equivalent_allowed": null,
+  "delivery_deadline": "2026-12-01"
+}

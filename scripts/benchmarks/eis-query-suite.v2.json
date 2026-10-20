@@ -1,0 +1,729 @@
+{
+  "cases": [
+    {
+      "attempts": [
+        {
+          "attempt_id": "44-broad-paper-default-r1-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "44-broad-paper-default-r2-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "44-broad-paper-default-r3-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 3
+        }
+      ],
+      "case_id": "44-broad-paper-default",
+      "intent": "Broad supply of paper products; office, sanitary and medical paper remain distinct.",
+      "intent_sha256": "50cf8ef8cb1d0d834f21ae868ef530bd31ec7ef48520fc87fea81ea6ecabb9b0",
+      "kind": "MEASURED",
+      "order": 1,
+      "page_budget": 1,
+      "query": "бумага",
+      "relevance_criterion": "Relevant only when the exact saved notice supplies a paper product within this broad intent.",
+      "repeats": 3,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "NOT_EXPIRED_OR_UNKNOWN",
+        "endpoint": "/v1/tender-discovery/eis-index",
+        "filters": [
+          {
+            "application": "HTTP",
+            "name": "search_scope",
+            "value": "NOT_EXPIRED_OR_UNKNOWN"
+          }
+        ],
+        "law": "44",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "NOT_EXPIRED_OR_UNKNOWN",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "6dc3abb969429c397474532e6a3adde2c9c22f4db69603662e0a5aada1a4ec3a",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "44-office-a4-history-r1-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "44-office-a4-history-r1-p2",
+          "http_request_expected": true,
+          "kind": "CONTINUATION",
+          "page_index": 2,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "44-office-a4-history-r1-full",
+          "http_request_expected": true,
+          "kind": "COMPLETE_TRAVERSAL",
+          "page_index": null,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "44-office-a4-history-r2-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "44-office-a4-history-r2-p2",
+          "http_request_expected": true,
+          "kind": "CONTINUATION",
+          "page_index": 2,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "44-office-a4-history-r2-full",
+          "http_request_expected": true,
+          "kind": "COMPLETE_TRAVERSAL",
+          "page_index": null,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "44-office-a4-history-r3-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 3
+        },
+        {
+          "attempt_id": "44-office-a4-history-r3-p2",
+          "http_request_expected": true,
+          "kind": "CONTINUATION",
+          "page_index": 2,
+          "repeat": 3
+        },
+        {
+          "attempt_id": "44-office-a4-history-r3-full",
+          "http_request_expected": true,
+          "kind": "COMPLETE_TRAVERSAL",
+          "page_index": null,
+          "repeat": 3
+        }
+      ],
+      "case_id": "44-office-a4-history",
+      "intent": "Supply of A4 office printing paper.",
+      "intent_sha256": "3f914ad9835edddce8eb82ac1a6b777c9f8609aca1a5f9abffab9ce79e89e234",
+      "kind": "MEASURED",
+      "order": 2,
+      "page_budget": 2,
+      "query": "офисная бумага А4",
+      "relevance_criterion": "Relevant only for supply of A4 office printing paper, excluding paper services and unrelated paper products.",
+      "repeats": 3,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "UNTIL_END_OR_PAGE_BUDGET",
+        "deadline_mode": "ALL_CACHED",
+        "endpoint": "/v1/tender-discovery/eis-index",
+        "filters": [
+          {
+            "application": "HTTP",
+            "name": "search_scope",
+            "value": "ALL_CACHED"
+          }
+        ],
+        "law": "44",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "ALL_CACHED",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "7685fa01205879324f290771ffee11f2c5c3ed4f953e1f532282dc5b643c2de7",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "44-paper-natural-language-r1-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "44-paper-natural-language-r2-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "44-paper-natural-language-r3-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 3
+        }
+      ],
+      "case_id": "44-paper-natural-language",
+      "intent": "Natural-language request for supply of paper goods.",
+      "intent_sha256": "b5f51dd9f1aa79a0a3c678a8e3ce768e180ed222aa72fac08a1a6b57541cde2b",
+      "kind": "MEASURED",
+      "order": 3,
+      "page_budget": 1,
+      "query": "хочу перепродавать бумагу",
+      "relevance_criterion": "Relevant only for saved notices supplying paper goods; the phrase does not establish A4 or office-paper intent.",
+      "repeats": 3,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "NOT_EXPIRED_OR_UNKNOWN",
+        "endpoint": "/v1/tender-discovery/eis-index",
+        "filters": [
+          {
+            "application": "HTTP",
+            "name": "search_scope",
+            "value": "NOT_EXPIRED_OR_UNKNOWN"
+          }
+        ],
+        "law": "44",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "NOT_EXPIRED_OR_UNKNOWN",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "6dc3abb969429c397474532e6a3adde2c9c22f4db69603662e0a5aada1a4ec3a",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "44-invalid-query-r1-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        }
+      ],
+      "case_id": "44-invalid-query",
+      "intent": "Invalid lexical query boundary.",
+      "intent_sha256": "ef485bc518f041c29eba6da46cc162f4c5cfdb8f677580afb85bf2a4e9130c9f",
+      "kind": "INVALID_QUERY",
+      "order": 4,
+      "page_budget": 1,
+      "query": "!!!",
+      "relevance_criterion": "No relevance metric; the expected outcome is a typed invalid-query response.",
+      "repeats": 1,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "NOT_EXPIRED_OR_UNKNOWN",
+        "endpoint": "/v1/tender-discovery/eis-index",
+        "filters": [
+          {
+            "application": "HTTP",
+            "name": "search_scope",
+            "value": "NOT_EXPIRED_OR_UNKNOWN"
+          }
+        ],
+        "law": "44",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "NOT_EXPIRED_OR_UNKNOWN",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "6dc3abb969429c397474532e6a3adde2c9c22f4db69603662e0a5aada1a4ec3a",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "223-broad-paper-default-r1-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "223-broad-paper-default-r2-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "223-broad-paper-default-r3-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 3
+        }
+      ],
+      "case_id": "223-broad-paper-default",
+      "intent": "Broad 223-FZ supply of paper products.",
+      "intent_sha256": "ffa9506c80bae9367a390c27026cc32d2af4f05862e01ab3202e84a557b991f4",
+      "kind": "MEASURED",
+      "order": 5,
+      "page_budget": 1,
+      "query": "бумага",
+      "relevance_criterion": "Relevant only when the exact saved 223-FZ notice supplies a paper product within this broad intent.",
+      "repeats": 3,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "ALL_CACHED",
+        "endpoint": "/v1/tender-discovery/eis-223-index",
+        "filters": [],
+        "law": "223",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "ALL_CACHED",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "ed047c277513d2839e3e071b7e423a8908b0e5f17c25920c15c00fe7638e22d5",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "223-server-equipment-continuation-r1-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "223-server-equipment-continuation-r1-p2",
+          "http_request_expected": true,
+          "kind": "CONTINUATION",
+          "page_index": 2,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "223-server-equipment-continuation-r1-full",
+          "http_request_expected": true,
+          "kind": "COMPLETE_TRAVERSAL",
+          "page_index": null,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "223-server-equipment-continuation-r2-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "223-server-equipment-continuation-r2-p2",
+          "http_request_expected": true,
+          "kind": "CONTINUATION",
+          "page_index": 2,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "223-server-equipment-continuation-r2-full",
+          "http_request_expected": true,
+          "kind": "COMPLETE_TRAVERSAL",
+          "page_index": null,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "223-server-equipment-continuation-r3-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 3
+        },
+        {
+          "attempt_id": "223-server-equipment-continuation-r3-p2",
+          "http_request_expected": true,
+          "kind": "CONTINUATION",
+          "page_index": 2,
+          "repeat": 3
+        },
+        {
+          "attempt_id": "223-server-equipment-continuation-r3-full",
+          "http_request_expected": true,
+          "kind": "COMPLETE_TRAVERSAL",
+          "page_index": null,
+          "repeat": 3
+        }
+      ],
+      "case_id": "223-server-equipment-continuation",
+      "intent": "Supply of physical server equipment.",
+      "intent_sha256": "e681aedd486bdd940c7c51fee63a45e9cdd40772fc3265987d497ba5cdcebb61",
+      "kind": "MEASURED",
+      "order": 6,
+      "page_budget": 2,
+      "query": "серверное оборудование",
+      "relevance_criterion": "Relevant for physical server equipment, excluding administration-only services and software-only notices.",
+      "repeats": 3,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "UNTIL_END_OR_PAGE_BUDGET",
+        "deadline_mode": "ALL_CACHED",
+        "endpoint": "/v1/tender-discovery/eis-223-index",
+        "filters": [],
+        "law": "223",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "ALL_CACHED",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "efbf0e6807936ec1602e56a7ddf4bb7b539b91c2ca8adf26c1a1f68ef5874dd3",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "223-storage-abbreviation-r1-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        },
+        {
+          "attempt_id": "223-storage-abbreviation-r2-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 2
+        },
+        {
+          "attempt_id": "223-storage-abbreviation-r3-p1",
+          "http_request_expected": true,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 3
+        }
+      ],
+      "case_id": "223-storage-abbreviation",
+      "intent": "Supply of a hardware data storage system.",
+      "intent_sha256": "d96ab04e65ac8621b58ccd36138ee70467cc9b075ea8482c0b5969cea77aaf03",
+      "kind": "MEASURED",
+      "order": 7,
+      "page_budget": 1,
+      "query": "СХД",
+      "relevance_criterion": "Relevant only for hardware storage-system supply; abbreviation evidence requires exact saved-version review.",
+      "repeats": 3,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "ALL_CACHED",
+        "endpoint": "/v1/tender-discovery/eis-223-index",
+        "filters": [],
+        "law": "223",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "ALL_CACHED",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "ed047c277513d2839e3e071b7e423a8908b0e5f17c25920c15c00fe7638e22d5",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "44-region-filter-unsupported-r1-p1",
+          "http_request_expected": false,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        }
+      ],
+      "case_id": "44-region-filter-unsupported",
+      "intent": "Paper supply restricted by HTTP region filter.",
+      "intent_sha256": "6d460f5f2ebceb3439e8b28481f98debf3dd6b69547ea9957c4910d1af96d5f2",
+      "kind": "UNSUPPORTED",
+      "order": 8,
+      "page_budget": 1,
+      "query": "бумага",
+      "relevance_criterion": "No measured relevance because the selected endpoint has no region filter.",
+      "repeats": 1,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "NOT_EXPIRED_OR_UNKNOWN",
+        "endpoint": "/v1/tender-discovery/eis-index",
+        "filters": [
+          {
+            "application": "UNSUPPORTED",
+            "name": "region",
+            "value": "77"
+          }
+        ],
+        "law": "44",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "NOT_EXPIRED_OR_UNKNOWN",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "7b69e1f1a8c4c03fcb43d335236716d7c50350375946c971ee9414d15827083d",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "44-ktru-filter-unsupported-r1-p1",
+          "http_request_expected": false,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        }
+      ],
+      "case_id": "44-ktru-filter-unsupported",
+      "intent": "Paper supply restricted by HTTP KTRU filter.",
+      "intent_sha256": "20be68d466c4f7c871be5d6a54475f146f23fcf723eb6c3a1b69ad48bfe84003",
+      "kind": "UNSUPPORTED",
+      "order": 9,
+      "page_budget": 1,
+      "query": "бумага",
+      "relevance_criterion": "No measured relevance because the selected endpoint has no KTRU filter.",
+      "repeats": 1,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "ALL_CACHED",
+        "endpoint": "/v1/tender-discovery/eis-index",
+        "filters": [
+          {
+            "application": "UNSUPPORTED",
+            "name": "ktru",
+            "value": "17.12.14.110"
+          }
+        ],
+        "law": "44",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "ALL_CACHED",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "a9603f7689f2b69c50ff434f1d2ad4761067c12f704f37cc1a67a24a2b5b18a9",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "223-active-only-unsupported-r1-p1",
+          "http_request_expected": false,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        }
+      ],
+      "case_id": "223-active-only-unsupported",
+      "intent": "223-FZ paper supply with active-only semantics.",
+      "intent_sha256": "2cd4504c7c539f78bb2a480475c6dc4bb2050c7bf767f8b6e76b3d31c3293ead",
+      "kind": "UNSUPPORTED",
+      "order": 10,
+      "page_budget": 1,
+      "query": "бумага",
+      "relevance_criterion": "No measured relevance because 223 saved search uses ALL_CACHED and has no active-only HTTP filter.",
+      "repeats": 1,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "ACTIVE_ONLY_UNSUPPORTED",
+        "endpoint": "/v1/tender-discovery/eis-223-index",
+        "filters": [
+          {
+            "application": "UNSUPPORTED",
+            "name": "active_only",
+            "value": "true"
+          }
+        ],
+        "law": "223",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "ALL_CACHED",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "f16a19174a1b8f625005b8a8d9002766bfc0fe8e949ac6d7008b12f5feefa851",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    },
+    {
+      "attempts": [
+        {
+          "attempt_id": "223-publication-date-unsupported-r1-p1",
+          "http_request_expected": false,
+          "kind": "FIRST_PAGE",
+          "page_index": 1,
+          "repeat": 1
+        }
+      ],
+      "case_id": "223-publication-date-unsupported",
+      "intent": "223-FZ server supply restricted by publication date.",
+      "intent_sha256": "ac5620047ab382a7abb920c811a93cb06333dfc025626eb6ac8ea8617e3add16",
+      "kind": "UNSUPPORTED",
+      "order": 11,
+      "page_budget": 1,
+      "query": "серверы",
+      "relevance_criterion": "No measured relevance because the selected endpoint has no publication-date HTTP filter.",
+      "repeats": 1,
+      "scope": {
+        "boundary_notes": "Read-only saved-index endpoint only; excludes Server Action, UI rendering, regional refresh queueing, background ingestion and public EIS.",
+        "clock": "2026-10-07T12:00:00Z",
+        "continuation_policy": "FIRST_PAGE_ONLY",
+        "deadline_mode": "ALL_CACHED",
+        "endpoint": "/v1/tender-discovery/eis-223-index",
+        "filters": [
+          {
+            "application": "UNSUPPORTED",
+            "name": "publication_date",
+            "value": "2026-01-01/2026-10-07"
+          }
+        ],
+        "law": "223",
+        "measurement_boundary": "HTTP_READ_ONLY_ENDPOINT",
+        "order_version": 1,
+        "page_size": 100,
+        "publication_interval": {
+          "bounds": null,
+          "end": null,
+          "mode": "UNBOUNDED",
+          "start": null
+        },
+        "region_codes": [],
+        "region_mode": "UNBOUNDED",
+        "region_source": "No HTTP region filter exists; scope explicitly unbounded.",
+        "search_scope": "ALL_CACHED",
+        "version": "eis-search-scope-v2"
+      },
+      "scope_sha256": "fbdc708326ebde8d4f0d0d8607bd8e64ec35429bc29e00c197f6f43e1c9f9ef2",
+      "timeout_ms": "30000",
+      "warmup_count": 0
+    }
+  ],
+  "suite_id": "m2a-template-v2",
+  "tenant": "local-eis-supplier-template",
+  "version": "eis-search-suite-v2"
+}

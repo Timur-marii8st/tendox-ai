@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "rootDir": ".",
+    "outDir": "build/requirement-review-tests",
+    "noEmitOnError": true
+  },
+  "include": [
+    "tests/eis-requirement-review.test.ts",
+    "tests/eis-requirement-review-render.test.tsx",
+    "src/lib/eis-requirement-review.ts",
+    "src/app/tender-discovery/requirement-review-report.tsx"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "rootDir": ".",
+    "outDir": "build/supplier-catalog-tests",
+    "noEmitOnError": true
+  },
+  "include": [
+    "tests/eis-supplier-catalog.test.ts",
+    "tests/eis-supplier-catalog-render.test.tsx",
+    "src/lib/eis-supplier-catalog.ts",
+    "src/app/tender-discovery/supplier-catalog-report.tsx"
+  ]
+}

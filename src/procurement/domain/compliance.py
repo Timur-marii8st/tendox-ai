@@ -1,7 +1,7 @@
 """Движок соответствия — ядро продукта.
 
 Инвариант домена №4: LLM извлекает, правила решают. Этот модуль детерминирован и
-не имеет доступа к языковой модели. Методика — docs/03-compliance-engine.md,
+не имеет доступа к языковой модели. Методика — docs/architecture/03-compliance-engine.md,
 обоснование — docs/adr/0002-llm-extracts-rules-decide.md.
 
 Три правила, которые здесь закодированы и не подлежат «оптимизации»:
@@ -66,7 +66,7 @@ class RequirementCheck(BaseModel):
         return self.verdict is Verdict.UNKNOWN and self.requirement.mandatory
 
     def explain(self) -> str:
-        """Формат вывода из docs/03-compliance-engine.md — обе ссылки обязательны."""
+        """Формат вывода из docs/architecture/03-compliance-engine.md — обе ссылки обязательны."""
         icon = {Verdict.PASS: "OK", Verdict.FAIL: "FAIL", Verdict.UNKNOWN: "?"}[self.verdict]
         return "\n".join(
             (
@@ -142,6 +142,11 @@ def _canonical_numbers(
 
     if req.unit is None:
         # Безразмерное требование, например число портов.
+        if attr.unit is not None:
+            return (
+                f"единица измерения «{attr.unit}» указана только у факта — "
+                "размерность требования не подтверждена"
+            )
         return attr.value, tuple(bounds)
 
     if attr.unit is None:
@@ -187,6 +192,8 @@ def _compare_numeric(req: Requirement, attr: Attribute) -> tuple[Verdict, str]:
         Operator.LE: fact <= limit,
         Operator.GT: fact > limit,
         Operator.LT: fact < limit,
+        Operator.EQ: fact == limit,
+        Operator.NE: fact != limit,
     }[req.operator]
     reason = (
         "значение удовлетворяет требованию"
@@ -246,8 +253,17 @@ def check_requirement(
     candidate: Candidate,
     *,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    delivery_deadline: date | None = None,
 ) -> RequirementCheck:
     """Проверить одно требование. Отсутствие данных даёт UNKNOWN, никогда PASS."""
+    if req.property.startswith("certificate:") and req.operator is Operator.EXISTS:
+        return _check_certificate_requirement(
+            req,
+            candidate,
+            delivery_deadline=delivery_deadline,
+            min_confidence=min_confidence,
+        )
+
     attr = candidate.attribute(req.property)
 
     if attr is None:
@@ -279,8 +295,13 @@ def check_requirement(
             evidence=str(attr.provenance),
         )
 
+    numeric_equality = (
+        req.operator in (Operator.EQ, Operator.NE) and isinstance(req.value, Decimal)
+    )
     verdict, reason = (
-        _compare_numeric(req, attr) if req.operator.is_numeric else _compare_non_numeric(req, attr)
+        _compare_numeric(req, attr)
+        if req.operator.is_numeric or numeric_equality
+        else _compare_non_numeric(req, attr)
     )
     if verdict is Verdict.FAIL and req.mandatory:
         reason = f"{reason}. Требование обязательное — товар не проходит ТЗ"
@@ -314,28 +335,96 @@ def _equivalent_gate(item: LineItem, candidate: Candidate) -> RequirementCheck |
     )
 
 
-def _certificate_gate(item: LineItem, candidate: Candidate) -> RequirementCheck | None:
-    """Разрешительные документы проверяются на дату поставки, а не на сегодня."""
-    deadline: date | None = item.delivery_deadline
-    if deadline is None:
-        return None
-    for cert in candidate.certificates:
-        if cert.is_valid_on(deadline) is False:
-            gate = Requirement(
-                property=f"certificate:{cert.kind}",
-                operator=Operator.EXISTS,
-                mandatory=True,
-                raw_text=f"Действующий документ: {cert.kind}",
-                provenance=item.provenance,
-            )
-            return RequirementCheck(
-                requirement=gate,
-                verdict=Verdict.FAIL,
-                actual=f"{cert.kind} {cert.number} недействителен на {deadline.isoformat()}",
-                reason="документ не действует на дату поставки. Требование обязательное",
-                evidence=str(cert.provenance),
-            )
-    return None
+def _normalized_certificate_kind(value: str) -> str:
+    """Нормализовать только регистр и пробелы, не угадывая вид документа."""
+    return " ".join(value.split()).casefold()
+
+
+def _check_certificate_requirement(
+    req: Requirement,
+    candidate: Candidate,
+    *,
+    delivery_deadline: date | None,
+    min_confidence: float,
+) -> RequirementCheck:
+    """Проверить явно требуемый вид документа на дату поставки."""
+    required_kind = req.property.removeprefix("certificate:")
+    matching = tuple(
+        certificate
+        for certificate in candidate.certificates
+        if _normalized_certificate_kind(certificate.kind)
+        == _normalized_certificate_kind(required_kind)
+    )
+    if not matching:
+        return RequirementCheck(
+            requirement=req,
+            verdict=Verdict.UNKNOWN,
+            actual="документ не представлен",
+            reason=f"нет подтверждённого документа вида «{required_kind}»",
+        )
+    if delivery_deadline is None:
+        return RequirementCheck(
+            requirement=req,
+            verdict=Verdict.UNKNOWN,
+            actual=f"представлен документ {matching[0].number}",
+            reason="дата поставки не указана — действительность документа проверить нельзя",
+            evidence=str(matching[0].provenance),
+        )
+
+    trusted = tuple(
+        certificate
+        for certificate in matching
+        if certificate.provenance.confidence >= min_confidence
+    )
+    if not trusted:
+        return RequirementCheck(
+            requirement=req,
+            verdict=Verdict.UNKNOWN,
+            actual=f"представлен документ {matching[0].number}",
+            reason=(
+                f"уверенность источника {matching[0].provenance.confidence:.2f} ниже порога "
+                f"{min_confidence:.2f}"
+            ),
+            evidence=str(matching[0].provenance),
+        )
+
+    validity = tuple(certificate.is_valid_on(delivery_deadline) for certificate in trusted)
+    if any(state is True for state in validity):
+        certificate = trusted[validity.index(True)]
+        return RequirementCheck(
+            requirement=req,
+            verdict=Verdict.PASS,
+            actual=(
+                f"{certificate.kind} {certificate.number} действует на "
+                f"{delivery_deadline.isoformat()}"
+            ),
+            reason="требуемый документ действует на дату поставки",
+            evidence=str(certificate.provenance),
+        )
+    if any(state is None for state in validity):
+        certificate = trusted[validity.index(None)]
+        return RequirementCheck(
+            requirement=req,
+            verdict=Verdict.UNKNOWN,
+            actual=f"срок действия документа {certificate.number} не указан",
+            reason="действительность документа на дату поставки не подтверждена",
+            evidence=str(certificate.provenance),
+        )
+
+    certificate = trusted[0]
+    reason = "документ не действует на дату поставки"
+    if req.mandatory:
+        reason = f"{reason}. Требование обязательное — товар не проходит ТЗ"
+    return RequirementCheck(
+        requirement=req,
+        verdict=Verdict.FAIL,
+        actual=(
+            f"{certificate.kind} {certificate.number} недействителен на "
+            f"{delivery_deadline.isoformat()}"
+        ),
+        reason=reason,
+        evidence=str(certificate.provenance),
+    )
 
 
 def _soft_score(checks: tuple[RequirementCheck, ...]) -> float | None:
@@ -364,12 +453,17 @@ def evaluate(
     """
     checks: list[RequirementCheck] = []
 
-    for gate in (_equivalent_gate(item, candidate), _certificate_gate(item, candidate)):
+    for gate in (_equivalent_gate(item, candidate),):
         if gate is not None:
             checks.append(gate)
 
     checks.extend(
-        check_requirement(req, candidate, min_confidence=min_confidence)
+        check_requirement(
+            req,
+            candidate,
+            min_confidence=min_confidence,
+            delivery_deadline=item.delivery_deadline,
+        )
         for req in item.requirements
     )
 

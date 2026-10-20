@@ -1,0 +1,103 @@
+{
+  "report": {
+    "policy_version": "eis-position-fragment-association-v1",
+    "association_id": "11111111-1111-4111-8111-111111111111",
+    "request": {
+      "position": {
+        "selection": {
+          "notice": {
+            "purchase_number": "0133200001726002460",
+            "version_number": 2,
+            "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "source_index": 1
+        }
+      },
+      "document": {
+        "notice": {
+          "purchase_number": "0133200001726002460",
+          "version_number": 2,
+          "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "content_uid": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "expected_document_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "analyzer_version": "eis-native-review-v1",
+      "fragments": [
+        {
+          "block_index": 0,
+          "character_start": 0,
+          "character_end": 8
+        },
+        {
+          "block_index": 25,
+          "character_start": 0,
+          "character_end": 8
+        }
+      ]
+    },
+    "position_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "position_name": {
+      "value": "Сервер",
+      "raw": "Сервер",
+      "provenance": {
+        "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "locator": "position[1]/name",
+        "extractor": "api",
+        "confidence": 1.0
+      }
+    },
+    "analysis_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "document_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "filename": "tz.docx",
+    "observation_id": "22222222-2222-4222-8222-222222222222",
+    "observed_at": "2026-10-06T08:01:37.371719Z",
+    "analyzed_at": "2026-10-06T08:01:37.371726Z",
+    "created_at": "2026-10-06T08:01:37.371728Z",
+    "linked_by": "operator",
+    "fragments": [
+      {
+        "selection": {
+          "block_index": 0,
+          "character_start": 0,
+          "character_end": 8
+        },
+        "text": "Проц: 8🧩",
+        "provenance": {
+          "document_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "locator": "docx/body/paragraph[0] :: characters[0:8]",
+          "extractor": "native_docx",
+          "confidence": 1.0
+        },
+        "source_character_count": 8
+      },
+      {
+        "selection": {
+          "block_index": 25,
+          "character_start": 0,
+          "character_end": 8
+        },
+        "text": "RAM: 32Г",
+        "provenance": {
+          "document_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "locator": "docx/body/paragraph[25] :: characters[0:8]",
+          "extractor": "native_docx",
+          "confidence": 1.0
+        },
+        "source_character_count": 8
+      }
+    ],
+    "retained_total": 33,
+    "retained_characters": 1732,
+    "selected_characters": 16,
+    "association_status": "OPERATOR_LINKED",
+    "requirement_status": "UNKNOWN",
+    "full_tspec_completeness": "UNKNOWN",
+    "technical": "UNKNOWN",
+    "quote": "UNKNOWN",
+    "participation": "UNKNOWN",
+    "source_requests": 0,
+    "jobs_created": 0
+  },
+  "created": false
+}

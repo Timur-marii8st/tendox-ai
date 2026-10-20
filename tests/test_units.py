@@ -28,6 +28,7 @@ class TestResolveUnit:
             ("см", "см"),
             ("Гбит/с", "Гбит/с"),
             ("шт", "шт"),
+            ("Гбайт", "ГБ"),
         ],
     )
     def test_known_aliases(self, raw: str, symbol: str) -> None:

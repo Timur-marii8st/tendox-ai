@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2020", "lib": ["ES2022", "DOM"], "module": "CommonJS",
+    "moduleResolution": "Node", "strict": true, "skipLibCheck": true,
+    "esModuleInterop": true, "jsx": "react-jsx", "rootDir": ".",
+    "outDir": "build/analog-tests", "noEmitOnError": true
+  },
+  "include": ["tests/eis-analogs.test.tsx", "src/lib/eis-analogs.ts",
+    "src/app/tender-discovery/historical-analog-report.tsx"]
+}

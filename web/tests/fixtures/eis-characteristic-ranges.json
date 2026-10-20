@@ -1,0 +1,607 @@
+{
+  "request": {
+    "target": {
+      "notice": {
+        "purchase_number": "0000000000000000000",
+        "version_number": 1,
+        "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "source_index": 1
+    },
+    "candidate": {
+      "notice": {
+        "purchase_number": "0000000000000000000",
+        "version_number": 1,
+        "notice_xml_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "source_index": 1
+    }
+  },
+  "checked_at": "2026-10-05T12:00:00Z",
+  "policy_version": "eis-characteristic-observation-v2",
+  "scope": "SELECTED_SAVED_POSITION_PAIR",
+  "target": {
+    "selection": {
+      "notice": {
+        "purchase_number": "0000000000000000000",
+        "version_number": 1,
+        "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "source_index": 1
+    },
+    "position": {
+      "source_index": 1,
+      "lot_index": null,
+      "lot_ordinal": null,
+      "name": {
+        "value": "Товар",
+        "raw": "Товар",
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "quantity": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "notice.xml :: item[1]",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "unit": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "classification_code": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "ktru_code": {
+        "value": "17.12.14.110-00000001",
+        "raw": "17.12.14.110-00000001",
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "unit_price": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "notice.xml :: item[1]",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "line_sum": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "notice.xml :: item[1]",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "currency": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "characteristics": [
+        {
+          "name": {
+            "value": "Количество листов",
+            "raw": "Количество листов",
+            "provenance": {
+              "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "locator": "characteristic/name",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "instruction_code": {
+            "value": "2",
+            "raw": "2",
+            "provenance": {
+              "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "locator": "characteristic/instruction",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "values": [
+            {
+              "description": {
+                "value": null,
+                "raw": null,
+                "provenance": {
+                  "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "locator": "fact",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "minimum": {
+                "value": "500",
+                "raw": "500",
+                "raw_truncated": false,
+                "provenance": {
+                  "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "locator": "number",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "minimum_operator": {
+                "value": "greaterOrEqual",
+                "raw": "greaterOrEqual",
+                "provenance": {
+                  "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "locator": "fact",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "maximum": {
+                "value": null,
+                "raw": null,
+                "raw_truncated": false,
+                "provenance": {
+                  "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "locator": "number",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "maximum_operator": {
+                "value": null,
+                "raw": null,
+                "provenance": {
+                  "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "locator": "fact",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "unit": {
+                "value": "Штука",
+                "raw": "Штука",
+                "provenance": {
+                  "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "locator": "fact",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "concrete_values": [],
+              "concrete_values_total": 0,
+              "concrete_values_truncated": false,
+              "range_source_complete": true
+            }
+          ],
+          "values_total": 1,
+          "truncated": false,
+          "review_status": "UNKNOWN"
+        }
+      ],
+      "characteristics_total": 1,
+      "characteristics_truncated": false,
+      "characteristics_status": "SOURCE_VALUES",
+      "provenance": {
+        "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "locator": "notice.xml :: item[1]",
+        "extractor": "api",
+        "confidence": 1.0
+      },
+      "review_status": "UNKNOWN"
+    },
+    "storage_kind": "SAVED_PROJECTION",
+    "legacy_values_unknown": false
+  },
+  "candidate": {
+    "selection": {
+      "notice": {
+        "purchase_number": "0000000000000000000",
+        "version_number": 1,
+        "notice_xml_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "source_index": 1
+    },
+    "position": {
+      "source_index": 1,
+      "lot_index": null,
+      "lot_ordinal": null,
+      "name": {
+        "value": "Товар",
+        "raw": "Товар",
+        "provenance": {
+          "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "quantity": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "locator": "notice.xml :: item[1]",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "unit": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "classification_code": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "ktru_code": {
+        "value": "17.12.14.110-00000001",
+        "raw": "17.12.14.110-00000001",
+        "provenance": {
+          "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "unit_price": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "locator": "notice.xml :: item[1]",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "line_sum": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "locator": "notice.xml :: item[1]",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "currency": {
+        "value": null,
+        "raw": null,
+        "provenance": {
+          "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "locator": "fact",
+          "extractor": "api",
+          "confidence": 1.0
+        }
+      },
+      "characteristics": [
+        {
+          "name": {
+            "value": "Количество листов",
+            "raw": "Количество листов",
+            "provenance": {
+              "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "locator": "characteristic/name",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "instruction_code": {
+            "value": "2",
+            "raw": "2",
+            "provenance": {
+              "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "locator": "characteristic/instruction",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "values": [
+            {
+              "description": {
+                "value": null,
+                "raw": null,
+                "provenance": {
+                  "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "locator": "fact",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "minimum": {
+                "value": "500.0",
+                "raw": "500.0",
+                "raw_truncated": false,
+                "provenance": {
+                  "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "locator": "number",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "minimum_operator": {
+                "value": "greaterOrEqual",
+                "raw": "greaterOrEqual",
+                "provenance": {
+                  "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "locator": "fact",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "maximum": {
+                "value": null,
+                "raw": null,
+                "raw_truncated": false,
+                "provenance": {
+                  "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "locator": "number",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "maximum_operator": {
+                "value": null,
+                "raw": null,
+                "provenance": {
+                  "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "locator": "fact",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "unit": {
+                "value": "Штука",
+                "raw": "Штука",
+                "provenance": {
+                  "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "locator": "fact",
+                  "extractor": "api",
+                  "confidence": 1.0
+                }
+              },
+              "concrete_values": [],
+              "concrete_values_total": 0,
+              "concrete_values_truncated": false,
+              "range_source_complete": true
+            }
+          ],
+          "values_total": 1,
+          "truncated": false,
+          "review_status": "UNKNOWN"
+        }
+      ],
+      "characteristics_total": 1,
+      "characteristics_truncated": false,
+      "characteristics_status": "SOURCE_VALUES",
+      "provenance": {
+        "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "locator": "notice.xml :: item[1]",
+        "extractor": "api",
+        "confidence": 1.0
+      },
+      "review_status": "UNKNOWN"
+    },
+    "storage_kind": "SAVED_PROJECTION",
+    "legacy_values_unknown": false
+  },
+  "rows": [
+    {
+      "name": "Количество листов",
+      "target_indices": [
+        1
+      ],
+      "candidate_indices": [
+        1
+      ],
+      "target_values": [
+        {
+          "description": {
+            "value": null,
+            "raw": null,
+            "provenance": {
+              "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "locator": "fact",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "minimum": {
+            "value": "500",
+            "raw": "500",
+            "raw_truncated": false,
+            "provenance": {
+              "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "locator": "number",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "minimum_operator": {
+            "value": "greaterOrEqual",
+            "raw": "greaterOrEqual",
+            "provenance": {
+              "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "locator": "fact",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "maximum": {
+            "value": null,
+            "raw": null,
+            "raw_truncated": false,
+            "provenance": {
+              "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "locator": "number",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "maximum_operator": {
+            "value": null,
+            "raw": null,
+            "provenance": {
+              "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "locator": "fact",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "unit": {
+            "value": "Штука",
+            "raw": "Штука",
+            "provenance": {
+              "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "locator": "fact",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "concrete_values": [],
+          "concrete_values_total": 0,
+          "concrete_values_truncated": false,
+          "range_source_complete": true
+        }
+      ],
+      "candidate_values": [
+        {
+          "description": {
+            "value": null,
+            "raw": null,
+            "provenance": {
+              "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "locator": "fact",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "minimum": {
+            "value": "500.0",
+            "raw": "500.0",
+            "raw_truncated": false,
+            "provenance": {
+              "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "locator": "number",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "minimum_operator": {
+            "value": "greaterOrEqual",
+            "raw": "greaterOrEqual",
+            "provenance": {
+              "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "locator": "fact",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "maximum": {
+            "value": null,
+            "raw": null,
+            "raw_truncated": false,
+            "provenance": {
+              "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "locator": "number",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "maximum_operator": {
+            "value": null,
+            "raw": null,
+            "provenance": {
+              "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "locator": "fact",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "unit": {
+            "value": "Штука",
+            "raw": "Штука",
+            "provenance": {
+              "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "locator": "fact",
+              "extractor": "api",
+              "confidence": 1.0
+            }
+          },
+          "concrete_values": [],
+          "concrete_values_total": 0,
+          "concrete_values_truncated": false,
+          "range_source_complete": true
+        }
+      ],
+      "observation": "SAME",
+      "reason": "EXACT_COMPLETE_STORED_VALUES_EQUAL",
+      "target_provenance": {
+        "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "locator": "characteristic/name",
+        "extractor": "api",
+        "confidence": 1.0
+      },
+      "candidate_provenance": {
+        "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "locator": "characteristic/name",
+        "extractor": "api",
+        "confidence": 1.0
+      }
+    }
+  ],
+  "row_count": 1,
+  "same_count": 1,
+  "different_count": 0,
+  "unknown_count": 0,
+  "source_requests": 0,
+  "technical": "UNKNOWN",
+  "delivery_region": "UNKNOWN",
+  "comparability": "UNKNOWN",
+  "participation": "UNKNOWN",
+  "profit": "UNKNOWN",
+  "coverage": "UNKNOWN"
+}

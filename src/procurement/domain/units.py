@@ -73,7 +73,7 @@ _DEFS: tuple[tuple[Unit, tuple[str, ...]], ...] = (
     (_u("Гц", Dimension.FREQUENCY, "1"), ("гц", "hz")),
     (_u("кГц", Dimension.FREQUENCY, "1000"), ("кгц", "khz")),
     (_u("МГц", Dimension.FREQUENCY, "1000000"), ("мгц", "mhz")),
-    (_u("ГБ", Dimension.CAPACITY, "1"), ("гб", "gb")),
+    (_u("ГБ", Dimension.CAPACITY, "1"), ("гб", "гбайт", "gb")),
     (_u("ТБ", Dimension.CAPACITY, "1024"), ("тб", "tb")),
     (_u("МБ", Dimension.CAPACITY, "0.0009765625"), ("мб", "mb")),
 )

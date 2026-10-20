@@ -1,0 +1,111 @@
+{
+  "report": {
+    "policy_version": "eis-position-supplier-search-v1",
+    "run_id": "12345678-1234-1234-1234-123456789abc",
+    "request": {
+      "selection": {
+        "notice": {
+          "purchase_number": "1111111111111111111",
+          "version_number": 1,
+          "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "source_index": 1
+      }
+    },
+    "position_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "position_name": {
+      "value": "Сервер HPE DL360 Gen12",
+      "raw": null,
+      "provenance": {
+        "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "locator": "notice.xml/purchaseObject[1]/name",
+        "extractor": "api",
+        "confidence": 1.0
+      }
+    },
+    "query": "dl360",
+    "query_scope": "FIXED_CATEGORY_ROUTE_FROM_POSITION_NAME",
+    "status": "COMPLETED",
+    "reason_code": "FIXED_CATEGORY_SNAPSHOT",
+    "created_at": "2026-10-06T07:30:00Z",
+    "observation": {
+      "policy_version": "eis-supplier-catalog-v1",
+      "source_url": "https://servermall.ru/sets/servery-hp-proliant-gen12/",
+      "observed_at": "2026-10-06T07:30:00Z",
+      "source_sha256": "2b7ddfe601c81a03b67f0be17e6c061e15822ec16c74e8d4469affeb387d7969",
+      "byte_count": 443,
+      "query": "dl360",
+      "leads": [
+        {
+          "supplier": "ServerMall",
+          "manufacturer": "HPE",
+          "product_name": "Сервер HPE DL360 Gen12",
+          "product_url": "https://servermall.ru/catalog/servers/dl360/",
+          "name_provenance": {
+            "document_id": "2b7ddfe601c81a03b67f0be17e6c061e15822ec16c74e8d4469affeb387d7969",
+            "locator": "jsonld/OfferCatalog/itemListElement[1]/name",
+            "extractor": "api",
+            "confidence": 1.0
+          },
+          "price_status": "PUBLISHED",
+          "published_prices": [
+            {
+              "kind": "BASE_PRICE_FROM",
+              "amount_rub": "100000",
+              "raw_label": "Цена базы: от 100 000 ₽",
+              "provenance": {
+                "document_id": "2b7ddfe601c81a03b67f0be17e6c061e15822ec16c74e8d4469affeb387d7969",
+                "locator": "html/article.product-card[1]/price[BASE_PRICE_FROM]",
+                "extractor": "api",
+                "confidence": 1.0
+              },
+              "configured_unit_cost": "UNKNOWN",
+              "quote_status": "UNKNOWN",
+              "tax_status": "UNKNOWN"
+            },
+            {
+              "kind": "LEASE_MONTHLY",
+              "amount_rub": "500",
+              "raw_label": "Аренда: 500 ₽ / мес",
+              "provenance": {
+                "document_id": "2b7ddfe601c81a03b67f0be17e6c061e15822ec16c74e8d4469affeb387d7969",
+                "locator": "html/article.product-card[1]/price[LEASE_MONTHLY]",
+                "extractor": "api",
+                "confidence": 1.0
+              },
+              "configured_unit_cost": "UNKNOWN",
+              "quote_status": "UNKNOWN",
+              "tax_status": "UNKNOWN"
+            }
+          ],
+          "stock": "UNKNOWN",
+          "delivery": "UNKNOWN",
+          "compliance": "UNKNOWN",
+          "participation": "UNKNOWN"
+        }
+      ],
+      "scanned_count": 1,
+      "matched_count": 1,
+      "returned_count": 1,
+      "truncated": false,
+      "scope": "ONE_CATEGORY_PAGE_ONLY",
+      "source_requests": 1,
+      "coverage": "UNKNOWN",
+      "tax": "UNKNOWN",
+      "stock": "UNKNOWN",
+      "delivery": "UNKNOWN",
+      "compliance": "UNKNOWN",
+      "participation": "UNKNOWN"
+    },
+    "attempted_source_requests": 1,
+    "specification_completeness": "UNKNOWN",
+    "position_document_association": "UNKNOWN",
+    "quote": "UNKNOWN",
+    "technical": "UNKNOWN",
+    "profit": "UNKNOWN",
+    "participation": "UNKNOWN"
+  },
+  "created": false,
+  "source_requests": 0,
+  "jobs_created": 0
+}

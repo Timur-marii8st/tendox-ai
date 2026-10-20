@@ -20,6 +20,7 @@
     "characters_extracted": 25
   },
   "mapping": {
+    "document_role": "TENDER_REQUIREMENTS",
     "requirements": [
       {
         "property": "warranty",

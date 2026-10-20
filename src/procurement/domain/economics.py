@@ -3,7 +3,7 @@
 Инвариант домена №6: деньги — только Decimal, НДС хранится отдельной ставкой.
 Поставщик выбирает не самый дешёвый товар, а сделку с лучшим соотношением
 прибыли и риска, поэтому сравнение по цене за единицу бесполезно.
-Методика — docs/04-economics.md.
+Методика — docs/architecture/04-economics.md.
 """
 
 from __future__ import annotations
@@ -257,7 +257,7 @@ class DealEconomics(BaseModel):
         return self.gross_profit > 0
 
     def report(self) -> str:
-        """Раскладка из docs/04-economics.md."""
+        """Раскладка из docs/architecture/04-economics.md."""
         width = 18
         rows = [f"{'Контракт заказчика':<28}{self.contract_revenue:>{width},.2f}"]
         rows += [f"{label:<28}{-value:>{width},.2f}" for label, value in self.costs.lines()]

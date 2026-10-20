@@ -1,0 +1,646 @@
+{
+  "explicit_not_performed": [
+    "PaddleOCR integration",
+    "browser/E2E suite"
+  ],
+  "limits": {
+    "build_timeout_seconds": 1800,
+    "command_timeout_seconds": 900,
+    "maximum_archive_bytes": 536870912,
+    "maximum_expanded_bytes": 1073741824,
+    "maximum_file_bytes": 26214400,
+    "maximum_files": 5000
+  },
+  "network_policy": {
+    "dependency_acquisition": "Docker default build network for pinned dependency layers; dedicated bridge for npm ci; no production credentials or mounts",
+    "python_tests": "container namespace of disposable PostgreSQL on an internal bridge",
+    "runtime_smoke": "network none",
+    "web_after_install": "internal bridge after npm ci --ignore-scripts; offline lifecycle rebuild",
+    "forbidden": [
+      "host network",
+      "production network",
+      "production environment",
+      "Docker socket inside candidate containers"
+    ]
+  },
+  "policy_version": "2026-10-07.2",
+  "build_recipes": {
+    "api": {
+      "path": "Dockerfile.api",
+      "sha256": "83aa0b661c4f1f6722c0e67176ecd8d6f2afe060d348587c6dc2eef98e4631db"
+    },
+    "web": {
+      "path": "Dockerfile.web",
+      "sha256": "ae42edba526debcd22ef60884368e2ccb52c162a302ff0f9fe6e6f4cd598f25a"
+    }
+  },
+  "docker_client": {
+    "binary": "/usr/bin/docker",
+    "engine_platform": "linux/x86_64",
+    "host": "unix:///var/run/docker.sock",
+    "buildx": {
+      "binary_platform": "linux/amd64",
+      "builder": "default",
+      "buildkit_version": "v0.26.2",
+      "bytes": 65806498,
+      "config_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "config_relative_path": "docker-config",
+      "driver": "docker",
+      "plugin_relative_path": "docker-config/cli-plugins/docker-buildx",
+      "sha256": "982ca20490b45ed1ec8d99795974d3d874a358f75938c9c237305010e6b7e548",
+      "source_url": "https://github.com/docker/buildx/releases/download/v0.37.2/buildx-v0.37.2.linux-amd64",
+      "version": "github.com/docker/buildx v0.37.2 2d379c0c3f22da0d2759d132a0ec81ca949098f0"
+    }
+  },
+  "required_stages": [
+    {
+      "expect": {},
+      "id": "runtime-prerequisites"
+    },
+    {
+      "expect": {},
+      "id": "python-runtime-build"
+    },
+    {
+      "expect": {},
+      "id": "postgres-start"
+    },
+    {
+      "expect": {},
+      "id": "python-runner-start"
+    },
+    {
+      "expect": {},
+      "id": "docs-navigation"
+    },
+    {
+      "expect": {},
+      "id": "quality-scope"
+    },
+    {
+      "expect": {},
+      "id": "lock-check"
+    },
+    {
+      "expect": {},
+      "id": "ruff"
+    },
+    {
+      "expect": {},
+      "id": "mypy-domain"
+    },
+    {
+      "expect": {
+        "allowed_skip_ids": [
+          "tests.test_browser_catalog::test_real_browser_200_captcha_is_blocked",
+          "tests.test_browser_catalog::test_real_browser_delayed_hydration_and_dom_evidence",
+          "tests.test_browser_catalog::test_real_browser_http_refusal_wins_over_valid_cards[403]",
+          "tests.test_browser_catalog::test_real_browser_http_refusal_wins_over_valid_cards[429]",
+          "tests.test_browser_catalog::test_real_browser_missing_schema_is_not_empty_results",
+          "tests.test_browser_catalog::test_real_browser_motion_emits_events",
+          "tests.test_browser_catalog::test_real_browser_no_matches_requires_valid_catalog",
+          "tests.test_browser_catalog::test_real_browser_oversized_dom_is_not_empty_catalog",
+          "tests.test_browser_catalog::test_real_browser_supl_category_preserves_seller_claim",
+          "tests.test_browser_catalog::test_real_browser_yandex_navigation_keeps_category_and_hides_rs[15774673]",
+          "tests.test_browser_catalog::test_real_browser_yandex_navigation_keeps_category_and_hides_rs[999]",
+          "tests.test_catalog_routes::test_real_browser_follows_approved_next_page_when_first_has_no_matches",
+          "tests.test_eis_mixed_number_archive::test_isolated_pg_atomic_complete_metadata_index_replay_and_constraints",
+          "tests.test_eis_no_data_evidence::test_isolated_pg_offline_raw_audit_attempt_binding",
+          "tests.test_eis_no_data_evidence::test_isolated_postgres_retention_and_quota_audit_are_tenant_scoped",
+          "tests.test_eis_no_data_public_check::test_isolated_pg_target_latest_tenant_and_index_partition",
+          "tests.test_eis_no_data_report::test_actual_pg_latest_tenant_canonical_variant_invalid_date_and_read_only",
+          "tests.test_eis_no_data_store_report::test_isolated_pg_failure_and_missing_audit_are_tenant_scoped",
+          "tests.test_eis_public_candidate_recovery::test_isolated_pg_exact_intake_queue_and_rejection[empty]",
+          "tests.test_eis_public_candidate_recovery::test_isolated_pg_exact_intake_queue_and_rejection[error]",
+          "tests.test_eis_public_candidate_recovery::test_isolated_pg_exact_intake_queue_and_rejection[foreign]",
+          "tests.test_eis_public_candidate_recovery::test_isolated_pg_exact_intake_queue_and_rejection[notice]",
+          "tests.test_eis_public_candidate_recovery::test_isolated_pg_exact_intake_queue_and_rejection[unsupported]",
+          "tests.test_eis_requirement_review_postgres::test_proposal_replay_independent_decision_comparison_and_immutability",
+          "tests.test_eis_requirement_review_postgres::test_tenant_isolation_pending_decision_and_conflicting_replay",
+          "tests.test_yandex_pagination::test_chromium_state_pagination_and_stale_second_page[False]",
+          "tests.test_yandex_pagination::test_chromium_state_pagination_and_stale_second_page[True]"
+        ],
+        "errors": 0,
+        "failures": 0,
+        "min_tests": 3302,
+        "skipped": 27,
+        "collection_sha256": "c2d871a5c799680ec845e8a12d9254b39adb820391def2ca77a0e52f2f4c58f0"
+      },
+      "id": "python-unit"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 9,
+        "collection_sha256": "3f0db93b1043da88d546bc2440b2e0cd623ae7f68cf7d4d95df7a785fe24b166"
+      },
+      "id": "domain-doctest"
+    },
+    {
+      "expect": {},
+      "id": "node-runner-start"
+    },
+    {
+      "expect": {},
+      "id": "web-install"
+    },
+    {
+      "expect": {},
+      "id": "web-lint"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 153,
+        "collection_sha256": "11ab1124c5b63eb92ba4f943ca6d5bd2e88231b2f09c450e635cbd99d6fee5e7"
+      },
+      "id": "web-tests"
+    },
+    {
+      "expect": {},
+      "id": "web-build"
+    },
+    {
+      "expect": {},
+      "id": "pg-eis-a-m-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 140,
+        "collection_sha256": "578edb6eac69db926434ee8d80aa7b18eeb64249466346e55d6df24a0cbb2fb0"
+      },
+      "id": "pg-eis-a-m-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-eis-characteristic-pair-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 13,
+        "collection_sha256": "650e9cee4ecf505ecb040bec491877d4e58ce52794f9697be5ea6663c6291727"
+      },
+      "id": "pg-eis-characteristic-pair-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-eis-n-z-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 92,
+        "collection_sha256": "1e511b8528c134d32b179e7f8253ce94be9fda6f413631e5c13656de4f4019f9"
+      },
+      "id": "pg-eis-n-z-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-foundation-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 103,
+        "collection_sha256": "4722c0b9a6f3d624a25c86db1569593c45cdb39493357f06948f327ced6301b5"
+      },
+      "id": "pg-foundation-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-manufacturer-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 29,
+        "collection_sha256": "6ffd2bf5d5fb358107de89304dc9990d956d9237d1aa0a0705a06fb43678d62e"
+      },
+      "id": "pg-manufacturer-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-223-catalog-checks-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 8,
+        "collection_sha256": "4709c71cfdd941b11b6fe242cfa6b5c1e3a2cd24000098b6b6a99ed5676ffbdc"
+      },
+      "id": "pg-migration-eis-223-catalog-checks-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-223-events-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 9,
+        "collection_sha256": "d1ca49dbb2ee1df17caa0f6da3d6440219bd956b863f6d00f8e7ca2489f24c5d"
+      },
+      "id": "pg-migration-eis-223-events-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-223-general-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 2,
+        "collection_sha256": "0813ee2b58e4cb076e8ff9f6edef5ae530199431ca4ba8ca6b70eb668f555a47"
+      },
+      "id": "pg-migration-eis-223-general-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-223-index-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 18,
+        "collection_sha256": "7280a183a3de823c324a4ef31b4603d851338ca45e471315aa356b5ff83fa9fa"
+      },
+      "id": "pg-migration-eis-223-index-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-223-lot-events-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 9,
+        "collection_sha256": "8e4ee231ef478710b03fe5b0e6a15c8a8f94332dbca30c1097a1a4b84a2c3cdc"
+      },
+      "id": "pg-migration-eis-223-lot-events-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-223-regions-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 8,
+        "collection_sha256": "3fec1ed5a3ec642346776699bc8cfde0995c62c46627c6ba9987c6276d5a6ff6"
+      },
+      "id": "pg-migration-eis-223-regions-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-223-wide-window-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 4,
+        "collection_sha256": "7cf16a8c1329ad4d12efe309fc5767ad550f3d7487966d39f8b7d7eb562d25ee"
+      },
+      "id": "pg-migration-eis-223-wide-window-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-notice-projection-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 14,
+        "collection_sha256": "ac9b4e19b8aabc13311603f8d451895907a5022d9847d01d7797dca726e0e6b7"
+      },
+      "id": "pg-migration-eis-notice-projection-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-migration-eis-notice-variants-pg-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 14,
+        "collection_sha256": "63eeccfb14498f755f2a6954ce606850a2a94d68d8dfb954c6dd92da0e8993ca"
+      },
+      "id": "pg-migration-eis-notice-variants-pg-tests"
+    },
+    {
+      "expect": {},
+      "id": "pg-root-postgres-migrate"
+    },
+    {
+      "expect": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 145,
+        "collection_sha256": "9b62c89db7294dc13fa463efcc666db2010b013fd620cbf92564c4cd7c26d331"
+      },
+      "id": "pg-root-postgres-tests"
+    },
+    {
+      "expect": {},
+      "id": "build-api"
+    },
+    {
+      "expect": {},
+      "id": "build-web"
+    },
+    {
+      "expect": {},
+      "id": "smoke-api"
+    },
+    {
+      "expect": {},
+      "id": "smoke-web"
+    }
+  ],
+  "runtime_images": {
+    "node": {
+      "image_id": "sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392",
+      "reference": "node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392"
+    },
+    "postgres": {
+      "image_id": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+      "reference": "postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
+    },
+    "python": {
+      "image_id": "sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0",
+      "reference": "mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0"
+    }
+  },
+  "schema_version": "release-gate-policy-v1",
+  "scope": {
+    "expanded_inventory": {
+      "optional_integration": [
+        {
+          "path": "tests/integration/test_paddle_ocr.py",
+          "reason": "optional PaddleOCR runtime and model assets"
+        }
+      ],
+      "postgres_groups": [
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "eis-a-m",
+          "isolated": false,
+          "paths": [
+            "tests/integration/test_eis_analog_holds_pg.py",
+            "tests/integration/test_eis_analog_prefilter_pg.py",
+            "tests/integration/test_eis_analog_resolution_scope_pg.py",
+            "tests/integration/test_eis_analogs_pg.py",
+            "tests/integration/test_eis_attachment_recovery_pg.py",
+            "tests/integration/test_eis_characteristic_ranges_pg.py",
+            "tests/integration/test_eis_corpus_fairness_pg.py",
+            "tests/integration/test_eis_document_queue_pg.py",
+            "tests/integration/test_eis_document_review_pg.py",
+            "tests/integration/test_eis_gap_status_pg.py",
+            "tests/integration/test_eis_mixed_comparison_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "eis-characteristic-pair",
+          "isolated": false,
+          "paths": [
+            "tests/integration/test_eis_characteristic_pair_pg.py",
+            "tests/integration/test_supplier_captcha_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "eis-n-z",
+          "isolated": false,
+          "paths": [
+            "tests/integration/test_eis_notice_conflicts_pg.py",
+            "tests/integration/test_eis_notice_hold_pg.py",
+            "tests/integration/test_eis_notice_index_pg.py",
+            "tests/integration/test_eis_position_association_pg.py",
+            "tests/integration/test_eis_protocols_pg.py",
+            "tests/integration/test_eis_rejected_evidence_pg.py",
+            "tests/integration/test_eis_requirement_preview_pg.py",
+            "tests/integration/test_eis_search_pagination_pg.py",
+            "tests/integration/test_eis_supplier_catalog_pg.py",
+            "tests/integration/test_eis_supplier_page_pg.py",
+            "tests/integration/test_eis_supplier_product_pg.py",
+            "tests/integration/test_eis_supplier_search_pg.py",
+            "tests/integration/test_eis_supplier_serp_pg.py",
+            "tests/integration/test_eis_variant_intake_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "foundation",
+          "isolated": false,
+          "paths": [
+            "tests/integration/test_ai_transfer_materialization_sql.py",
+            "tests/integration/test_ai_transfer_raw_sql.py",
+            "tests/integration/test_api_postgres.py",
+            "tests/integration/test_case_evidence_binding_sql.py",
+            "tests/integration/test_case_from_evidence_sql.py",
+            "tests/integration/test_document_storage.py",
+            "tests/integration/test_postgres_gate.py",
+            "tests/integration/test_reviewed_requirement_set_sql.py",
+            "tests/integration/test_storage.py"
+          ]
+        },
+        {
+          "database": "procurement_manufacturer_test",
+          "group": "manufacturer",
+          "isolated": false,
+          "paths": [
+            "tests/integration/test_manufacturer_directory_api_pg.py",
+            "tests/integration/test_manufacturer_directory_pg.py",
+            "tests/integration/test_manufacturer_review_api_pg.py",
+            "tests/integration/test_manufacturer_review_pg.py",
+            "tests/integration/test_manufacturer_rfq_api_pg.py",
+            "tests/integration/test_manufacturer_rfq_pg.py",
+            "tests/integration/test_manufacturer_search_api_pg.py",
+            "tests/integration/test_manufacturer_search_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "migration-eis-223-catalog-checks-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_223_catalog_checks_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "migration-eis-223-events-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_223_events_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "migration-eis-223-general-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_223_general_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "migration-eis-223-index-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_223_index_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "migration-eis-223-lot-events-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_223_lot_events_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "migration-eis-223-regions-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_223_regions_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261004_s176",
+          "group": "migration-eis-223-wide-window-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_223_wide_window_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261004_s180",
+          "group": "migration-eis-notice-projection-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_notice_projection_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261004_s178",
+          "group": "migration-eis-notice-variants-pg",
+          "isolated": true,
+          "paths": [
+            "tests/integration/test_eis_notice_variants_pg.py"
+          ]
+        },
+        {
+          "database": "procurement_eis_test_20261005_s209",
+          "group": "root-postgres",
+          "isolated": false,
+          "paths": [
+            "tests/test_eis_mixed_number_archive.py",
+            "tests/test_eis_no_data_evidence.py",
+            "tests/test_eis_no_data_public_check.py",
+            "tests/test_eis_no_data_report.py",
+            "tests/test_eis_no_data_store_report.py",
+            "tests/test_eis_public_candidate_recovery.py",
+            "tests/test_eis_requirement_review_postgres.py"
+          ]
+        }
+      ],
+      "web_configs": [
+        "tsconfig.analog-tests.json",
+        "tsconfig.captcha-tests.json",
+        "tsconfig.characteristic-tests.json",
+        "tsconfig.discovery-tests.json",
+        "tsconfig.document-review-tests.json",
+        "tsconfig.manufacturer-directory-tests.json",
+        "tsconfig.manufacturer-review-tests.json",
+        "tsconfig.manufacturer-rfq-tests.json",
+        "tsconfig.manufacturer-tests.json",
+        "tsconfig.position-association-tests.json",
+        "tsconfig.protocol-tests.json",
+        "tsconfig.requirement-preview-tests.json",
+        "tsconfig.requirement-review-tests.json",
+        "tsconfig.supplier-catalog-tests.json",
+        "tsconfig.supplier-page-tests.json",
+        "tsconfig.supplier-product-tests.json",
+        "tsconfig.supplier-search-tests.json",
+        "tsconfig.supplier-serp-tests.json"
+      ],
+      "web_tests": [
+        "tests/eis-analogs.test.tsx",
+        "tests/eis-characteristic-render.test.tsx",
+        "tests/eis-characteristics.test.ts",
+        "tests/eis-discovery-overview.test.tsx",
+        "tests/eis-document-review-render.test.tsx",
+        "tests/eis-document-review.test.ts",
+        "tests/eis-position-association-render.test.tsx",
+        "tests/eis-position-association.test.ts",
+        "tests/eis-protocols.test.tsx",
+        "tests/eis-requirement-preview-render.test.tsx",
+        "tests/eis-requirement-preview.test.ts",
+        "tests/eis-requirement-review-render.test.tsx",
+        "tests/eis-requirement-review.test.ts",
+        "tests/eis-search-pages.test.tsx",
+        "tests/eis-supplier-catalog-render.test.tsx",
+        "tests/eis-supplier-catalog.test.ts",
+        "tests/eis-supplier-page-render.test.tsx",
+        "tests/eis-supplier-page.test.ts",
+        "tests/eis-supplier-product-render.test.tsx",
+        "tests/eis-supplier-product.test.ts",
+        "tests/eis-supplier-search-render.test.tsx",
+        "tests/eis-supplier-search.test.ts",
+        "tests/eis-supplier-serp-render.test.tsx",
+        "tests/eis-supplier-serp.test.ts",
+        "tests/manufacturer-directory.test.ts",
+        "tests/manufacturer-review.test.ts",
+        "tests/manufacturer-rfq.test.ts",
+        "tests/manufacturer-search.test.ts",
+        "tests/supplier-captcha.test.ts"
+      ]
+    },
+    "expanded_inventory_sha256": "b9e9494fffdaef763d1fe318d8754495c1986676af0253dcf1fed8091cbb8ce3"
+  },
+  "supported_candidate_kinds": [
+    "WORKTREE_SNAPSHOT"
+  ],
+  "tool_versions": {
+    "node_major": 22,
+    "postgres_major": 16,
+    "uv": "0.9.12"
+  }
+}

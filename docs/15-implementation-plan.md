@@ -1,168 +1,120 @@
-# Последовательная разработка
+# Текущий статус и ближайший срез
 
-Источник требований — [ТЗ](11-product-requirements.md), распределение обязанностей
-разработчиков — [AGENTS.md](../AGENTS.md). Этот файл хранит актуальный порядок
-и статус этапов. Аудит 13 — исторический снимок до начала реализации.
+Обновлено: 2026-10-19. Root: NO_DATA overflowv2 READY_PENDING_EXACT_APPROVAL; source68c64fd0/image935dae45, full50PASS(unit3665+27allowed skips/PG688zero skips/Node178), actual-copy57976/hash/replay/foreign PASS. Owned runtime/report/два test modules; [evidence и payload](operations/122-eis-no-data-overflow.md). Payloadaca2b9b8/preflightPASS; NOT INSTALLED. Следующее: exact approval→install→ordinary-cron raw/journal proof; API NOT READY. SQLfix/worker pacing installed17Oct. Единственный live-план; [история](history/implementation/README.md). Требования — в [PRD](product/11-product-requirements.md), порядок разработки — в
+[AGENTS.md](../AGENTS.md). Читать историю целиком перед задачей не требуется. Tendox INSTALLED/VERIFIED: approved web-only `8bf356fd…`, source `6a184459…`, web `cec6383b…`;4production-origin routes200,50/50gate/render/rollback PASS. Evidence: `tmp/tendox-branding-20261016-v1/handoff.json`; backend/DB/worker unchanged.
+Профиль: installed UI/API and personal OPERATOR access for elkgo verified17Oct; critical settings remain OWNER_AUTHORIZATION_UNAVAILABLE. Installed contract is documented in accepted source `tmp/eis-223-probe-fix-20261017-v1/candidate/docs/architecture/09-company-profile-api.md`; no profile behavior changes in EIS speed slice.
+ЕИС/Татарстан — root, handoff v177; INCOMPLETE. M0v7: full50PASS (3712unit/689PG/181web), три реальных формата отображаются корректно; прежний actual63PG PASS (274редакции/254закупки/replay/search/RLS). На18Oct04:24UTC:52отсутствующих редакции/36закупок, проект56адресныхTatкомплектов+23метадокумента; региональное окно исключено. Дополнительно29новых закупок/36редакций прошли парсер, все29 подтверждены какTat и отсутствуют в production на05:16UTC; изолированный импорт ещё не проверен. Source53 продолжен после завершения сборки: две ресурсные ошибки были до обращения кЕИС. Остаток30 без повтора23успехов. HTMLdirect остановлен; используется штатная пауза60s. Следующее: закончить новый набор, проверить импорт и точную операцию с миграциями01→03. Production не менялся; exact-approval не запрошено. Evidence: tmp/improvement-program/handoff-current.json.
+EIS speed INSTALLED_VERIFIED17Oct19:29UTC: approved548773f3/sourcee57cf271/worker96a570c1,gap1.25s;SQLfix/API721727d4 сохраняются. Один обычный44проход60окон/113.187s против155.254s,0fail; устойчивое ускорение UNKNOWN. Evidence tmp/eis-ingest-speed-20261017-v1/completion-summary-v1.json. Tendox/профиль/БД не изменены; hourlymonitorDISABLED.
+## Подтверждённые границы
 
-## S1 — проверяемое решение по вручную собранному кейсу
+| Область | Состояние и источник |
+|---|---|
+| Домен, хранение, первый экран | S1, первый серверный S2 и внутренний S3 завершены в ограниченных границах; [история](history/implementation/01-foundation-and-document-review.md) |
+| Документы и ЕИС | Внутренний пилот: native extraction/OCR/review, индекс и очереди ЕИС, выбранные документы и поиск; [документы](documents/README.md), [ЕИС](eis/README.md) |
+| Поиск снабжения | S223–S226 выпущены: поисковики → сайт → выбранная карточка → сохранённые условия/характеристики; [поставщики](suppliers/README.md) |
+| Выбранная таблица ТЗ | S227 выпущен: точные сохранённые ячейки рядом с товаром; [контракт](documents/109-eis-requirement-table-preview.md) |
+| Независимая проверка | S228 COMPLETE для механизма и проверки формата; установлен 2026-10-06; [контракт и evidence](documents/110-eis-independent-requirement-review.md) |
+| Реальное решение S228 | PENDING: production proposal создан, независимых решений ноль; полный технический допуск UNKNOWN |
 
-Статус: **завершён 2026-09-08 в описанных ниже границах**.
+Полный охват ЕИС, полнота всего ТЗ, действительное полное КП, стоимость партии
+и PARTICIPATE в текущем выбранном сценарии не подтверждены. Публичная цена
+не становится КП. Выпуск механизма не означает завершение product acceptance.
+Полные этапы поставщиков/логистики, внешнего исполнения/post-award и SaaS
+остаются незавершёнными; отдельные механизмы уже есть. Целевые релизы — в
+[roadmap](product/05-roadmap.md), а не в перечне исторических NEXT.
 
-Результат: `Quote`, `ProcurementCase`, ручная оценка точного снимка, именованные
-обязательные проверки, полнота расходов и три сценария, локальный CLI с записью
-расчёта. Инструкция и пример — [локальный workflow](16-local-case-workflow.md).
-Проверки: **296 pytest-тестов, 9 doctests, ruff и mypy домена проходят**.
-В тестах сохранены прежние ограничения recommendation; API заменён со скалярных
-утверждений вызывающего кода на проверку целого кейса.
+## Последние проверки продукта
 
-Вход: профиль компании, процедура, подтверждённое КП на весь комплект поставки,
-именованные обязательные проверки с источниками и три сценария экономики.
-Выход: типизированная рекомендация с основаниями и ценой остановки.
-Локальный CLI позволяет загрузить JSON и повторить расчёт на указанное время.
+В [отчёте S228](documents/110-eis-independent-requirement-review.md) зафиксированы:
+505 Python/API/real PostgreSQL PASS без skips, 116 Node wire/render PASS,
+TypeScript/ESLint/production build PASS, installed API/Next Actions/SSR proof.
+Это результаты выпуска S228, не новые проверки текущего рабочего дерева.
+Browser visual NOT_PERFORMED; production independent review PENDING.
 
-Критерии завершения:
+## S229 — будущий срез требований внутри M4, NOT STARTED
 
-- КП принадлежит компании и процедуре, имеет источник, срок и подтверждённые условия;
-- пропущенный обязательный фильтр и неполная экономика не дают зелёное решение;
-- отсутствие расхода отличается от явно указанного нуля, в том числе после JSON roundtrip;
-- НДС не угадывается, денежные float и нечисловые значения отвергаются;
-- изменение профиля, процедуры или КП требует нового анализа их точного снимка;
-- просроченная подача/КП, межтенантная подмена и FAIL покрыты негативными тестами;
-- пример запуска проверяется вместе с unit-тестами, doctests, ruff и mypy;
-- документация прямо отделяет ручные подтверждения от будущего автоматического извлечения.
+Цель: подтверждённые единицы количества листов на требуемую упаковку.
+Зависимости: exact S226 product, S227 preview и механизм S228.
+Реальное независимое решение S228 остаётся отдельным незакрытым acceptance.
 
-Граница: одна компания на кейс, рубли, одно КП на весь комплект, введённые человеком
-затраты на единой базе НДС. Никакой отправки писем, заявки, заказа или подписи.
-Юридические проверки в S1 вводит проверяющий; действующего автоматического
-нормативного ruleset нет. Автоматическая рекомендация shelf sales будет подключена
-отдельно после доказуемой связи процедуры с контекстом платформы.
+До реализации назначить одного владельца, owned files и ограниченную проверку.
+Этот план не назначает разработчиков и не разрешает менять общие файлы параллельно.
 
-## S2 — хранение и API
+Критерии контракта:
 
-Статус: **завершён 2026-09-08 для первого серверного среза**.
+- Количество сохраняет смысл «на требуемую упаковку», исходную единицу и provenance.
+- Листы не заменяются на штуки без подтверждённого контекста и независимого review.
+- Плотность >=80 и <90 сохраняет обе границы; 80±3 не становится scalar 80.
+- Сортность С/Сэ UNKNOWN до подтверждённого порядка и производителя.
+- UNKNOWN не становится допуском; mandatory FAIL блокирует кандидата, процентов нет.
 
-PostgreSQL, миграции, tenant-scoped репозитории, идентификация пользователя,
-версии профиля/кейса/КП, audit и тонкий FastAPI. Изоляция проверяется реальной
-БД и негативными API-тестами. Мок tenant header не считается авторизацией.
-Результат: кейс сохраняется, загружается и пересчитывается через API без потери
-неизвестных данных и истории. Выбор очереди не блокирует этот этап.
+Дальше последовательно: полнота требований → единица цены/упаковка/MOQ/НДС/
+доставка → стоимость партии → draft RFQ → полное действующее КП →
+base/realistic/conservative. Внешняя отправка требует exact-payload approval.
 
-Реализован immutable-снимок `ProcurementCase`, который хранит точные версии
-профиля, процедуры, КП, проверок и экономики внутри aggregate. Отдельные таблицы
-профиля и КП пока не выделены: второго независимого write workflow для них ещё
-нет. Добавлены Alembic, PostgreSQL RLS/FORCE RLS, runtime-роль без доступа к
-digest API-ключей, bearer identity, cursor pagination, append-only audit,
-атомарная evaluation + audit + idempotency receipt и FastAPI endpoints.
+## Поиск и проверка производителя — `IN PROGRESS` локально
 
-Проверки: **303 unit/API-теста**, **12 integration-тестов на PostgreSQL 16**,
-9 doctests, ruff и mypy домена проходят. Сквозной тест выполняет bearer auth,
-create/replay/conflict, межтенантный `404`, серверную оценку и audit через
-HTTP → PostgreSQL. Контракт и локальный запуск — в [документе S2](17-storage-api.md),
-решение об изоляции — [ADR-0007](adr/0007-postgres-rls-and-bearer-tenant.md).
+План и границы: [111-manufacturer-search-and-verification](suppliers/111-manufacturer-search-and-verification.md).
+Первый срез сохраняет raw response официального EAEU PRODUCTS и создаёт
+server-derived candidate dossier; он CHECKED LOCALLY, но live query
+`SOURCE_ERROR`, поэтому live-success и production acceptance не заявляются.
+Identity/role review с immutable PDF, exact registry linkage и separation of
+duties проверен локально по [ADR-0100](adr/0100-independent-manufacturer-review.md).
+Сводка изготовителей одного run с exact-key grouping проверена локально по
+[ADR-0101](adr/0101-run-scoped-manufacturer-grouping.md). RFQ draft проверен локально;
+отправки нет. GISP/B2B access contract pending; supplier SKU linkage,
+contacts/commercial review и действительное полное КП остаются незавершёнными.
+Владельцы: root — API/интеграция, Sol — backend/web, Astra — review.
 
-## S3 — первый пользовательский экран
+## Отмена дополнительных поисковиков
 
-Статус: **завершён 2026-09-09 для внутреннего пилота одного tenant**.
+По запросу пользователя Brave/DDG/Mojeek удалены из активного поиска;
+policy v1 снова запускает Bing/Яндекс/Google. Исторический v2 читается source0.
+Владелец root: storage/integration/docs; Sol: source и web. Owned files:
+supplier_serp source/storage, SERP UI/wire и тематические тесты.
+Acceptance: нет новых обращений к удалённым engines; старый evidence сохранён;
+три активных источника, исходные лимиты, проверка backend/UI/real PG.
+Проверено: 90 Python с real PG + 20 Node PASS, TS/ESLint/Ruff/docs PASS.
+История — [отозванный ADR0103](adr/0103-supplier-serp-fallback-engines.md).
 
-Профиль → ручной импорт процедуры/КП → обязательные проверки → карточка решения
-и очередь неизвестных. Видны источники, сроки, расходы и основания. Ошибки
-API объясняются без показа трассировок. Демоданные явно помечены.
+## Программа улучшения — M1 COMPLETE; национальный охват IN PROGRESS
 
-Реализован внутренний пилот одного настроенного tenant. Next.js
-использует server-side bearer token и не передаёт его браузеру; пользователь
-работает со списком последних версий, импортом полного `ProcurementCase`,
-карточкой и последней сохранённой evaluation. Production multi-user auth,
-ingestion, аналитика и любые внешние действия в S3 не входят. Контракт и
-локальный запуск описаны в [документе S3](18-first-screen.md).
+Приоритет09.10: первый результат — актуальные44/223 по всей России с измеренной свежестью; fresh flow обрабатывается быстрее поступления, история отдельно на остаточной мощности. После выкладки измерить новые окна/сутки по официальным регионам/families, terminal throughput, source→search lag и необслуживаемые координаты; планы/общий ETA истории не доказывают охват. M1 и принятые production6/restore сохраняются.
+Контракт и рабочие цели — [программа](product/16-improvement-program.md).
+Root; exact v4 c4f6…/activation092d…/applicationbee8… APPROVED и INSTALLED777.067s; minimal223 c641…/receipt11dd… переиспользованы, схема20261008_01, worker3GiB/3CPU. Окна77/05–06.10:481новая версия,423ранее отсутствовавшие закупки, три production HTTP query нашли заданные версии; integrity PASS. Штатный223 также закрыл77/08.10 (+57версий). Ошибки postcheck OOM137 и leasewait180s сохранены; вместо третьей выгрузки использованы committed audit и bounded read-only/API proof. Национальная свежесть INCOMPLETE: за08.10 evidence448/450 координат44 и450/450 координат223 в scope90регионов×5поддержанныхfamilies;44остались48/EZK duplicate и77/EOK attachment. Existing national fresh pilot:43окна/241.358s,37версий,2события,0ошибок; terminal RUN_TIME_BUDGET_REACHED, постоянный cron не изменён. Измерены lag и поисковая проекция; sustained arrival/repoll capacity UNKNOWN. Следующий срез — latest-hour-first и ограниченная reconciliation через существующий scheduler с измерением совместной ёмкости; история на остаточной мощности. Pagination/paper не установлены; wholecoverage/quality UNKNOWN. [Release/evidence](operations/115-candidate-quality-workflow.md), [scope](eis/ingestion/120-eis-national-coverage.md), [search](eis/search/113-eis-search-continuation.md).
+Baseline v2 sealed Linux: 3233 PASS/27 explicit skips; real PG 608/608 PASS, 60 modules/15 groups; Ruff/mypy/9 doctests, 153 Node, API/web clean build/startup PASS. Provider v5 and independent audit PASS: Python 3892/27 known skips, Node153, clean builds/startup/cleanup.
+Gate по [ADR-0107](adr/0107-candidate-triggered-quality-gate.md): provider/два guards INSTALLED; four refusals/identity audit PASS. Два fresh full installed runs и независимые audits PASS; root принял ограниченный local-provider M1.
+M1 принят для bounded local-provider. M2 INCOMPLETE: PG5 terminal FAIL `CONTAINER_ENV_UNEXPECTED` с принятым failed-evidence/cleanup review; PG6 и PG7 bounded synthetic diagnostics приняты в описанных пределах, не как full release gate или production-fit результат.
+Production6 повторно не выгружался. В isolated PG16.15 восстановлены25relations/800444rows; schema/25FK/counts/ordered hashes до и после поиска PASS;209 deployed Python files exact before/copy/after,95 loaded modules verified; RLS/read-only/foreign tenant0/write refusal PASS. Fixed9cases×3:327calls=324success+3wall timeout;12complete/12page-budget/3error traversals. Restore COMPLETE, bounded SQL_STORAGE observation executed; all-success/full-walk INCOMPLETE. Total6287.272s; worker peak1.340GiB, PG peak1GiB+8192B/max-events304947/OOM0; cleanup PASS, stopped PGdata retained. Root owns corpus worker/evidence/live; one preflight0600 failure diagnosed/fixed, no third cycle. Precision/recall UNKNOWN без labels; fullM2/release NOT ACCEPTED, M3/M4 не начаты; M5 теперь приоритет. q05 SQL/fetch/comparison localization сохранена как проблема поиска; текущий приоритет — ingestion; [evidence](eis/search/118-eis-benchmark-instrument-evidence.md).
 
-Экран показывает сводку только по фактически загруженной выборке, карточки,
-deadline и часовой пояс, provenance, gates, три сценария расходов, рейтинг с
-факторами, основания и следующий шаг. Импорт и пересчёт идут через server actions
-с новым idempotency key; bearer secret не попадает в browser bundle.
-Проверки: Next.js lint/build, 318 Python-тестов с включёнными 13 PostgreSQL
-integration, 9 doctests, Ruff и mypy проходят; desktop layout проверен headless
-Edge через реальный BFF → FastAPI → PostgreSQL workflow.
+## Серверная браузерная методология — транспорт INSTALLED
 
-## S4 — документы и разрешённый мониторинг
+Root: source/storage/runner, compose, deployment и docs; Sol: новый browser helper
+и его тесты; Astra: независимый review. Зависимость: серверный controlled probe.
+Acceptance: отдельные tenant/origin профили, lock, durable pacing/cooldown,
+bounded cleanup, source0 и сохранение UNKNOWN; проверка на VPS после restart.
+Bing: 10 ссылок после смены контейнера; полный runner→PostgreSQL→source0 PASS.
+105 Python/real PG PASS; API health и отсутствие zombie/живых браузеров PASS.
+Google, Яндекс и Маркет: CAPTCHA; доступ ко всем источникам не подтверждён.
+Полнота/качество выбора производителя остаются UNKNOWN; [evidence](suppliers/105-eis-position-supplier-serp.md).
 
-Статус: **в работе; три среза завершены 2026-09-10 (pipeline, OCR-версии, факты+v0)**.
+## Обзор и продолжение поиска ЕИС — INSTALLED
 
-Immutable snapshots, native parsing/OCR, извлечение в строгую схему, полнота ТЗ,
-золотой набор. Затем один согласованный источник с checkpoint, rate limit,
-дедупликацией и видимой свежестью. Фактическое покрытие показывается пользователю.
+Root; owned: saved-index storage/API, discovery UI/tests/docs. Зависимости: existing query contracts.
+Acceptance: схема, до 10 строк, все совпадения через continuation; tenant/evidence guards, FAIL/UNKNOWN.
+100 Python, 24 real PG, 7 Node, build/types/lint и saved-production read PASS; [evidence](eis/search/113-eis-search-continuation.md).
+Census 1485 recent 44 windows без known gaps; полнота UNKNOWN, 223 PARTIAL. Installed 07.10: HTTPS/browser/continuation PASS.
 
-Первый срез принимает PDF/DOCX/XLSX через tenant-scoped API, проверяет MIME,
-сигнатуру и ресурсные лимиты, нативно извлекает текст с provenance и атомарно
-сохраняет исходные байты, результат, audit event и idempotency receipt в PostgreSQL.
-Пустой или сканированный PDF получает `UNKNOWN/OCR_REQUIRED`; макросы, формулы и
-внешние ссылки не исполняются. PostgreSQL RLS, межтенантный `404`, append-only
-trigger, конкурентный replay и полный HTTP → PostgreSQL путь проверены тестами.
-Контракт и ограничения описаны в [документе S4](19-document-pipeline.md), решение
-о пилотном `BYTEA` — в [ADR-0009](adr/0009-postgres-document-snapshots.md).
+## Как обновлять
 
-Следующий ограниченный срез S4: OCR как отдельная производная версия с confidence,
-затем строгая схема фактов и золотой набор. Мониторинг источника начинается после
-устойчивого document pipeline; S4 ещё не завершён.
+Ручная CAPTCHA — INSTALLED; root API/storage/UI/deploy/docs, Sol browser/парсеры, Astra review; [owned files/evidence](suppliers/112-human-supplier-captcha.md). Frame/input/verify/retry PASS; retry source_error, human CAPTCHA pending.
 
-Второй срез S4 завершён 2026-09-09: immutable OCR-производные версии
-(`document_ocr_derivatives`, миграция `20260909_02`) с FK на исходник, RLS,
-append-only trigger, audit `document.ocr_stored` и idempotency; домен
-`procurement.documents.ocr` с порогом `0.75` и provenance `extractor=ocr`;
-API `POST /v1/documents/{id}/ocr`, `GET .../ocr/latest`,
-`GET /v1/document-ocr/{ocr_id}`. Пилотный engine честно возвращает
-`UNKNOWN/OCR_REQUIRED` без синтеза фактов. Проверки: 333 unit/API-теста
-(12 доменных OCR + 5 API OCR), doctests, ruff и mypy домена проходят;
-Alembic имеет единственный head `20260909_02`; PostgreSQL integration-тесты
-требуют `DATABASE_URL` и в этой среде пропускаются.
+Доступ к пилоту (2026-10-06): по запросу пользователя домен заменён на
+`www.syurai.su`, HTTPS/Basic Auth работают; 401 без пароля, 200 с паролем,
+302 с корня на поиск, Forgejo 200. Прежний `.ru` снят;
+границы и evidence — [эксплуатация](operations/28-eis-server-operations.md#syurairu--конфигурация-активирована-2026-10-06-dnstls-pending).
 
-Третий срез S4 завершён 2026-09-10: детерминированный маппер блоков в строгие
-факты (`procurement.documents.facts`, правила `warranty`/`ethernet_ports`,
-порог `0.75`, непокрытое — честный `unmapped` без синтеза) и золотой набор v0
-(`data/goldenset/v1/tz_001.docx` + ручной эталон `tz_001.expected.json`,
-тест `tests/test_goldenset_v1.py` запрещает ложный PASS). Проверки: 344
-unit/API-теста (9 маппера + 2 golden), doctests, ruff и mypy проходят; миграций
-не требовалось, head прежний. Золотой набор v1 (2026-09-10): негативные пути
-`tz_002` (скан → `UNKNOWN/OCR_REQUIRED`, пустой маппинг) и `tz_003` (XLSX:
-литерал `Spec!A1` → `warranty >= 12`, формула исключена,
-`UNKNOWN/FORMULAS_IGNORED`); набор версионируется через исключение
-`!/data/goldenset/` в `.gitignore`. Проверки: 346 unit/API-тестов. Четвёртый срез
-S4 (2026-09-10): правила R1–R4 и e2e `факты tz_001 → evaluate`
-(`tests/test_tz001_e2e.py`, 6 вердиктов, флаг эквивалента всегда явно).
-Проверки: 363 unit/API-теста, ruff и mypy проходят. Пятый срез S4 (2026-09-10):
-словарь стран + `country NE` (неизвестное — в unmapped), R2 терпит двоеточие,
-золотой набор v2 (`tz_004` бан+дата, `tz_005` числовые+страна как файлы).
-Проверки: 372 unit/API-теста, ruff и mypy проходят. Остаток S4: расширение золотого набора
-(сканы, XLSX с формулами, КП-ловушки, сертификаты) и только потом мониторинг
-источника; S4 ещё не завершён.
-
-## S5 — поставщики, логистика и финансовый график
-
-Статус: **запланировано**.
-
-Supplier discovery, RFQ drafts, разрешённая отправка после exact approval,
-Quote Analyzer, несколько поставщиков/позиций, плечи/адреса и cash-flow.
-Налоги и расходы, зависящие от ставки, пересчитываются при изменении цены.
-Для платформ — импорт каталогов и оферт, допуск канала, отдельные действия продаж.
-
-## S6 — заявки, исполнение и post-award
-
-Статус: **запланировано**.
-
-ApplicationPackage, гарантии и договоры, транзакционная одноразовость approvals,
-Local Executor, receipts, контроль поставки/приёмки/оплаты и прогноз-факт.
-Параллельные попытки исполнить одно действие не приводят к повторной отправке.
-
-## S7 — история, обучение и масштабирование SaaS
-
-Статус: **запланировано**.
-
-Аналоги и калибровка прогнозов, аналитика по событиям, предпочтения отдельно
-от hard policy, тарифы и ограничения ресурсов. Базовая tenant isolation
-реализуется в S2, а не откладывается на этап масштабирования.
-
-## Правило перехода
-
-Следующий этап начинается после проверяемого результата предыдущего. Приоритет
-можно изменить по фактической зависимости или решению владельца, обновив этот
-файл. Для каждой итерации фиксируются результат, проверки и оставшиеся ограничения;
-не создаются дублирующие списки задач в нескольких документах.
+После среза обновить только текущие границы, ограничения и следующий шаг здесь.
+Контракт/evidence хранить в тематическом документе, ADR — в [реестре решений](adr/README.md).
+Прошедший подробный журнал перенести в history и добавить ссылку в индекс.
+Не дописывать сюда журналы тестов, SHA-таблицы и историю развёртываний.

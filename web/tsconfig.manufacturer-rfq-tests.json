@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM"],"module":"CommonJS","moduleResolution":"Node","resolveJsonModule":true,"strict":true,"skipLibCheck":true,"esModuleInterop":true,"rootDir":".","outDir":"build/manufacturer-rfq-tests"},"include":["tests/manufacturer-rfq.test.ts","tests/fixtures/manufacturer-rfq-backend.json","src/lib/manufacturer-rfq.ts"]}

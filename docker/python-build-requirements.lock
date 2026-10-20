@@ -1,0 +1,8 @@
+# Exact build-backend closure observed in clean API image b9f54dba (2026-10-07).
+# Keep identical to pyproject.toml build-system.requires; no optional extras.
+hatchling==1.32.4
+packaging==26.3
+pathspec==1.1.1
+pluggy==1.6.0
+tomlkit==0.15.1
+trove-classifiers==2026.9.21.13
