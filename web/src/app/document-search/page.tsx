@@ -9,7 +9,7 @@ import {
 } from "@/lib/procurement-api";
 
 export const metadata: Metadata = {
-  title: "Поиск по документам — Syurai Procurement",
+  title: "Поиск по документам — Tendox",
   description: "Tenant-scoped поиск по доказательствам из документов закупки",
 };
 

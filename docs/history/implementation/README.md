@@ -14,3 +14,6 @@
 - [06-eis-freshness-and-historical-search.md](06-eis-freshness-and-historical-search.md) — S189–S209: свежесть, история и поиск аналогов.
 - [07-eis-characteristics-and-recovery.md](07-eis-characteristics-and-recovery.md) — S210–S217: характеристики и восстановление evidence.
 - [08-selected-document-and-supplier-review.md](08-selected-document-and-supplier-review.md) — S218–S228: выбранный DOCX, товар и независимый review; исходный NEXT S229.
+
+- [09-status-snapshot-2026-10-20.md](09-status-snapshot-2026-10-20.md) — снимок статусов, rollout и evidence перед сокращением входного плана 21 октября.
+- [10-git-checkpoint-2026-10-25.md](10-git-checkpoint-2026-10-25.md) — сохранение накопленных изменений и проверки перед отправкой в GitHub.

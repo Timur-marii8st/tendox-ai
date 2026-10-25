@@ -188,7 +188,7 @@ def _attachment_findings(xml: bytes) -> tuple[int, int, list[dict[str, object]]]
                 }
             ],
         )
-    seen: set[str] = set()
+    seen: dict[str, dict[str, str]] = {}
     findings: list[dict[str, object]] = []
     for ordinal, element in enumerate(entries, 1):
         flags: list[str] = []
@@ -218,17 +218,21 @@ def _attachment_findings(xml: bytes) -> tuple[int, int, list[dict[str, object]]]
         # Nonnegative decimal strings cannot have int(value)<0. Avoid converting unbounded digits.
         if uid is not None and url is not None and not parser._official_url(url, uid):
             flags.append("URL_BINDING_INVALID")
+        reason = "ATTACHMENT_REFERENCE_INVALID"
         if uid is not None:
             if uid in seen:
+                previous = seen[uid]
+                if not flags and (previous.get("url"), previous.get("fileSize")) == (url, size):
+                    reason = "ATTACHMENT_REFERENCE_ALIAS"
                 flags.append("DUPLICATE_UID")
             if not flags:
-                seen.add(uid)
+                seen[uid] = fields
         if flags:
             findings.append(
                 dict(
                     attachment_ordinal=ordinal,
                     locator=f"{kind}/attachmentsInfo/attachmentInfo[{ordinal}]",
-                    reason="ATTACHMENT_REFERENCE_INVALID",
+                    reason=reason,
                     failure_flags=tuple(flags),
                     filename_length=len(filename) if filename is not None else None,
                     uid_length=len(uid) if uid is not None else None,

@@ -85,6 +85,95 @@ def _counts(storage: PostgresStorage, company: str) -> tuple[int, ...]:
         )
 
 
+def test_history_admission_order_and_concurrent_persisted_request(storage, monkeypatch, tmp_path):
+    import asyncio
+    import fcntl
+    import hashlib
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from unittest.mock import AsyncMock, Mock
+
+    from procurement import eis_freshness_dispatch_cli as dispatch
+    from procurement.sources import eis_corpus
+    from procurement.sources.eis_223_regions import REGION_SELECTOR_URL
+    from procurement.storage.eis_223_regions import register_region_catalog
+    from procurement.storage.eis_freshness_requests import (
+        EisRefreshRequestPayload,
+        plan_refresh_request,
+    )
+    from test_eis_223_regions import catalog_html
+
+    now = datetime.now(UTC)
+    company, other = ("admission-" + uuid.uuid4().hex for _ in range(2))
+    raw = catalog_html()
+    register_region_catalog(
+        storage,
+        company,
+        raw,
+        source_url=REGION_SELECTOR_URL,
+        response_sha256=hashlib.sha256(raw).hexdigest(),
+        observed_at=now,
+        actor_id="test",
+    )
+    # Isolate the real persisted foreground lane; no baseline/regional work in this scenario.
+    monkeypatch.setattr(dispatch, "resource_gate", lambda *_a, **_k: None)
+    monkeypatch.setattr(dispatch, "read_due_freshness", lambda *_a, **_k: ())
+    monkeypatch.setattr(dispatch, "_regional_demand", lambda *_a, **_k: (0, False))
+    payload = EisRefreshRequestPayload(query="test", regions=("50",))
+    plan_refresh_request(storage, other, payload, actor_id="test", now=now)
+    journal = EisSyncJournal(storage, company, "test")
+    before = _counts(storage, company)
+    source = AsyncMock()
+    monkeypatch.setattr(eis_corpus, "sync_eis_window", source)
+    selected = []
+
+    def selection(*_a, **_k):
+        # Reached only if the other tenant's persisted request did not block admission.
+        selected.append(True)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(
+                plan_refresh_request, storage, company, payload, actor_id="concurrent", now=now
+            ).result(timeout=10)
+        return (_key(50, "2026-10-02"),)
+
+    monkeypatch.setattr(eis_corpus, "eligible_windows", selection)
+    lease = tmp_path / "import.lock"
+    with lease.open("ab") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        with lease.open("ab") as contender, pytest.raises(BlockingIOError):
+            fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        report = asyncio.run(
+            eis_corpus.run_corpus(
+                journal, "no-source", now=now, mandatory_fresh_first=True, transport=object()
+            )
+        )
+    assert selected == [True]
+    assert report["reason"] == "MANDATORY_FRESH_WORK_READY" and report["attempted"] == 0
+    source.assert_not_awaited()
+    after = _counts(storage, company)
+    assert after[:3] == before[:3] and after[3] == before[3] + 1  # Concurrent request audit only.
+
+    expensive = Mock(side_effect=AssertionError("existing debt must precede history selection"))
+    monkeypatch.setattr(eis_corpus, "eligible_windows", expensive)
+    started = time.monotonic()
+    with lease.open("ab") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        report = asyncio.run(
+            eis_corpus.run_corpus(
+                journal, "no-source", now=now, mandatory_fresh_first=True, transport=object()
+            )
+        )
+    blocked_seconds = time.monotonic() - started
+    print(f"existing_debt_lease_hold_seconds={blocked_seconds:.6f}")
+    assert blocked_seconds < 2  # The previous ~30s eligibility work must be excluded.
+    expensive.assert_not_called()
+    assert report["selected"] == report["attempted"] == 0
+    assert report["reason"] == "MANDATORY_FRESH_WORK_READY"
+    assert _counts(storage, company) == after
+    with lease.open("ab") as contender:
+        fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)  # A waiting fresh worker can proceed.
+
+
 def test_recent_failure_lane_is_bounded_due_latest_tenant_scoped_and_read_only(
     storage: PostgresStorage,
 ) -> None:

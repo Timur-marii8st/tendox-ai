@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from io import BytesIO
 from typing import TYPE_CHECKING, Literal
@@ -16,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, exists, func, insert, select, text, true, tuple_
 
 from procurement.sources.eis_223_archive import (
-    SUPPORTED_DOCUMENT_TYPES,
+    PARSABLE_DOCUMENT_TYPES,
     Eis223ArchiveInspection,
     Eis223ContractError,
     Eis223DocumentType,
@@ -40,6 +41,7 @@ from procurement.sources.eis_223_window_limits import (
 from procurement.sources.eis_feed import validate_eis_archive_url
 from procurement.sources.eis_index_search import (
     EisSearchTermEvidence,
+    exact_purchase_number,
     match_search_terms,
     search_keys_v1,
     search_query_keys_v1,
@@ -47,7 +49,7 @@ from procurement.sources.eis_index_search import (
 )
 from procurement.storage.eis_223_events import read_event223_states
 from procurement.storage.eis_223_lot_events import read_lot_event223_states
-from procurement.storage.eis_search_pagination import SearchPagination
+from procurement.storage.eis_search_pagination import PAGE_COMPARISONS, SearchPagination
 from procurement.storage.models import (
     audit_events,
     eis_223_archive_sources,
@@ -64,8 +66,10 @@ if TYPE_CHECKING:
     from procurement.storage.repository import PostgresStorage
 
 _WINDOW = re.compile(
-    r"^getDocsIP/RI223/(?:0[1-9]|[1-9][0-9])/(?P<day>[0-9]{4}-[0-9]{2}-[0-9]{2})\+03:00/"
-    r"(?P<family>purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice)$"
+    r"^getDocsIP/RI223/(?:(?:0[1-9]|[1-9][0-9])/"
+    r"(?P<day>[0-9]{4}-[0-9]{2}-[0-9]{2})\+03:00/"
+    r"(?P<family>purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice)"
+    r"|by-number/(?P<number>[0-9]{11})/(?P<target_family>purchaseNoticeKESMBO))$"
 )
 _SEARCH_BATCH_SIZE = 200
 _SEARCH_RESULT_LIMIT = 100
@@ -119,11 +123,13 @@ class Eis223SearchResult(IndexModel):
     indexed_current_notices: int
     indexed_windows: int
     evaluated_candidates: int
+    compared_candidates: int = 0
+    reused_candidates: int = 0
     matched_count: int
     matched: tuple[Eis223SearchLead, ...]
     latest_ingested_at: datetime | None
     law: Literal["223"] = "223"
-    document_types: tuple[Eis223DocumentType, ...] = SUPPORTED_DOCUMENT_TYPES
+    document_types: tuple[Eis223DocumentType, ...] = PARSABLE_DOCUMENT_TYPES
     coverage: Literal["UNKNOWN"] = "UNKNOWN"
     freshness: Literal["UNKNOWN"] = "UNKNOWN"
     economics_status: Literal["UNKNOWN"] = "UNKNOWN"
@@ -141,10 +147,11 @@ def bind_notice223_window(
     match = _WINDOW.fullmatch(window_key)
     if match is None:
         raise Eis223IndexConflict("WINDOW_INVALID")
-    date.fromisoformat(match["day"])
+    if match["day"] is not None:
+        date.fromisoformat(match["day"])
     if (
         initial.service != "IP"
-        or initial.kind != "BY_REGION"
+        or initial.kind != ("BY_NUMBER" if match["number"] else "BY_REGION")
         or initial.state != "LINKS_PENDING"
         or initial.source_mode != "PROD"
         or prepared.service != "IP"
@@ -196,7 +203,8 @@ def preflight_notice223_window(
     match = _WINDOW.fullmatch(window.window_key)
     if match is None or len(window.archives) != len(window.archive_urls):
         raise Eis223IndexConflict("WINDOW_INVALID")
-    date.fromisoformat(match["day"])
+    if match["day"] is not None:
+        date.fromisoformat(match["day"])
     if sum(len(a) for a in window.archives) > MAX_NOTICE_COMPRESSED_BYTES:
         raise Eis223IndexConflict("WINDOW_BYTES_LIMIT")
     if len(set(window.archive_urls)) != len(window.archive_urls):
@@ -232,7 +240,7 @@ def preflight_notice223_window(
             company_id=company,
             source_response_sha256=window.response_sha256,
             source_locator=window.window_key,
-            document_type=match["family"],
+            document_type=match["family"] or match["target_family"],
         )
         for a in window.archives
     )
@@ -241,6 +249,8 @@ def preflight_notice223_window(
     identities = set()
     for archive in inspections:
         for notice in archive.records:
+            if match["number"] is not None and notice.purchase_number != match["number"]:
+                raise Eis223IndexConflict("BY_NUMBER_PURCHASE_MISMATCH")
             key = (notice.purchase_number, notice.version_number)
             if key in identities:
                 raise Eis223IndexConflict("NOTICE_VERSION_DUPLICATE")
@@ -404,14 +414,29 @@ def compare_notice223(
     source_response_sha256: str,
     archive_sha256: str,
 ) -> Eis223SearchLead | None:
+    query = query.strip()
+    number = exact_purchase_number(query)
     terms = search_query_terms(query)
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("NOW_TIMEZONE_MISSING")
-    evidence = match_search_terms(
-        ((notice.title.value or "", notice.title.provenance.locator, "TITLE"),), query
+    if number is not None and notice.purchase_number != number:
+        return None
+    evidence = (
+        (
+            EisSearchTermEvidence(
+                number,
+                notice.identity_provenance[0].locator,
+                notice.purchase_number,
+                "PURCHASE_NUMBER",
+            ),
+        )
+        if number is not None
+        else match_search_terms(
+            ((notice.title.value or "", notice.title.provenance.locator, "TITLE"),), query
+        )
     )
     ordinal = None
-    for lot in notice.lots:
+    for lot in () if number is not None else notice.lots:
         candidates = [
             match_search_terms(
                 ((lot.subject.value or "", lot.subject.provenance.locator, "TITLE"),), query
@@ -436,8 +461,12 @@ def compare_notice223(
     reasons = [
         "223-ФЗ: требования, МСП-статус, отмены и полнота комплекта не проверены.",
         "Цены каждого лота и валюта показаны отдельно; прибыль UNKNOWN.",
-        "Найдены слова в одном заголовке, одном предмете лота или одной позиции; "
-        "соответствие ТЗ UNKNOWN.",
+        (
+            "Найден точный регистрационный номер; соответствие ТЗ UNKNOWN."
+            if number is not None
+            else "Найдены слова в одном заголовке, одном предмете лота или одной позиции; "
+            "соответствие ТЗ UNKNOWN."
+        ),
     ]
     if expired:
         reasons.append("Срок подачи истёк; кандидат заблокирован.")
@@ -469,7 +498,10 @@ def search_notice223_index(
     paginate: bool = False,
     cursor: str | None = None,
     limit: int = 100,
+    on_matches: Callable[[tuple[Eis223SearchLead, ...]], None] | None = None,
 ) -> Eis223SearchResult:
+    query = query.strip()
+    number = exact_purchase_number(query)
     search_query_terms(query)
     at = now or datetime.now(UTC)
     if at.tzinfo is None or at.utcoffset() is None:
@@ -512,12 +544,18 @@ def search_notice223_index(
         ).one()
         scan_cursor: str | None = None
         evaluated = matched_count = 0
+        reused_count = 0
         matched: list[Eis223SearchLead] = []
         keys = list(search_query_keys_v1(query))
         while True:
             statement = (
                 select(table)
-                .where(current, table.c.search_keys.overlap(keys))
+                .where(
+                    current,
+                    table.c.purchase_number == number
+                    if number is not None
+                    else table.c.search_keys.overlap(keys),
+                )
                 .order_by(table.c.purchase_number)
                 .limit(_SEARCH_BATCH_SIZE)
             )
@@ -534,6 +572,7 @@ def search_notice223_index(
                 connection, company, tuple(r["purchase_number"] for r in rows), now=at
             )
             batch_leads: list[Eis223SearchLead] = []
+            notices = []
             for row in rows:
                 notice = Eis223NoticeSnapshot.model_validate(row["snapshot"])
                 if (notice.purchase_number, notice.version_number, notice.xml_sha256) != (
@@ -542,14 +581,28 @@ def search_notice223_index(
                     row["xml_sha256"],
                 ):
                     raise Eis223ContractError("PERSISTED_IDENTITY_MISMATCH")
-                lead = compare_notice223(
-                    notice,
-                    query,
-                    now=at,
-                    source_window=row["window_key"],
-                    source_response_sha256=row["response_sha256"],
-                    archive_sha256=row["archive_sha256"],
+                notices.append(notice)
+            sources = tuple(
+                (row["window_key"], row["response_sha256"], row["archive_sha256"]) for row in rows
+            )
+            if pager is not None:
+                base_leads, reused = _compare_page_notices223(
+                    company, tuple(notices), query, at, sources
                 )
+                reused_count += len(rows) if reused else 0
+            else:
+                base_leads = tuple(
+                    compare_notice223(
+                        notice,
+                        query,
+                        now=at,
+                        source_window=source[0],
+                        source_response_sha256=source[1],
+                        archive_sha256=source[2],
+                    )
+                    for notice, source in zip(notices, sources, strict=True)
+                )
+            for notice, lead in zip(notices, base_leads, strict=True):
                 if lead:
                     state = states[notice.purchase_number]
                     lot_state = lot_states[notice.purchase_number]
@@ -567,8 +620,11 @@ def search_notice223_index(
                     )
                     matched_count += 1
                     batch_leads.append(lead)
-            if pager is not None:
+            if pager is not None or on_matches is not None:
                 batch_leads = _with_schema_quality(connection, company, batch_leads)
+            if on_matches is not None:
+                on_matches(tuple(batch_leads))
+            if pager is not None:
                 batch_leads = [
                     lead
                     for lead in batch_leads
@@ -598,9 +654,55 @@ def search_notice223_index(
         indexed_windows=windows,
         latest_ingested_at=last,
         evaluated_candidates=evaluated,
+        compared_candidates=evaluated - reused_count,
+        reused_candidates=reused_count,
         matched_count=matched_count,
         matched=tuple(matched),
     )
+
+
+def _compare_page_notices223(
+    company: str,
+    notices: tuple[Eis223NoticeSnapshot, ...],
+    query: str,
+    at: datetime,
+    sources: tuple[tuple[str, str, str], ...],
+) -> tuple[tuple[Eis223SearchLead | None, ...], bool]:
+    key = PAGE_COMPARISONS.key(
+        company,
+        "223",
+        query,
+        at,
+        json.dumps(sources).encode(),
+        chunks=(notice.model_dump_json().encode() for notice in notices),
+    )
+    cached = PAGE_COMPARISONS.get(key)
+    if cached is not None:
+        data = json.loads(cached)
+        return tuple(
+            Eis223SearchLead.model_validate(dict(record, notice=notice)) if record else None
+            for record, notice in zip(data, notices, strict=True)
+        ), True
+    leads = tuple(
+        compare_notice223(
+            notice,
+            query,
+            now=at,
+            source_window=source[0],
+            source_response_sha256=source[1],
+            archive_sha256=source[2],
+        )
+        for notice, source in zip(notices, sources, strict=True)
+    )
+    PAGE_COMPARISONS.put(
+        key,
+        json.dumps(
+            [lead.model_dump(mode="json", exclude={"notice"}) if lead else None for lead in leads],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode(),
+    )
+    return leads, False
 
 
 def _with_schema_quality(

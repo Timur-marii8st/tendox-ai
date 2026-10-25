@@ -6,7 +6,7 @@ import { MaterializeForm } from "./materialize-form";
 import { ApiError, ConfigurationError, loadServerOfferEconomics, type ServerOfferEconomicsRecord } from "@/lib/procurement-api";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Экономика server offer — Syurai Procurement" };
+export const metadata: Metadata = { title: "Экономика server offer — Tendox" };
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 function failure(error: unknown) { if (error instanceof ConfigurationError) return "Operator API не настроен."; if (error instanceof ApiError && error.status === 404) return "Exact case или PASS offer не найден."; return "Economics evidence недоступен."; }
 

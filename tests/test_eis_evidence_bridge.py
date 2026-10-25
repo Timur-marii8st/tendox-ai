@@ -352,3 +352,20 @@ def test_unknown_variant_hold_prevents_cached_bridge_economics():
     )
     with pytest.raises(ValueError, match="NOTICE_VARIANT_REVIEW_REQUIRED"):
         calculate_eis_preliminary_estimate(bridge, costs)
+
+
+def test_ambiguous_source_never_reuses_supplied_legacy_analysis():
+    from dataclasses import replace
+
+    from procurement.sources.eis_feed_archive import EisAttachmentAlias
+
+    notice, collection, analysis = sample(deadline=NOW + timedelta(days=1))
+    attachment = replace(
+        notice.attachments[0], aliases=(EisAttachmentAlias("other.pdf", None, "xml/attachment[2]"),)
+    )
+    notice = replace(notice, attachments=(attachment,))
+    result = build_eis_evidence_bridge(notice, collection, {UID: analysis}, (), now=NOW)
+    assert result.collection.extraction_status == "UNKNOWN"
+    assert result.documents[0].conditions == ()
+    assert result.collection.documents[0].reference_status == "UNKNOWN"
+    assert "ATTACHMENT_REFERENCE_REQUIRES_REVIEW" in result.review_gaps

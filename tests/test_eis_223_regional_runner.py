@@ -96,9 +96,9 @@ def test_regional_batch_guards_and_target_local_failure(monkeypatch, runner, cas
         assert calls == ["77"] and records == ["NO_DATA"]
         assert result["stop_reason"] == "DISK_RESERVE_REACHED"
     else:
-        assert calls == ["77"] and records == ["NO_DATA"]
-        assert result["attempted"] == 1 and result["source_posts"] == 1
-        assert result["stop_reason"] == "PRIORITY_REFRESH_REQUESTED"
+        # A queued44 marker cannot starve the acquired bounded223 turn.
+        assert calls == ["77", "78"] and records == ["NO_DATA", "NO_DATA"]
+        assert result["attempted"] == 2 and result["source_posts"] == 2
         assert result["quality"] == {"reason": "DEFERRED_FOR_PRIORITY", "source_requests": 0}
         quality.assert_not_called()
     engine.dispose.assert_called_once()
@@ -161,6 +161,7 @@ def test_readonly_dispatch_probe_announces_only_meaningful_work(monkeypatch, run
     monkeypatch.setattr(runner, "PostgresStorage", lambda *a: object())
     monkeypatch.setattr(runner, "catalog_refresh_due", lambda *a: case == "catalog")
     monkeypatch.setattr(runner, "accepted_catalog_present", lambda *a: case != "no_catalog")
+    monkeypatch.setattr(runner, "joint_mandatory_status", lambda *a: "IDLE")
 
     def due(*a, limit, **k):
         assert 2 <= limit <= 32
@@ -173,13 +174,18 @@ def test_readonly_dispatch_probe_announces_only_meaningful_work(monkeypatch, run
             raise ValueError("synthetic-probe-failure")
         return Eis223RegionalCoverage(
             company_id="local-eis-supplier",
-            checked_at=datetime.now(UTC),
+            checked_at=k["now"],
             catalog_sha256=None if case in {"catalog_only", "no_catalog"} else "a" * 64,
             wave_id=None if case in {"new_wave", "catalog_only", "no_catalog"} else "wave",
             first_sweep_finished=case == "calendar",
-            end_day=date(2020, 1, 1),
+            end_day=(
+                k["now"].astimezone(runner.MSK).date() if case == "idle" else date(2020, 1, 1)
+            ),
         )
 
+    # This legacy dispatch fixture has no recent reconciliation rows. Its DB
+    # dependency is mocked just like the existing regional_due_windows read.
+    monkeypatch.setattr(runner, "recent_reconciliation_due", lambda *a: False)
     monkeypatch.setattr(runner, "read_region_coverage", coverage)
     forbidden = MagicMock(side_effect=AssertionError("probe must not mutate or access source"))
     for name in (
@@ -201,6 +207,13 @@ def test_readonly_dispatch_probe_announces_only_meaningful_work(monkeypatch, run
     engine.dispose.assert_called_once()
 
 
+@pytest.mark.parametrize("hour", [20, 21], ids=["before_moscow_midnight", "after_moscow_midnight"])
+def test_dispatch_idle_fixture_uses_the_probe_moscow_day(monkeypatch, runner, hour):
+    now = datetime(2026, 10, 23, hour, 30, tzinfo=UTC)
+    monkeypatch.setattr(runner, "datetime", SimpleNamespace(now=lambda tz: now.astimezone(tz)))
+    test_readonly_dispatch_probe_announces_only_meaningful_work(monkeypatch, runner, "idle")
+
+
 def test_quality_rechecks_priority_after_last_window_or_catalog_work(monkeypatch, runner):
     priority = False
     quality = MagicMock(return_value={"reason": "COMPLETED", "source_requests": 0})
@@ -211,3 +224,46 @@ def test_quality_rechecks_priority_after_last_window_or_catalog_work(monkeypatch
     assert runner.optional_quality(object(), regional=True)["reason"] == "DEFERRED_FOR_PRIORITY"
     assert quality.call_count == 1
     assert runner.optional_quality(object(), regional=False)["reason"] == "COMPLETED"
+
+
+@pytest.mark.parametrize("joint", ["READY", "BLOCKED", "IDLE"])
+def test_regional_old_recovery_waits_for_joint_idle_and_yields_before_next_window(
+    monkeypatch, runner, joint
+):
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value.scalar.return_value = 1
+    monkeypatch.setenv("EIS_223_REGIONAL_ENABLED", "1")
+    monkeypatch.setenv("DATABASE_URL", "synthetic")
+    monkeypatch.setattr(runner, "create_engine", lambda *a, **k: engine)
+    monkeypatch.setattr(runner, "PostgresStorage", lambda *a: object())
+    monkeypatch.setattr(runner.shutil, "disk_usage", lambda *a: SimpleNamespace(free=10**12))
+
+    async def catalog(_):
+        return {"status": "NOT_DUE"}
+
+    monkeypatch.setattr(runner, "refresh_catalog", catalog)
+    monkeypatch.setattr(runner, "ensure_region_wave", lambda *a, **k: "wave")
+    old = Eis223RefreshTarget(date(2020, 1, 1), "purchaseNoticeAESMBO", "77")
+    monkeypatch.setattr(
+        runner, "regional_due_windows", lambda *a, **k: () if k.get("fresh_only") else (old,)
+    )
+    statuses = iter([joint, "READY"])
+    monkeypatch.setattr(runner, "joint_mandatory_status", lambda *a: next(statuses))
+    monkeypatch.setattr(runner, "read_region_coverage", lambda *a, **k: MagicMock())
+    monkeypatch.setattr(runner, "priority_requested", lambda *a, **k: False)
+    monkeypatch.setattr(runner, "optional_quality", lambda *a, **k: {})
+
+    @asynccontextmanager
+    async def session():
+        yield object()
+
+    monkeypatch.setattr(runner, "eis_browser_transport", session)
+    forbidden = MagicMock(side_effect=AssertionError("history must not contact source"))
+    monkeypatch.setattr(runner, "fetch_notice223_day", forbidden)
+    result = asyncio.run(runner.run())
+    assert result["attempted"] == 0
+    expected = (
+        "MANDATORY_DEMAND_UNAVAILABLE" if joint == "BLOCKED" else "MANDATORY_FRESH_WORK_READY"
+    )
+    assert result.get("reason", result.get("stop_reason")) == expected
+    forbidden.assert_not_called()

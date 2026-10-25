@@ -14,7 +14,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from procurement.sources.eis_analysis import DocumentAnalysis, analyze_document
 from procurement.sources.eis_document_sync import MAX_DOCUMENT_BYTES
-from procurement.sources.eis_feed_archive import EisNoticeSnapshot, EisProcedureEvent
+from procurement.sources.eis_feed_archive import (
+    EisAttachmentAlias,
+    EisNoticeSnapshot,
+    EisProcedureEvent,
+)
 from procurement.sources.eis_procedure_state import resolve_procedure_state
 from procurement.storage.eis_index_query import search_eis_index
 from procurement.storage.eis_notice_hold import (
@@ -62,6 +66,8 @@ class DocumentCollectionItem(BaseModel):
     source_url: str
     source_locator: str
     declared_byte_count: int
+    reference_status: Literal["PASS", "UNKNOWN"] = "PASS"
+    aliases: tuple[EisAttachmentAlias, ...] = ()
     received_byte_count: int | None = None
     sha256: str | None = None
     fetch_status: Literal["PENDING", "RECEIVED", "SIZE_MISMATCH", "FAILED"] = "PENDING"
@@ -540,7 +546,7 @@ def read_document_status(
         row = observations.get(item.content_uid)
         analysis = (
             _cached_analysis(connection, company_id, str(row["sha256"]), item.filename, item.url)
-            if row and row["fetch_status"] == "RECEIVED"
+            if item.reference_status == "PASS" and row and row["fetch_status"] == "RECEIVED"
             else None
         )
         documents.append(
@@ -550,12 +556,16 @@ def read_document_status(
                 source_url=item.url,
                 source_locator=item.locator,
                 declared_byte_count=item.byte_count,
+                reference_status=item.reference_status,
+                aliases=item.aliases,
                 received_byte_count=row["byte_count"] if row else None,
                 sha256=row["sha256"] if row else None,
                 fetch_status=row["fetch_status"] if row else "PENDING",
                 extraction_status=analysis.status if analysis else "UNKNOWN",
                 reasons=(
-                    analysis.reasons
+                    ("ATTACHMENT_REFERENCE_REQUIRES_REVIEW",)
+                    if item.reference_status == "UNKNOWN"
+                    else analysis.reasons
                     if analysis
                     else (
                         str(
@@ -649,6 +659,8 @@ def reanalyze_received_document(
         observation = _observations(connection, company_id, ref).get(content_uid)
         if attachment is None or observation is None or observation["fetch_status"] != "RECEIVED":
             raise LookupError("DOCUMENT_RECEIPT_NOT_FOUND")
+        if attachment.reference_status == "UNKNOWN":
+            raise ValueError("ATTACHMENT_REFERENCE_REQUIRES_REVIEW")
         digest = str(observation["sha256"])
         if (
             _cached_analysis(connection, company_id, digest, attachment.filename, attachment.url)
@@ -736,6 +748,8 @@ def record_document_outcome(
         )
         if attachment is None:
             raise ValueError("DOCUMENT_NOT_IN_MANIFEST")
+        if attachment.reference_status == "UNKNOWN" and content is not None:
+            raise ValueError("ATTACHMENT_REFERENCE_REQUIRES_REVIEW")
         previous = _observations(connection, company_id, ref).get(content_uid)
         digest = hashlib.sha256(content).hexdigest() if content is not None else None
         if previous and previous["fetch_status"] == "RECEIVED":
@@ -815,6 +829,8 @@ def get_document_analysis(
         row = _observations(connection, company_id, ref).get(content_uid)
         if attachment is None or row is None or row["fetch_status"] != "RECEIVED":
             raise LookupError("DOCUMENT_ANALYSIS_NOT_FOUND")
+        if attachment.reference_status == "UNKNOWN":
+            raise ValueError("ATTACHMENT_REFERENCE_REQUIRES_REVIEW")
         analysis = _cached_analysis(
             connection, company_id, str(row["sha256"]), attachment.filename, attachment.url
         )

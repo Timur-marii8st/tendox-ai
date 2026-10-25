@@ -69,6 +69,19 @@ def assess_notice_document_set(
             source_locator=item.locator,
             declared_byte_count=item.byte_count,
         )
+        if item.reference_status == "UNKNOWN":
+            documents.append(
+                EisDocumentEvidence(
+                    **base,
+                    received_byte_count=None,
+                    sha256=None,
+                    fetch_status="BLOCKED",
+                    extraction_status="UNKNOWN",
+                    extraction_reasons=("ATTACHMENT_REFERENCE_REQUIRES_REVIEW",),
+                    analysis=None,
+                )
+            )
+            continue
         if content is None:
             documents.append(
                 EisDocumentEvidence(
@@ -109,8 +122,10 @@ def assess_notice_document_set(
             )
         )
     fetched = sum(item.fetch_status == "RECEIVED" for item in documents)
-    all_extracted = bool(documents) and fetched == len(documents) and all(
-        item.extraction_status == "PASS" for item in documents
+    all_extracted = (
+        bool(documents)
+        and fetched == len(documents)
+        and all(item.extraction_status == "PASS" for item in documents)
     )
     return EisDocumentSetReport(
         purchase_number=notice.purchase_number,
@@ -121,7 +136,9 @@ def assess_notice_document_set(
         download_status=(
             "COMPLETE_LISTED_SET"
             if documents and fetched == len(documents)
-            else "INCOMPLETE" if documents else "UNKNOWN_MANIFEST"
+            else "INCOMPLETE"
+            if documents
+            else "UNKNOWN_MANIFEST"
         ),
         extraction_status="EXTRACTED" if all_extracted else "UNKNOWN",
         review_status="UNKNOWN",

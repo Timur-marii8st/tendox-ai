@@ -51,7 +51,10 @@ def zip_bytes(items: list[tuple[str, bytes]]) -> bytes:
     result = BytesIO()
     with ZipFile(result, "w", ZIP_DEFLATED) as archive:
         for name, raw in items:
-            archive.writestr(name, raw)
+            # Replay fixtures must retain exact bytes across ZIP's two-second clock boundary.
+            info = ZipInfo(name, date_time=(2026, 10, 1, 0, 0, 0))
+            info.compress_type = ZIP_DEFLATED
+            archive.writestr(info, raw)
     return result.getvalue()
 
 
@@ -102,9 +105,18 @@ def test_direct_duplicate_and_namespace_shadow_are_rejected():
         parse_purchase_rejection_xml(shadow, source_member="event.xml")
 
 
-def test_archive_retains_guid_variants_but_rejects_exact_duplicate_and_unsafe_path():
+def test_archive_retains_guid_variants_but_rejects_exact_duplicate_and_unsafe_path(monkeypatch):
     first = event_xml(cause="one")
     second = event_xml(cause="two")
+    archives = []
+    for tick in (0, 2):
+        with monkeypatch.context() as clock:
+            clock.setattr("zipfile.time.localtime", lambda _, tick=tick: (2026, 10, 1, 0, 0, tick))
+            archives.append(zip_bytes([("one.xml", first)]))
+    assert archives[0] == archives[1]
+    with ZipFile(BytesIO(archives[0])) as zipped:
+        assert zipped.read("one.xml") == first
+        assert zipped.getinfo("one.xml").compress_type == ZIP_DEFLATED
     report = inspect_purchase_rejection_archive(
         zip_bytes([("one.xml", first), ("two.xml", second)]),
         company_id="tenant-a",

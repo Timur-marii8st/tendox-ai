@@ -1,0 +1,26 @@
+{
+  "schema_version": "company-profile-save-command-v1",
+  "expected_version": 0,
+  "changes": {
+    "identity.name": {
+      "knowledge": "KNOWN",
+      "value": "Синтетический пример пустых списков",
+      "reason": null
+    },
+    "provided_services": {
+      "knowledge": "KNOWN",
+      "value": [],
+      "reason": null
+    },
+    "performed_works": {
+      "knowledge": "KNOWN",
+      "value": [],
+      "reason": null
+    },
+    "geography.all_russia": {
+      "knowledge": "KNOWN",
+      "value": false,
+      "reason": null
+    }
+  }
+}

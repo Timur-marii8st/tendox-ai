@@ -1,4 +1,4 @@
-"""The local EIS runtime is authenticated and exposes no business API."""
+"""Discovery pilot access stays separate from personal business access."""
 
 import asyncio
 
@@ -55,7 +55,45 @@ def test_runtime_keeps_only_discovery_and_safe_routes(monkeypatch: pytest.Monkey
         route.path for route in app.routes if hasattr(route, "path")
     }
     assert all(
-        path.startswith("/v1/tender-discovery/")
+        path.startswith(
+            (
+                "/v1/tender-discovery/",
+                "/v1/company-profile",
+                "/v1/procurement-comparison",
+                "/v1/beta-procurement/",
+            )
+        )
         or path in {"/health", "/openapi.json", "/docs", "/docs/oauth2-redirect"}
         for path in paths
     )
+
+
+@pytest.mark.parametrize("path", ["/v1/company-profile", "/v1/procurement-comparison/catalog"])
+def test_pilot_and_missing_credentials_cannot_access_personal_routes(monkeypatch, path):
+    monkeypatch.setenv(EIS_PILOT_TOKEN_ENV, TOKEN)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    for headers in (None, {"Authorization": "Bearer " + TOKEN}):
+        response = _request(path, headers)
+        assert response.status_code == 401
+        assert response.headers["cache-control"] == "no-store"
+
+
+def test_pilot_cannot_read_or_save_personal_beta_quotes(monkeypatch):
+    monkeypatch.setenv(EIS_PILOT_TOKEN_ENV, TOKEN)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    app = create_discovery_app()
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            for path in ("quote/read", "quote/save", "shortlist"):
+                response = await client.post(
+                    "/v1/beta-procurement/" + path,
+                    json={},
+                    headers={"Authorization": "Bearer " + TOKEN},
+                )
+                assert response.status_code == 401
+                assert response.headers["cache-control"] == "no-store"
+
+    asyncio.run(run())

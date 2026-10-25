@@ -10,6 +10,27 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_legacy_layout_still_rejects_missing_links_and_anchors(tmp_path: Path, monkeypatch):
+    spec = spec_from_file_location("legacy_docs_check", ROOT / "scripts/check_docs.py")
+    checker = module_from_spec(spec)
+    spec.loader.exec_module(checker)
+    monkeypatch.setattr(checker, "ROOT", tmp_path)
+    monkeypatch.setattr(checker, "DOCS", tmp_path / "docs")
+    for name in ("README.md", "AGENTS.md", "CLAUDE.md", "web/README.md", "web/AGENTS.md",
+                 "web/CLAUDE.md", "docs/README.md"):
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    index = tmp_path / "docs/README.md"
+    index.write_text("[missing](absent.md)", encoding="utf-8")
+    assert checker.main("legacy-flat") == 1
+    index.write_text("[bad anchor](target.md#absent)", encoding="utf-8")
+    (tmp_path / "docs/target.md").write_text("# Present\n", encoding="utf-8")
+    assert checker.main("legacy-flat") == 1
+    index.write_text("[valid](target.md#present)", encoding="utf-8")
+    assert checker.main("legacy-flat") == 0
+
+
 @pytest.mark.parametrize("private_present", [False, True])
 def test_only_named_local_material_may_use_literal_index_entry(
     tmp_path: Path,

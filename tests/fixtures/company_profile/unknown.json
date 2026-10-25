@@ -1,0 +1,199 @@
+{
+  "schema_version": "company-profile-handoff-v1",
+  "selection": {
+    "schema_version": "company-profile-selection-v1",
+    "company_id": "synthetic-example-unknown",
+    "selection_id": "00000000-0000-4000-8000-000000000001",
+    "profile_ref": {
+      "company_id": "synthetic-example-unknown",
+      "version": 1,
+      "snapshot_sha256": "dc1afae1ef4a09293fdc800d2b2a1c655a2ab3844e9b110febc02cd23ac49c48"
+    },
+    "selected_at": "2026-10-14T20:54:25.949046Z",
+    "selected_by": "synthetic-fixture-operator",
+    "audit_event_id": "synthetic-selection-audit-1"
+  },
+  "profile_ref": {
+    "company_id": "synthetic-example-unknown",
+    "version": 1,
+    "snapshot_sha256": "dc1afae1ef4a09293fdc800d2b2a1c655a2ab3844e9b110febc02cd23ac49c48"
+  },
+  "profile_snapshot": {
+    "schema_version": "company-profile-snapshot-v1",
+    "company_id": "synthetic-example-unknown",
+    "version": 1,
+    "parent_version": null,
+    "created_at": "2026-10-14T20:54:25.949046Z",
+    "created_by": "synthetic-fixture-operator",
+    "effective_at": "2026-10-14T20:54:25.949046Z",
+    "currency": "RUB",
+    "amount_basis": "EX_VAT",
+    "facts": {
+      "identity.name": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "identity.inn": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "identity.kpp": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "identity.ogrn": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "identity.legal_form": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.all_russia": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.federal_districts": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.regions": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.cities": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.max_distance_km": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.min_contract_amount": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_contract_amount": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.min_margin": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.min_expected_profit": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_contract_without_extra_approval": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_application_security": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_performance_security": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.price_floor_margin": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "okved": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "business_description": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "supplied_goods": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "performed_works": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "provided_services": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "enabled_platforms": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "subcontracting_allowed": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "allowed_procedure_methods": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "prohibitions": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      }
+    },
+    "critical_settings_status": "OWNER_AUTHORIZATION_UNAVAILABLE",
+    "snapshot_sha256": "dc1afae1ef4a09293fdc800d2b2a1c655a2ab3844e9b110febc02cd23ac49c48",
+    "audit_event_id": "synthetic-audit-1"
+  }
+}

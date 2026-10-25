@@ -92,6 +92,76 @@ def test_coarse_persisted_keys_remain_identical_despite_refinement():
     assert search_keys_v1("Серверного оборудования") == ("обору", "серве")
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Услуги по оценке Векселя, облигации, акции и др. ценные бумаги",
+        "Депозитарный учет ценных бумаг",
+        "Операции с ценными бумагами",
+        "ЦЕННЫЕ БУМАГИ, ценные бумаги",
+    ],
+)
+def test_paper_query_excludes_securities_in_title_and_item(value):
+    notice = _notice("9000000000000000001", value)
+    assert not compare_indexed_notices((notice,), "бумага", now=NOW).matched_notices
+    item = replace(
+        _paper_item("А4"), name=value, characteristics=(), locator="synthetic/purchaseObject[42]"
+    )
+    notice = replace(notice, title="Услуги по оценке имущества", lot_items=(item,))
+    assert not compare_indexed_notices((notice,), "бумага", now=NOW).matched_notices
+    assert "бумаг" in search_keys_v1(value)  # No derived-index migration.
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Поставка бумаги офисной",
+        "Бумага для печати",
+        "Ценные бумаги и офисная бумага",
+        "Бумага офисная и ценные бумаги",
+        "Бланки на самокопирующейся бумаге для приема вещей и ценностей",
+        "Определение цены бумаги для печати",
+        "Мониторинг цен бумаги офисной",
+    ],
+)
+def test_paper_occurrence_is_preserved_even_next_to_financial_occurrences(value):
+    notice = _notice("9000000000000000001", value)
+    lead = compare_indexed_notices((notice,), "бумага", now=NOW).matched_notices[0]
+    assert lead.match_quality == "STRONG"
+    assert lead.term_evidence[0].source_value == value
+
+
+def test_paper_item_remains_visible_under_securities_title():
+    notice = replace(
+        _notice("9000000000000000001", "Учет ценных бумаг"),
+        lot_items=(
+            replace(
+                _paper_item("А4"),
+                name="Бумага офисная",
+                characteristics=(),
+                locator="synthetic/item",
+            ),
+        ),
+    )
+    lead = compare_indexed_notices((notice,), "бумага", now=NOW).matched_notices[0]
+    assert lead.match_quality == "STRONG"
+    assert lead.term_evidence[0].value_kind == "ITEM_NAME"
+
+
+def test_explicit_securities_query_still_matches_morphology():
+    notice = _notice("9000000000000000001", "Депозитарный учет ценных бумаг")
+    lead = compare_indexed_notices((notice,), "ценные бумаги", now=NOW).matched_notices[0]
+    assert lead.match_quality == "STRONG"
+
+
+def test_price_query_does_not_enable_the_financial_paper_sense():
+    notice = _notice("9000000000000000001", "Оценка ценных бумаг")
+    leads = compare_indexed_notices((notice,), "бумага цена", now=NOW).matched_notices
+    assert all(
+        lead.match_quality == "PARTIAL" and "бумага" not in lead.matched_terms for lead in leads
+    )
+
+
 def test_open_competition_never_approves_unreviewed_criteria_or_economics():
     notice = replace(
         _notice("0848300054826000154", "Поставка бумаги"), document_type="epNotificationEOK2020"

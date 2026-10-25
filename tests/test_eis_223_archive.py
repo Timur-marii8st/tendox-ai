@@ -50,8 +50,9 @@ def test_generic_other_method_requires_its_explicit_family_selection():
     with pytest.raises(ValueError, match="DOCUMENT_TYPE_UNSUPPORTED"):
         parse_notice223_xml(raw, source_member="other.xml")
     assert (
-        parse_notice223_xml(raw, source_member="other.xml", document_type="purchaseNotice")
-        .document_type
+        parse_notice223_xml(
+            raw, source_member="other.xml", document_type="purchaseNotice"
+        ).document_type
         == "purchaseNotice"
     )
 
@@ -306,3 +307,45 @@ def test_rub_projection_and_nested_float_cannot_be_forged():
     body["lots"][0]["initial_sum_rub"] = 100.25
     with pytest.raises(ValueError, match="float"):
         Eis223NoticeSnapshot.model_validate(body)
+
+
+@pytest.mark.parametrize("size", [4_511_001, 9_471_478])
+def test_complete_notice_xml_above_old_pilot_limit_retains_identity(size):
+    original = xml()
+    padded = original + b"<!--" + b"x" * (size - len(original) - 7) + b"-->"
+    result = inspect(zip_bytes([("large.xml", padded)]))
+    assert len(padded) == size
+    assert result.records[0].purchase_number == "32600000001"
+    assert result.records[0].xml_sha256 == hashlib.sha256(padded).hexdigest()
+
+
+def test_notice_xml_new_bound_and_entity_guard_still_fail_closed():
+    oversized = xml() + b" " * (12 * 1024**2)
+    with pytest.raises(ValueError, match="XML_REJECTED"):
+        parse_notice223_xml(oversized, source_member="over.xml")
+    with pytest.raises(ValueError, match="XML_REJECTED"):
+        parse_notice223_xml(
+            b'<!DOCTYPE x [<!ENTITY x "unsafe">]>' + xml(), source_member="entity.xml"
+        )
+
+
+def test_large_notice_does_not_expand_shared_event_xml_policy():
+    from procurement.sources import eis_223_events, eis_223_lot_events
+
+    assert eis_223_events.MAX_XML_BYTES == eis_223_lot_events.MAX_XML_BYTES == 4 * 1024**2
+
+
+@pytest.mark.parametrize("count,accepted", [(5874, True), (6000, True), (6001, False)])
+def test_notice_position_bound_preserves_every_item_provenance(count, accepted):
+    import re
+
+    raw = xml()
+    item = re.search(rb"<t:lotItem>.*?</t:lotItem>", raw, re.S).group()
+    raw = raw.replace(item, item * count)
+    if not accepted:
+        with pytest.raises(ValueError, match="NOTICE_COLLECTION_LIMIT"):
+            parse_notice223_xml(raw, source_member="positions.xml")
+        return
+    result = parse_notice223_xml(raw, source_member="positions.xml")
+    assert len(result.lots[0].items) == count
+    assert f"t:lotItem[{count}]" in result.lots[0].items[-1].description.provenance.locator

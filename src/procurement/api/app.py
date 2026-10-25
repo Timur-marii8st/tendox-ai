@@ -40,6 +40,8 @@ from pydantic import (
 from sqlalchemy.exc import SQLAlchemyError
 
 from procurement.access import AccessRole
+from procurement.api.company_profile import company_profile_router
+from procurement.api.comparison import comparison_router
 from procurement.api.contracts import (
     AiRequirementReviewConflict,
     AiRequirementReviewDetail,
@@ -2014,6 +2016,7 @@ def create_app(
     ocr_runner: OcrRunner | None = None,
     eis_index_storage: PostgresStorage | None = None,
     eis_number_token: str | None = None,
+    profile_storage: PostgresStorage | None = None,
 ) -> FastAPI:
     """Create an app without database globals or caller-selected tenant identity."""
 
@@ -2051,6 +2054,13 @@ def create_app(
             raise _invalid_credentials()
         return principal
 
+    from procurement.api.public_unit_price import public_unit_price_router
+
+    app.include_router(public_unit_price_router(eis_index_storage, current_principal))
+    from procurement.api.tender_navigation import tender_navigation_router
+
+    app.include_router(tender_navigation_router(eis_index_storage, current_principal))
+
     async def document_review_principal(
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     ) -> Principal:
@@ -2064,6 +2074,12 @@ def create_app(
                 detail=error.detail,
                 headers=headers,
             ) from error
+
+    from procurement.api.beta_procurement import beta_procurement_router
+
+    app.include_router(beta_procurement_router(profile_storage, document_review_principal))
+    app.include_router(company_profile_router(profile_storage, document_review_principal))
+    app.include_router(comparison_router(profile_storage, document_review_principal))
 
     async def discovery_reader(
         response: Response,
@@ -2443,6 +2459,7 @@ def create_app(
             allowed = conflicts | {
                 "NOTICE_VARIANT_REVIEW_REQUIRED",
                 "ATTACHMENT_FILENAME_REQUIRES_REVIEW",
+                "ATTACHMENT_REFERENCE_REQUIRES_REVIEW",
                 "REVIEW_DOCUMENT_FORMAT_UNSUPPORTED",
                 "REVIEW_DOCUMENT_BYTES_LIMIT",
                 "DOCUMENT_BYTES_NOT_VERIFIABLE",
@@ -2527,6 +2544,7 @@ def create_app(
             allowed = conflicts | {
                 "NOTICE_VARIANT_REVIEW_REQUIRED",
                 "ATTACHMENT_FILENAME_REQUIRES_REVIEW",
+                "ATTACHMENT_REFERENCE_REQUIRES_REVIEW",
                 "REVIEW_DOCUMENT_FORMAT_UNSUPPORTED",
                 "REVIEW_DOCUMENT_BYTES_LIMIT",
                 "REVIEW_ATTACHMENT_MANIFEST_LIMIT",

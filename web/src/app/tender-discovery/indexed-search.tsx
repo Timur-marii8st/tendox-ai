@@ -7,7 +7,7 @@ import { searchIndexed, type IndexedSearchState } from "./actions";
 import { IndexedDocuments } from "./indexed-documents";
 import { HistoricalProtocols } from "./historical-protocols";
 import { HistoricalAnalogs } from "./historical-analogs";
-import { AddToMixedComparison, useMixedBasket } from "./mixed-comparison";
+import { AddToMixedComparison } from "./mixed-comparison";
 import { IndexedComparison } from "./indexed-comparison";
 import { prepareTopIndexedDocuments, loadEisRefresh } from "./actions";
 import { ResultExplorer, ResultRow } from "./result-explorer";
@@ -15,11 +15,10 @@ import { PagedResults } from "./paged-results";
 import { loadIndexedSearchPage } from "./actions";
 
 export function IndexedSearch() {
-  const basket = useMixedBasket();
   const [state, action, pending] = useActionState(searchIndexed, {} as IndexedSearchState);
   const [query, setQuery] = useState("");
   const [regions, setRegions] = useState("50,77,78");
-  const [refreshRequested, setRefreshRequested] = useState(true);
+  const [refreshRequested, setRefreshRequested] = useState(false);
   const [includeHistory, setIncludeHistory] = useState(false);
   const [selection, setSelection] = useState<DocumentSelectionResult>();
   const [selectionError, setSelectionError] = useState<string>();
@@ -34,9 +33,9 @@ export function IndexedSearch() {
       Сравниваются последние версии карточек из уже загруженных окон ЕИС.
       Выгода остаётся неизвестной без закупочных цен и полного КП.
     </p>
-    <form action={action} onSubmit={() => basket?.clearLaw("44")} onReset={(event) => event.preventDefault()} className="mt-4 flex flex-wrap gap-3">
-      <label className="min-w-64 flex-1 text-sm font-bold">Что вы поставляете
-        <input name="query" required maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Офисная бумага или серверное оборудование"
+    <form action={action} onReset={(event) => event.preventDefault()} className="mt-4 flex flex-wrap gap-3">
+      <label className="min-w-64 flex-1 text-sm font-bold">Товар или полный регистрационный номер 44-ФЗ
+        <input name="query" required maxLength={120} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Товар или полный регистрационный номер"
           className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-normal" disabled={pending} />
       </label>
       <label className="text-sm font-bold">Регионы публикации для обновления

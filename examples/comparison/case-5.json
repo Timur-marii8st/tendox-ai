@@ -1,0 +1,203 @@
+{
+  "case_snapshot": {
+    "case_id": "comparison-case-5",
+    "version": 1,
+    "company_id": "demo-company",
+    "channel": "standard",
+    "profile": {
+      "company_id": "demo-company",
+      "version": 1,
+      "identity": {
+        "name": "Синтетическая демо-компания — не реальный участник",
+        "inn": "0000000000",
+        "kpp": "000000000",
+        "ogrn": "0000000000000",
+        "legal_form": "Синтетическое ООО"
+      },
+      "okved": [],
+      "business_description": "Синтетическая поставка офисной бумаги",
+      "supplied_goods": [
+        "Офисная бумага А4, 500 листов"
+      ],
+      "performed_works": [],
+      "provided_services": [],
+      "geography": {
+        "all_russia": false,
+        "federal_districts": [],
+        "regions": [
+          "Татарстан"
+        ],
+        "cities": [],
+        "max_distance_km": null
+      },
+      "finance": {
+        "min_contract_amount": "500000",
+        "max_contract_amount": "10000000",
+        "min_margin": "0.15",
+        "min_expected_profit": "150000",
+        "max_contract_without_extra_approval": "5000000",
+        "max_application_security": "300000",
+        "max_performance_security": "1000000",
+        "price_floor_margin": "0.10"
+      },
+      "enabled_platforms": [
+        "synthetic-platform"
+      ],
+      "subcontracting_allowed": false,
+      "allowed_procedure_methods": [
+        "electronic_auction"
+      ],
+      "prohibitions": []
+    },
+    "tender": {
+      "tender_id": "comparison-tender-5",
+      "customer_name": "Синтетический заказчик",
+      "subject": "ДЕМО: обязательное требование нарушено, только НМЦК",
+      "law": "44-fz",
+      "method": "electronic_auction",
+      "stage": "submission_open",
+      "submission": {
+        "closes_at": "2026-11-15T12:00:00+03:00",
+        "timezone": "Europe/Moscow",
+        "provenance": {
+          "document_id": "SYNTHETIC-comparison-case-5-evidence",
+          "locator": "synthetic scenario specification",
+          "extractor": "manual",
+          "confidence": 1.0
+        }
+      },
+      "delivery": {
+        "addresses": [
+          {
+            "region": "Татарстан",
+            "city": "Казань",
+            "address": "Синтетический адрес доставки",
+            "unloading_required": false,
+            "lifting_required": false,
+            "installation_required": false,
+            "packaging_removal_required": false,
+            "provenance": {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          }
+        ]
+      },
+      "notice_provenance": {
+        "document_id": "SYNTHETIC-comparison-case-5-evidence",
+        "locator": "synthetic scenario specification",
+        "extractor": "manual",
+        "confidence": 1.0
+      }
+    },
+    "nmck_ex_vat": "1500000",
+    "nmck_source": {
+      "document_id": "SYNTHETIC-comparison-case-5-evidence",
+      "locator": "synthetic scenario specification",
+      "extractor": "manual",
+      "confidence": 1.0
+    },
+    "selected_quote": null,
+    "scenarios": null,
+    "assessment": {
+      "reviewer_id": "synthetic-reviewer",
+      "assessed_at": "2026-10-13T10:00:00+03:00",
+      "input_digest": "3af0a3d29fa14c12f7d6db55e862bbfa1f163d365efa5e3e22955d9a64748328",
+      "checks": [
+        {
+          "kind": "legal",
+          "status": "PASS",
+          "reason": "Синтетическая проверка legal для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "legal",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "participant",
+          "status": "PASS",
+          "reason": "Синтетическая проверка participant для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "participant",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "technical",
+          "status": "FAIL",
+          "reason": "Синтетическая ручная проверка: обязательная белизна не соответствует ТЗ",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "technical",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "company_policy",
+          "status": "PASS",
+          "reason": "Синтетическая проверка company_policy для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "company_policy",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "logistics",
+          "status": "PASS",
+          "reason": "Синтетическая проверка logistics для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "logistics",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "document",
+          "status": "PASS",
+          "reason": "Синтетическая проверка document для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "document",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    },
+    "rating": {
+      "score": 85,
+      "factors": [
+        {
+          "name": "demo",
+          "points": 85,
+          "explanation": "Синтетический рейтинг",
+          "change_hint": null
+        }
+      ]
+    }
+  },
+  "economics_input_sha256": null,
+  "economics_sources": []
+}

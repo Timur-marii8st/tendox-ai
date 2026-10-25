@@ -169,11 +169,6 @@ def _audited_projection_decisions(
         (func.jsonb_typeof(a.c.basis["decisions"]) == "array", a.c.basis["decisions"]),
         else_=cast(literal("[]", type_=Text), JSONB),
     )
-    member = (
-        func.jsonb_array_elements(safe_array)
-        .table_valued(column("value", JSONB))
-        .lateral("audited_member")
-    )
     scope_predicates = []
     if _pairs is not None:
         d = eis_notice_projection_decisions.alias("scoped_audit_decision")
@@ -191,18 +186,13 @@ def _audited_projection_decisions(
                 )
             ).correlate(b)
         )
-    return (
-        select(
-            b.c.company_id,
-            b.c.batch_id,
-            member.c.value["purchase_number"].astext.label("purchase_number"),
-            member.c.value["version_number"].astext.label("version_number"),
-            member.c.value.label("decision"),
-        )
+    # Keep the complete authenticated audit binding, then expand its array.
+    # A WHERE predicate around a lateral JSON function is not an execution
+    # boundary: PostgreSQL can expand unrelated tenant audit rows first.
+    bindings = (
+        select(b.c.company_id, b.c.batch_id, a.c.basis.label("audit_basis"))
         .select_from(
-            b.join(
-                a, (a.c.company_id == b.c.company_id) & (a.c.event_id == b.c.audit_event_id)
-            ).join(member, true())
+            b.join(a, (a.c.company_id == b.c.company_id) & (a.c.event_id == b.c.audit_event_id))
         )
         .where(
             b.c.company_id == tenant,
@@ -215,6 +205,30 @@ def _audited_projection_decisions(
             func.jsonb_array_length(safe_array) == b.c.pair_count,
             *scope_predicates,
         )
+        .cte("audited_batch_bindings")
+        .prefix_with("MATERIALIZED")
+    )
+    bound_array = case(
+        (
+            func.jsonb_typeof(bindings.c.audit_basis["decisions"]) == "array",
+            bindings.c.audit_basis["decisions"],
+        ),
+        else_=cast(literal("[]", type_=Text), JSONB),
+    )
+    member = (
+        func.jsonb_array_elements(bound_array)
+        .table_valued(column("value", JSONB))
+        .lateral("audited_member")
+    )
+    return (
+        select(
+            bindings.c.company_id,
+            bindings.c.batch_id,
+            member.c.value["purchase_number"].astext.label("purchase_number"),
+            member.c.value["version_number"].astext.label("version_number"),
+            member.c.value.label("decision"),
+        )
+        .select_from(bindings.join(member, true()))
         .cte("audited_projection_decisions")
         .prefix_with("MATERIALIZED")
     )

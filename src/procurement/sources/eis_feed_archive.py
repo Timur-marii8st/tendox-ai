@@ -9,11 +9,11 @@ from __future__ import annotations
 import hashlib
 import re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import parse_qs, urlsplit
 from zipfile import BadZipFile, ZipFile
 
@@ -22,7 +22,7 @@ from pydantic import Field
 _EXPORT_NS = "http://zakupki.gov.ru/oos/export/1"
 _NUMBER = re.compile(r"^[0-9]{19,23}$")
 _MAX_ZIP_BYTES = 50 * 1024 * 1024
-_MAX_XML_BYTES = 32 * 1024 * 1024
+_MAX_XML_BYTES = 64 * 1024 * 1024
 _MAX_MEMBERS = 1000
 _MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
 _FILE_UID = re.compile(r"^[0-9A-F]{32}$")
@@ -53,6 +53,13 @@ class EisFeedArchiveError(ValueError):
 
 
 @dataclass(frozen=True)
+class EisAttachmentAlias:
+    filename: str
+    kind_code: str | None
+    locator: str
+
+
+@dataclass(frozen=True)
 class EisOfficialAttachment:
     content_uid: str
     filename: str
@@ -60,6 +67,19 @@ class EisOfficialAttachment:
     url: str
     kind_code: str | None
     locator: str
+    aliases: tuple[EisAttachmentAlias, ...] = ()
+
+    @property
+    def reference_status(self) -> Literal["PASS", "UNKNOWN"]:
+        """Совпадение URL/размера не разрешает неоднозначное имя или назначение."""
+        return (
+            "UNKNOWN"
+            if any(
+                (alias.filename, alias.kind_code) != (self.filename, self.kind_code)
+                for alias in self.aliases
+            )
+            else "PASS"
+        )
 
 
 @dataclass(frozen=True)
@@ -334,7 +354,7 @@ def _attachments(notice: ET.Element) -> tuple[EisOfficialAttachment, ...]:
     if len(attachments) > _MAX_ATTACHMENT_METADATA_ENTRIES:
         raise EisFeedArchiveError("ATTACHMENT_METADATA_COUNT_LIMIT")
     result: list[EisOfficialAttachment] = []
-    seen: set[str] = set()
+    seen: dict[str, int] = {}
     for ordinal, element in enumerate(attachments, 1):
         uid = _value(element, "publishedContentId")
         filename = _value(element, "fileName")
@@ -346,21 +366,27 @@ def _attachments(notice: ET.Element) -> tuple[EisOfficialAttachment, ...]:
             or int(raw_size) < 0
             or _attachment_filename_invalid(filename)
             or not _official_url(url, uid)
-            or uid in seen
         ):
             raise EisFeedArchiveError("ATTACHMENT_REFERENCE_INVALID")
-        seen.add(uid)
         kind = _optional_child(element, "docKindInfo")
-        result.append(
-            EisOfficialAttachment(
-                content_uid=uid,
-                filename=filename,
-                byte_count=int(raw_size),
-                url=url,
-                kind_code=_optional_value(kind, "code") if kind is not None else None,
-                locator=f"{_name(notice)}/attachmentsInfo/attachmentInfo[{ordinal}]",
-            )
+        attachment = EisOfficialAttachment(
+            content_uid=uid,
+            filename=filename,
+            byte_count=int(raw_size),
+            url=url,
+            kind_code=_optional_value(kind, "code") if kind is not None else None,
+            locator=f"{_name(notice)}/attachmentsInfo/attachmentInfo[{ordinal}]",
         )
+        if uid in seen:
+            index = seen[uid]
+            previous = result[index]
+            if (previous.url, previous.byte_count) != (attachment.url, attachment.byte_count):
+                raise EisFeedArchiveError("ATTACHMENT_REFERENCE_INVALID")
+            alias = EisAttachmentAlias(filename, attachment.kind_code, attachment.locator)
+            result[index] = replace(previous, aliases=(*previous.aliases, alias))
+        else:
+            seen[uid] = len(result)
+            result.append(attachment)
     return tuple(result)
 
 

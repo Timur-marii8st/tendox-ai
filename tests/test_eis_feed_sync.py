@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections import deque
 from datetime import date
 from io import BytesIO
+from itertools import pairwise
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from xml.etree import ElementTree as ET
@@ -24,6 +26,86 @@ from procurement.sources.eis_feed_sync import (
     sync_eis_window,
 )
 from procurement.storage.eis_notice_index import EisIngestReport, preflight_ready_window
+
+
+@pytest.mark.parametrize("configured,expected", [(None, 2.0), ("2", 2.0), ("1.25", 1.25)])
+def test_browser_pacing_covers_posts_downloads_and_session_restarts(
+    monkeypatch, configured, expected
+):
+    from procurement.sources import eis_feed_sync as module
+
+    if configured is None:
+        monkeypatch.delenv("EIS_BROWSER_REQUEST_GAP_SECONDS", raising=False)
+    else:
+        monkeypatch.setenv("EIS_BROWSER_REQUEST_GAP_SECONDS", configured)
+    clock = 0.0
+    starts = []
+    requests = []
+
+    async def sleep(seconds):
+        nonlocal clock
+        assert seconds == expected
+        clock += seconds
+
+    async def evaluate(script, argument):
+        starts.append(clock)
+        requests.append(argument)
+        return 200
+
+    class Pending:
+        async def __aenter__(self):
+            self.value = asyncio.get_running_loop().create_future()
+            self.value.set_result(
+                SimpleNamespace(
+                    status=200, headers={}, body=AsyncMock(return_value=b"retained-bytes")
+                )
+            )
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+    async def exercise():
+        page = Mock(
+            evaluate=AsyncMock(side_effect=evaluate),
+            expect_response=Mock(side_effect=lambda *a, **kw: Pending()),
+        )
+        for index in range(3000):
+            # Recreating the browser must not bypass the first-call delay.
+            transport = module._BrowserTransport(page)
+            if index % 3:
+                result = await transport.post(b"<unchanged-request/>")
+            else:
+                result = await transport.download(
+                    "https://int.zakupki.gov.ru/archive.zip", "private-token"
+                )
+            assert result == (200, b"retained-bytes")
+
+    monkeypatch.setattr(module.asyncio, "sleep", sleep)
+    asyncio.run(exercise())
+    assert starts[0] == expected
+    assert all(b - a == expected for a, b in pairwise(starts))
+    assert requests[0]["token"] == "private-token"
+    assert requests[1]["xml"] == "<unchanged-request/>"
+    # Closed rolling intervals deliberately count both boundary requests.
+    for period, limit in [(60, 49), (3600, 2881)]:
+        active = deque()
+        for at in starts:
+            active.append(at)
+            while active[0] < at - period:
+                active.popleft()
+            assert len(active) <= limit
+
+
+@pytest.mark.parametrize("configured", ["", "0", "1", "1.249", "nan", "inf", "-2", "2.0"])
+def test_browser_pacing_rejects_unapproved_values_before_source_io(monkeypatch, configured):
+    from procurement.sources import eis_feed_sync as module
+
+    monkeypatch.setenv("EIS_BROWSER_REQUEST_GAP_SECONDS", configured)
+    page = Mock()
+    with pytest.raises(EisSyncError, match=r"^REQUEST_PACING_INVALID$"):
+        module._BrowserTransport(page)
+    assert not page.mock_calls
 
 
 @pytest.fixture(autouse=True)

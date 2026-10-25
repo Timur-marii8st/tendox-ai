@@ -1,6 +1,7 @@
 """Freshness never equates recent polling with a complete or fresh EIS corpus."""
 
 import asyncio
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +15,30 @@ from procurement.sources.eis_feed_sync import EisHourSelection, EisHourSyncResul
 from procurement.sources.eis_freshness import EisFreshnessScope, due_target
 
 NOW = datetime(2026, 10, 1, 10, 15, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("paced", [False, True])
+def test_official_paced_transport_does_not_pay_second_window_pause(monkeypatch, paced):
+    scope = EisFreshnessScope(("50",))
+    target = scope.targets(NOW)[0]
+    journal = Mock(company_id="tenant-a", actor_id="worker")
+    monkeypatch.setattr(eis_freshness, "eligible_freshness", lambda *a, **k: (target,))
+    monkeypatch.setattr(eis_freshness, "resource_gate", lambda *a, **k: None)
+    sleep = AsyncMock()
+    monkeypatch.setattr(eis_freshness.asyncio, "sleep", sleep)
+    sync = AsyncMock(
+        return_value=EisHourSyncResult(
+            target.selection.window_key, "NO_DATA", source_response_sha256="a" * 64
+        )
+    )
+    monkeypatch.setattr(eis_freshness, "sync_eis_window", sync)
+    report = asyncio.run(
+        eis_freshness.run_freshness(
+            journal, "secret", scope, now=NOW, transport=object(), paced_transport=paced
+        )
+    )
+    assert report.no_data == 1 and journal.record.call_count == 1
+    assert sleep.await_count == (0 if paced else 1)
 
 
 @pytest.mark.parametrize("replayed", [False, True])
@@ -180,7 +205,16 @@ def test_priority_hint_expires_and_backfill_yields_before_network(
 ) -> None:
     flag = tmp_path / "priority.request"
     flag.touch()
-    now = datetime.now(UTC)
+    # File mtimes can retain sub-microsecond precision beyond datetime on Windows.
+    now = NOW
+
+    class FixedClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW.astimezone(tz) if tz is not None else NOW.replace(tzinfo=None)
+
+    monkeypatch.setattr("procurement.sources.eis_corpus.datetime", FixedClock)
+    os.utime(flag, (now.timestamp(), now.timestamp()))
     assert priority_requested(flag, now=now)
     assert not priority_requested(flag, now=now + timedelta(minutes=11))
     assert not priority_requested(None, now=now)
@@ -476,3 +510,114 @@ def test_unprocessable_metadata_window_uses_daily_local_limit_cooldown():
         outcome="FAILED",
         reason="ATTACHMENT_METADATA_COUNT_LIMIT",
     )
+
+
+@pytest.mark.parametrize("ready", [True, False])
+def test_recovery_rechecks_fresh44_before_each_source_window(monkeypatch, ready):
+    from procurement.sources.eis_feed_sync import EisDateSelection
+
+    target = eis_freshness.FreshnessTarget(
+        EisDateSelection("50", NOW.date() - timedelta(days=1), 3),
+        "RECONCILE_DAY",
+        timedelta(days=1),
+    )
+    journal = Mock(company_id="tenant-a", actor_id="worker")
+    monkeypatch.setattr(eis_freshness, "eligible_freshness", lambda *a, **k: (target, target))
+    checks = iter([(target,) if ready else (), (target,)])
+    monkeypatch.setattr(
+        "procurement.storage.eis_223_regions.regional_due_windows", lambda *a, **k: ()
+    )
+    monkeypatch.setattr(eis_freshness, "read_due_freshness", lambda *a, **k: next(checks))
+    monkeypatch.setattr(eis_freshness, "resource_gate", lambda *a, **k: None)
+    sync = AsyncMock(
+        return_value=EisHourSyncResult(
+            target.selection.window_key, "NO_DATA", source_response_sha256="a" * 64
+        )
+    )
+    monkeypatch.setattr(eis_freshness, "sync_eis_window", sync)
+    budget = Mock(can_start=lambda *a, **k: True)
+    report = asyncio.run(
+        eis_freshness.run_freshness(
+            journal,
+            "synthetic",
+            EisFreshnessScope(("50",), checkpointed=True, mandatory_only=True),
+            now=NOW,
+            transport=object(),
+            paced_transport=True,
+            joint_budget=budget,
+        )
+    )
+    assert report.reason == "FRESH_WORK_READY" and report.attempted == (0 if ready else 1)
+    assert sync.await_count == report.attempted
+
+
+def test_daily44_yields_before_source_to_newly_due223(monkeypatch):
+    from procurement.sources.eis_feed_sync import EisDateSelection
+
+    target = eis_freshness.FreshnessTarget(
+        EisDateSelection("50", NOW.date() - timedelta(days=1), 3),
+        "RECONCILE_DAY",
+        timedelta(days=1),
+    )
+    journal = Mock(company_id="tenant-a", actor_id="worker")
+    monkeypatch.setattr(eis_freshness, "eligible_freshness", lambda *a, **k: (target,))
+    monkeypatch.setattr(eis_freshness, "read_due_freshness", lambda *a, **k: ())
+    monkeypatch.setattr(
+        "procurement.storage.eis_223_regions.regional_due_windows", lambda *a, **k: (object(),)
+    )
+    monkeypatch.setattr(eis_freshness, "resource_gate", lambda *a, **k: None)
+    sync = AsyncMock(side_effect=AssertionError("223fresh must preempt recovery"))
+    monkeypatch.setattr(eis_freshness, "sync_eis_window", sync)
+    report = asyncio.run(
+        eis_freshness.run_freshness(
+            journal,
+            "synthetic",
+            EisFreshnessScope(("50",), checkpointed=True, mandatory_only=True),
+            now=NOW,
+            transport=object(),
+            paced_transport=True,
+            joint_budget=Mock(),
+        )
+    )
+    assert report.reason == "FRESH_223_WORK_READY" and report.attempted == 0
+    sync.assert_not_called()
+
+
+def test_new44_debt_during223_preparation_stops_daily_capture(monkeypatch):
+    from procurement.sources.eis_feed_sync import EisDateSelection
+
+    target = eis_freshness.FreshnessTarget(
+        EisDateSelection("50", NOW.date() - timedelta(days=1), 3),
+        "RECONCILE_DAY",
+        timedelta(days=1),
+    )
+    journal = Mock(company_id="tenant-a", actor_id="worker")
+    ready = [False]
+    monkeypatch.setattr(eis_freshness, "eligible_freshness", lambda *a, **k: (target,))
+    monkeypatch.setattr(
+        eis_freshness, "read_due_freshness", lambda *a, **k: (target,) if ready[0] else ()
+    )
+
+    def during_preparation(*a, **k):
+        ready[0] = True
+        return ()
+
+    monkeypatch.setattr(
+        "procurement.storage.eis_223_regions.regional_due_windows", during_preparation
+    )
+    monkeypatch.setattr(eis_freshness, "resource_gate", lambda *a, **k: None)
+    sync = AsyncMock(side_effect=AssertionError("Fresh44 appeared during preparation"))
+    monkeypatch.setattr(eis_freshness, "sync_eis_window", sync)
+    report = asyncio.run(
+        eis_freshness.run_freshness(
+            journal,
+            "synthetic",
+            EisFreshnessScope(("50",), checkpointed=True, mandatory_only=True),
+            now=NOW,
+            transport=object(),
+            paced_transport=True,
+            joint_budget=Mock(),
+        )
+    )
+    assert report.reason == "FRESH_WORK_READY" and report.attempted == 0
+    sync.assert_not_called()

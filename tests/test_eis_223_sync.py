@@ -163,8 +163,15 @@ def test_four_archive_source_window_downloads_and_preflights_as_one_set():
     assert len(result.window.archives) == 4 and transport.downloads == 4
 
 
-def test_five_archive_source_set_fails_before_any_download():
-    transport = MultiArchiveTransport(5)
+def test_eight_archive_source_window_downloads_as_one_complete_set():
+    transport = MultiArchiveTransport(8)
+    result = fetch(transport)
+    assert result.status == "SYNCED" and result.window is not None
+    assert len(result.window.archives) == transport.downloads == 8
+
+
+def test_nine_archive_source_set_fails_before_any_download():
+    transport = MultiArchiveTransport(9)
     with pytest.raises(ValueError, match="ARCHIVE_COUNT_LIMIT"):
         fetch(transport)
     assert transport.downloads == 0

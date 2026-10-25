@@ -6,16 +6,82 @@ import base64
 import hashlib
 import json
 import re
+from collections import OrderedDict
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from decimal import Decimal
+from itertools import chain
+from threading import Lock
+from time import monotonic
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 Rank44 = tuple[StrictBool, StrictBool, StrictBool, Decimal, StrictInt, str]
 Rank223 = tuple[StrictBool, StrictBool, StrictBool, StrictInt, str]
-Rank = Rank44 | Rank223
+GlobalRank = tuple[StrictBool, StrictBool, Decimal, str, str]
+Rank = Rank44 | Rank223 | GlobalRank
 PAGE_TTL = timedelta(minutes=15)
+
+
+class SearchComparisonMemo:
+    """Process-local disposable comparison bytes; never caches live SQL evidence."""
+
+    def __init__(self, *, max_bytes: int = 32 * 1024**2, max_entries: int = 128) -> None:
+        self.max_bytes = max_bytes
+        self.max_entries = max_entries
+        self._entries: OrderedDict[str, tuple[float, bytes]] = OrderedDict()
+        self._bytes = 0
+        self._lock = Lock()
+
+    @staticmethod
+    def key(
+        company: str,
+        law: str,
+        query: str,
+        at: datetime,
+        *inputs: bytes,
+        chunks: Iterable[bytes] = (),
+    ) -> str:
+        digest = hashlib.sha256(_canonical((company, law, query, at.isoformat())))
+        for value in chain(inputs, chunks):
+            digest.update(len(value).to_bytes(8, "big"))
+            digest.update(value)
+        return digest.hexdigest()
+
+    def get(self, key: str) -> bytes | None:
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            expires, value = entry
+            if expires <= monotonic():
+                self._bytes -= len(self._entries.pop(key)[1])
+                return None
+            self._entries.move_to_end(key)
+            return value
+
+    def put(self, key: str, value: bytes) -> None:
+        # Retained payload bytes are bounded independently of source batch size.
+        # Oversize values and eviction are misses, never truncated comparisons.
+        if len(value) > self.max_bytes:
+            return
+        with self._lock:
+            previous = self._entries.pop(key, None)
+            if previous is not None:
+                self._bytes -= len(previous[1])
+            self._entries[key] = (monotonic() + PAGE_TTL.total_seconds(), value)
+            self._bytes += len(value)
+            while self._bytes > self.max_bytes or len(self._entries) > self.max_entries:
+                self._bytes -= len(self._entries.popitem(last=False)[1][1])
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+            self._bytes = 0
+
+
+PAGE_COMPARISONS = SearchComparisonMemo()
 
 
 class SearchPageError(ValueError):
@@ -25,7 +91,7 @@ class SearchPageError(ValueError):
 class SearchCursor(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     version: Literal[1] = 1
-    law: Literal["44", "223"]
+    law: Literal["44", "223", "all"]
     context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     snapshot_at: AwareDatetime
@@ -46,7 +112,7 @@ class SearchPagination:
         self,
         *,
         company: str,
-        law: Literal["44", "223"],
+        law: Literal["44", "223", "all"],
         query: str,
         scope: str,
         now: datetime,
@@ -77,6 +143,13 @@ class SearchPagination:
                 self.cursor = SearchCursor.model_validate_json(decoded)
                 if (
                     self.cursor.law != law
+                    or (law == "223" and type(self.cursor.after[2]) is not bool)
+                    or (
+                        law == "all"
+                        and (
+                            len(self.cursor.after) != 5 or self.cursor.after[3] not in {"44", "223"}
+                        )
+                    )
                     or self.cursor.context_sha256 != self.context
                     or len(self.cursor.after) != (6 if law == "44" else 5)
                     or re.fullmatch(r"[0-9]{11,23}", self.cursor.after[-1]) is None

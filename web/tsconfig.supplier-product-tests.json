@@ -25,6 +25,7 @@
     "tests/eis-supplier-product.test.ts",
     "tests/eis-supplier-product-render.test.tsx",
     "src/lib/eis-supplier-product.ts",
-    "src/app/tender-discovery/supplier-product-report.tsx"
+    "src/app/tender-discovery/supplier-product-report.tsx",
+    "tests/public-unit-price.test.tsx"
   ]
 }

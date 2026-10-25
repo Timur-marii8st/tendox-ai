@@ -11,7 +11,11 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from procurement.sources.eis_search_capture import canonical_bytes, verify_capture_package
+from procurement.sources.eis_search_capture import (
+    canonical_bytes,
+    load_sqlite_runtime_identity,
+    verify_capture_package,
+)
 from procurement.storage.eis_search_capture import build_storage, capture_search_projection
 
 
@@ -23,12 +27,15 @@ def _parser() -> argparse.ArgumentParser:
     capture.add_argument("--output", type=Path, required=True)
     capture.add_argument("--capture-id", required=True)
     capture.add_argument("--runtime-identity", type=Path, required=True)
+    capture.add_argument("--sqlite-runtime-identity", type=Path)
     capture.add_argument("--database-url-env", default="DATABASE_URL")
     verify = subcommands.add_parser("verify")
     verify.add_argument("--plan", type=Path, required=True)
     verify.add_argument("--package", type=Path, required=True)
     verify.add_argument("--report", type=Path, required=True)
     verify.add_argument("--expected-manifest-sha256")
+    verify.add_argument("--sqlite-runtime-identity", type=Path)
+    verify.add_argument("--scratch-database", type=Path)
     return parser
 
 
@@ -70,6 +77,11 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             capture_id=args.capture_id,
             external_runtime=_read_runtime(args.runtime_identity),
+            expected_sqlite_runtime=(
+                load_sqlite_runtime_identity(args.sqlite_runtime_identity)
+                if args.sqlite_runtime_identity is not None
+                else None
+            ),
         )
         status = capture_result.status
         output = args.output
@@ -78,6 +90,12 @@ def main(argv: list[str] | None = None) -> int:
             args.package,
             args.plan,
             expected_manifest_sha256=args.expected_manifest_sha256,
+            scratch_database=args.scratch_database,
+            expected_sqlite_runtime=(
+                load_sqlite_runtime_identity(args.sqlite_runtime_identity)
+                if args.sqlite_runtime_identity is not None
+                else None
+            ),
         )
         _write_report(args.report, verification_result)
         status = verification_result.status

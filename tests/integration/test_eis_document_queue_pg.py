@@ -133,6 +133,7 @@ def admit(
     competition: bool = False,
     price_weight: str = "60",
     qualification_weight: str = "40",
+    ambiguous_attachment: bool = False,
 ) -> NoticeDocumentRef:
     attachments = (
         f"""<attachmentsInfo><attachmentInfo><publishedContentId>{UID}</publishedContentId>
@@ -141,6 +142,11 @@ def admit(
         if listed
         else ""
     )
+    if ambiguous_attachment:
+        entry = attachments.removeprefix("<attachmentsInfo>").removesuffix("</attachmentsInfo>")
+        attachments = attachments.replace(
+            "</attachmentsInfo>", entry.replace(filename, "other.pdf") + "</attachmentsInfo>"
+        )
     xml = f"""<export xmlns="http://zakupki.gov.ru/oos/export/1"><epNotificationEF2020>
 <versionNumber>{version}</versionNumber><commonInfo><purchaseNumber>{number}</purchaseNumber>
 <purchaseObjectInfo>Поставка бумаги</purchaseObjectInfo></commonInfo>{attachments}
@@ -987,3 +993,38 @@ def test_competition_criteria_read_exact_archive_tenant_versions_without_mutatio
     assert get_eis_evidence_bridge(storage, company, current).competition_criteria.criteria[
         0
     ].weights[0].value_percent == Decimal(50)
+
+
+def test_ambiguous_reference_blocks_intake_analysis_and_probe(storage):
+    company = f"ambiguous-reference-{uuid.uuid4()}"
+    content = docx_bytes()
+    ref = admit(storage, company, len(content), ambiguous_attachment=True)
+    plan_document_job(storage, company, ref, actor_id="test")
+    report = get_document_status(storage, company, ref)
+    assert report.documents[0].reference_status == "UNKNOWN"
+    assert len(report.documents[0].aliases) == 1
+    assert report.documents[0].reasons == ("ATTACHMENT_REFERENCE_REQUIRES_REVIEW",)
+    with pytest.raises(ValueError, match="ATTACHMENT_REFERENCE_REQUIRES_REVIEW"):
+        record_document_outcome(storage, company, ref, UID, actor_id="test", content=content)
+
+    def forbidden(*args):
+        raise AssertionError("ambiguous source must not be downloaded")
+
+    for probe in (True, False):
+        result = run_document_step(
+            storage,
+            company,
+            actor_id="test",
+            downloader=forbidden,
+            min_free_bytes=1,
+            probe_only=probe,
+        )
+        assert result == {
+            "status": "BLOCKED",
+            "reason": "ATTACHMENT_REFERENCE_REQUIRES_REVIEW",
+            "attempted": 0,
+        }
+    with storage.transaction(company) as conn:
+        assert conn.scalar(select(func.count()).select_from(eis_document_blobs)) == 0
+        assert conn.scalar(select(func.count()).select_from(eis_document_analyses)) == 0
+    assert get_document_status(storage, company, ref).extraction_status == "UNKNOWN"

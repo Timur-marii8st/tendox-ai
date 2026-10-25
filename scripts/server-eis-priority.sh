@@ -42,12 +42,13 @@ if ! flock -n 8; then
   exit 75
 fi
 cd /home/syurai/vibe-seller
-regions=${EIS_FRESHNESS_REGIONS:-50,77,78}
+regions=${EIS_FRESHNESS_REGIONS:-official}
+urgent=1
 # Custom CLI scope/budgets and --smoke bypass the default-scope probe. The
 # worker still validates them under the import lock; never infer a false IDLE.
 if [[ $# == 0 ]]; then
   probe=$(sudo -n docker exec vibe-seller-api-1 python -m procurement.eis_freshness_dispatch_cli \
-    --company-id local-eis-supplier --regions "$regions") || { printf '%s\n' "$probe"; exit 69; }
+    --company-id local-eis-supplier --regions "$regions" --checkpointed --mandatory-only) || { printf '%s\n' "$probe"; exit 69; }
   status=$(printf '%s' "$probe" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
   if [[ "$status" != READY ]]; then
     case "$status" in
@@ -58,6 +59,8 @@ if [[ $# == 0 ]]; then
     printf '%s\n' "$probe"
     exit 0
   fi
+  # Older READY probes retain their original priority-marker contract.
+  urgent=$(printf '%s' "$probe" | python3 -c 'import json,sys; print(int(json.load(sys.stdin).get("urgent_due", 1) > 0))')
 fi
 proxy_health=$(sudo -n docker inspect -f '{{.State.Health.Status}}' vibe-seller-eis-proxy-1)
 if [[ "$proxy_health" != healthy ]]; then
@@ -66,9 +69,11 @@ if [[ "$proxy_health" != healthy ]]; then
 fi
 trap 'eis_metrics_signal=INT; eis_metrics_result=INTERRUPTED; exit 130' INT
 trap 'eis_metrics_signal=TERM; eis_metrics_result=INTERRUPTED; exit 143' TERM
-marker_owned=1
-sudo -n docker exec vibe-seller-api-1 python -c \
-  'from pathlib import Path; Path("/var/lib/eis-browser/eis-priority.request").touch()'
+if [[ "$urgent" == 1 ]]; then
+  marker_owned=1
+  sudo -n docker exec vibe-seller-api-1 python -c \
+    'from pathlib import Path; Path("/var/lib/eis-browser/eis-priority.request").touch()'
+fi
 exec 9>/home/syurai/vibe-seller-state/eis-import.lock
 eis_metric import_wait_start
 flock -w 300 9 &
@@ -92,12 +97,12 @@ if [[ ${1:-} == --smoke ]]; then
   eis_metrics_work_active=0
   exit "$worker_exit"
 fi
-# S137: 24-window live pass in 188s; steady capacity still needs daytime measurement.
+# Shared turns: twelve bounded180s44 turns plus six180s223 turns each hour.
 eis_metric work_start
 eis_metrics_work_active=1
-if sudo -n docker compose -p vibe-seller -f docker-compose.server.yml run --rm -T --no-deps worker \
+if sudo -n docker compose -p vibe-seller -f docker-compose.server.yml run --rm -T --no-deps -e EIS_JOINT_BUDGET_ENABLED=1 worker \
   python -m procurement.eis_corpus_cli fresh --regions "$regions" \
-  --max-windows 24 --max-seconds 240 --max-database-gib 100 --min-free-gib 40 \
+  --checkpointed --mandatory-only --max-windows 60 --max-seconds 180 --max-database-gib 100 --min-free-gib 40 \
   --company-id local-eis-supplier --actor-id server-freshness-worker "$@"; then worker_exit=0; else worker_exit=$?; fi
 if [[ "$worker_exit" == 0 ]]; then work_result=SUCCESS; else work_result=ERROR; fi
 eis_metric work_finish "$work_result" "$worker_exit"

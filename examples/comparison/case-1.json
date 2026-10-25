@@ -1,0 +1,387 @@
+{
+  "case_snapshot": {
+    "case_id": "comparison-case-1",
+    "version": 1,
+    "company_id": "demo-company",
+    "channel": "standard",
+    "profile": {
+      "company_id": "demo-company",
+      "version": 1,
+      "identity": {
+        "name": "Синтетическая демо-компания — не реальный участник",
+        "inn": "0000000000",
+        "kpp": "000000000",
+        "ogrn": "0000000000000",
+        "legal_form": "Синтетическое ООО"
+      },
+      "okved": [],
+      "business_description": "Синтетическая поставка офисной бумаги",
+      "supplied_goods": [
+        "Офисная бумага А4, 500 листов"
+      ],
+      "performed_works": [],
+      "provided_services": [],
+      "geography": {
+        "all_russia": false,
+        "federal_districts": [],
+        "regions": [
+          "Татарстан"
+        ],
+        "cities": [],
+        "max_distance_km": null
+      },
+      "finance": {
+        "min_contract_amount": "500000",
+        "max_contract_amount": "10000000",
+        "min_margin": "0.15",
+        "min_expected_profit": "150000",
+        "max_contract_without_extra_approval": "5000000",
+        "max_application_security": "300000",
+        "max_performance_security": "1000000",
+        "price_floor_margin": "0.10"
+      },
+      "enabled_platforms": [
+        "synthetic-platform"
+      ],
+      "subcontracting_allowed": false,
+      "allowed_procedure_methods": [
+        "electronic_auction"
+      ],
+      "prohibitions": []
+    },
+    "tender": {
+      "tender_id": "comparison-tender-1",
+      "customer_name": "Синтетический заказчик",
+      "subject": "ДЕМО: бумага в Казань — полные сценарии",
+      "law": "44-fz",
+      "method": "electronic_auction",
+      "stage": "submission_open",
+      "submission": {
+        "closes_at": "2026-11-15T12:00:00+03:00",
+        "timezone": "Europe/Moscow",
+        "provenance": {
+          "document_id": "SYNTHETIC-comparison-case-1-evidence",
+          "locator": "synthetic scenario specification",
+          "extractor": "manual",
+          "confidence": 1.0
+        }
+      },
+      "delivery": {
+        "addresses": [
+          {
+            "region": "Татарстан",
+            "city": "Казань",
+            "address": "Синтетический адрес доставки",
+            "unloading_required": false,
+            "lifting_required": false,
+            "installation_required": false,
+            "packaging_removal_required": false,
+            "provenance": {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          }
+        ]
+      },
+      "notice_provenance": {
+        "document_id": "SYNTHETIC-comparison-case-1-evidence",
+        "locator": "synthetic scenario specification",
+        "extractor": "manual",
+        "confidence": 1.0
+      }
+    },
+    "nmck_ex_vat": "1500000",
+    "nmck_source": {
+      "document_id": "SYNTHETIC-comparison-case-1-evidence",
+      "locator": "synthetic scenario specification",
+      "extractor": "manual",
+      "confidence": 1.0
+    },
+    "selected_quote": {
+      "quote_id": "synthetic-quote-001",
+      "version": 1,
+      "company_id": "demo-company",
+      "tender_id": "comparison-tender-1",
+      "supplier_id": "synthetic-supplier",
+      "amount_ex_vat": "900000",
+      "nds_rate": "0",
+      "currency": "RUB",
+      "issued_at": "2026-10-12T09:00:00+03:00",
+      "valid_until": "2026-11-10T18:00:00+03:00",
+      "source": {
+        "document_id": "SYNTHETIC-comparison-case-1-evidence",
+        "locator": "synthetic scenario specification",
+        "extractor": "manual",
+        "confidence": 1.0
+      },
+      "covers_full_scope": true,
+      "availability_terms": "ДЕМО: весь комплект в наличии",
+      "delivery_terms": "ДЕМО: перевозка оплачивается отдельно, 70000 рублей",
+      "payment_terms": "ДЕМО: 100% предоплата поставщику"
+    },
+    "scenarios": {
+      "scenarios": [
+        {
+          "kind": "base",
+          "economics": {
+            "contract_revenue": "1500000",
+            "costs": {
+              "goods": "900000",
+              "packaging": "0",
+              "logistics": "70000",
+              "loading_unloading": "0",
+              "storage": "0",
+              "installation": "0",
+              "payroll_travel": "0",
+              "subcontracting": "0",
+              "insurance": "0",
+              "finance": "25000",
+              "bank_guarantee": "0",
+              "platform_fees": "0",
+              "taxes": "50000",
+              "certification": "0",
+              "warranty": "0",
+              "risk_reserve": "20000",
+              "penalty_reserve": "0",
+              "other": "0",
+              "specified_cost_fields": [
+                "goods",
+                "packaging",
+                "logistics",
+                "loading_unloading",
+                "storage",
+                "installation",
+                "payroll_travel",
+                "subcontracting",
+                "insurance",
+                "finance",
+                "bank_guarantee",
+                "platform_fees",
+                "taxes",
+                "certification",
+                "warranty",
+                "risk_reserve",
+                "penalty_reserve",
+                "other"
+              ]
+            },
+            "nds_rate": "0"
+          },
+          "assumptions": [
+            "Все суммы и нули заданы только для синтетического примера",
+            "Расходы введены вручную; ставка не является налоговой рекомендацией"
+          ]
+        },
+        {
+          "kind": "realistic",
+          "economics": {
+            "contract_revenue": "1450000",
+            "costs": {
+              "goods": "900000",
+              "packaging": "0",
+              "logistics": "70000",
+              "loading_unloading": "0",
+              "storage": "0",
+              "installation": "0",
+              "payroll_travel": "0",
+              "subcontracting": "0",
+              "insurance": "0",
+              "finance": "25000",
+              "bank_guarantee": "0",
+              "platform_fees": "0",
+              "taxes": "50000",
+              "certification": "0",
+              "warranty": "0",
+              "risk_reserve": "40000",
+              "penalty_reserve": "0",
+              "other": "0",
+              "specified_cost_fields": [
+                "goods",
+                "packaging",
+                "logistics",
+                "loading_unloading",
+                "storage",
+                "installation",
+                "payroll_travel",
+                "subcontracting",
+                "insurance",
+                "finance",
+                "bank_guarantee",
+                "platform_fees",
+                "taxes",
+                "certification",
+                "warranty",
+                "risk_reserve",
+                "penalty_reserve",
+                "other"
+              ]
+            },
+            "nds_rate": "0"
+          },
+          "assumptions": [
+            "Все суммы и нули заданы только для синтетического примера",
+            "Расходы введены вручную; ставка не является налоговой рекомендацией"
+          ]
+        },
+        {
+          "kind": "conservative",
+          "economics": {
+            "contract_revenue": "1350000",
+            "costs": {
+              "goods": "900000",
+              "packaging": "0",
+              "logistics": "70000",
+              "loading_unloading": "0",
+              "storage": "0",
+              "installation": "0",
+              "payroll_travel": "0",
+              "subcontracting": "0",
+              "insurance": "0",
+              "finance": "25000",
+              "bank_guarantee": "0",
+              "platform_fees": "0",
+              "taxes": "50000",
+              "certification": "0",
+              "warranty": "0",
+              "risk_reserve": "70000",
+              "penalty_reserve": "0",
+              "other": "0",
+              "specified_cost_fields": [
+                "goods",
+                "packaging",
+                "logistics",
+                "loading_unloading",
+                "storage",
+                "installation",
+                "payroll_travel",
+                "subcontracting",
+                "insurance",
+                "finance",
+                "bank_guarantee",
+                "platform_fees",
+                "taxes",
+                "certification",
+                "warranty",
+                "risk_reserve",
+                "penalty_reserve",
+                "other"
+              ]
+            },
+            "nds_rate": "0"
+          },
+          "assumptions": [
+            "Все суммы и нули заданы только для синтетического примера",
+            "Расходы введены вручную; ставка не является налоговой рекомендацией"
+          ]
+        }
+      ]
+    },
+    "assessment": {
+      "reviewer_id": "synthetic-reviewer",
+      "assessed_at": "2026-10-13T10:00:00+03:00",
+      "input_digest": "ea5fbac177b28b2184ab8162ab24fb5ec7926ba6f21f8a4d75ab0c16c10cfb6c",
+      "checks": [
+        {
+          "kind": "legal",
+          "status": "PASS",
+          "reason": "Синтетическая проверка legal для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "legal",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "participant",
+          "status": "PASS",
+          "reason": "Синтетическая проверка participant для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "participant",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "technical",
+          "status": "PASS",
+          "reason": "Синтетическая проверка technical для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "technical",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "company_policy",
+          "status": "PASS",
+          "reason": "Синтетическая проверка company_policy для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "company_policy",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "logistics",
+          "status": "PASS",
+          "reason": "Синтетическая проверка logistics для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "logistics",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "document",
+          "status": "PASS",
+          "reason": "Синтетическая проверка document для точного исходного кейса",
+          "evidence": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "document",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    },
+    "rating": {
+      "score": 85,
+      "factors": [
+        {
+          "name": "demo",
+          "points": 85,
+          "explanation": "Синтетический рейтинг",
+          "change_hint": null
+        }
+      ]
+    }
+  },
+  "economics_input_sha256": "ea5fbac177b28b2184ab8162ab24fb5ec7926ba6f21f8a4d75ab0c16c10cfb6c",
+  "economics_sources": [
+    {
+      "document_id": "SYNTHETIC-confirmed-scenario-ledger-case-1",
+      "locator": "base/realistic/conservative: revenue, all 18 costs, VAT and assumptions; synthetic manual declaration",
+      "extractor": "manual",
+      "confidence": 1.0
+    }
+  ]
+}

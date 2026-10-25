@@ -1,0 +1,182 @@
+{
+  "ref": {
+    "notice": {
+      "law": "44",
+      "purchase_number": "1111111111111111111",
+      "version_number": 1,
+      "notice_xml_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "lot_index": null
+  },
+  "record_id": "synthetic-quote",
+  "input": {
+    "supplier": "Synthetic supplier",
+    "document": "offer.pdf",
+    "locator": "page 1",
+    "amount_ex_vat": "50000.00",
+    "quote_vat_rate": "0.20",
+    "issued_at": "2026-10-20T00:00:00Z",
+    "valid_until": "2026-10-31T00:00:00Z",
+    "covers_full_scope": true,
+    "availability_terms": "100 units in stock",
+    "delivery_terms": "to destination",
+    "payment_terms": "postpay",
+    "expenses": {
+      "packaging": "0.00",
+      "logistics": "0.00",
+      "loading_unloading": "0.00",
+      "storage": "0.00",
+      "installation": "0.00",
+      "payroll_travel": "0.00",
+      "subcontracting": "0.00",
+      "insurance": "0.00",
+      "finance": "0.00",
+      "bank_guarantee": "0.00",
+      "platform_fees": "0.00",
+      "taxes": "0.00",
+      "certification": "0.00",
+      "warranty": "0.00",
+      "risk_reserve": "0.00",
+      "penalty_reserve": "0.00",
+      "other": "0.00"
+    },
+    "expense_basis": "operator expense worksheet",
+    "tax_model": "Explicit test tax model",
+    "output_vat_rate": "0.20",
+    "realistic_discount": "0.05",
+    "conservative_discount": "0.10",
+    "conservative_cost_growth": "0.10"
+  },
+  "calculation": {
+    "status": "CALCULATED",
+    "checked_at": "2026-10-21T00:00:00Z",
+    "quote": {
+      "quote_id": "quote-1",
+      "version": 1,
+      "company_id": "tenant-a",
+      "tender_id": "44:1111111111111111111:0",
+      "supplier_id": "Synthetic supplier",
+      "amount_ex_vat": "50000.00",
+      "nds_rate": "0.20",
+      "currency": "RUB",
+      "issued_at": "2026-10-20T00:00:00Z",
+      "valid_until": "2026-10-31T00:00:00Z",
+      "source": {
+        "document_id": "manual:test",
+        "locator": "/quote",
+        "extractor": "manual",
+        "confidence": 1.0
+      },
+      "covers_full_scope": true,
+      "availability_terms": "100 units in stock",
+      "delivery_terms": "to destination",
+      "payment_terms": "postpay"
+    },
+    "costs": {
+      "goods": "50000.00",
+      "packaging": "0.00",
+      "logistics": "0.00",
+      "loading_unloading": "0.00",
+      "storage": "0.00",
+      "installation": "0.00",
+      "payroll_travel": "0.00",
+      "subcontracting": "0.00",
+      "insurance": "0.00",
+      "finance": "0.00",
+      "bank_guarantee": "0.00",
+      "platform_fees": "0.00",
+      "taxes": "0.00",
+      "certification": "0.00",
+      "warranty": "0.00",
+      "risk_reserve": "0.00",
+      "penalty_reserve": "0.00",
+      "other": "0.00",
+      "specified_cost_fields": [
+        "goods",
+        "packaging",
+        "logistics",
+        "loading_unloading",
+        "storage",
+        "installation",
+        "payroll_travel",
+        "subcontracting",
+        "insurance",
+        "finance",
+        "bank_guarantee",
+        "platform_fees",
+        "taxes",
+        "certification",
+        "warranty",
+        "risk_reserve",
+        "penalty_reserve",
+        "other"
+      ]
+    },
+    "expense_source": {
+      "document_id": "manual:test",
+      "locator": "/quote",
+      "extractor": "manual",
+      "confidence": 1.0
+    },
+    "tax_model": "Explicit test tax model",
+    "scenarios": [
+      {
+        "kind": "base",
+        "revenue_net": "100000.00",
+        "costs_net": "50000.00",
+        "profit": "50000.00",
+        "margin": "0.5000",
+        "assumptions": [
+          "Опубликованная НМЦК без снижения цены.",
+          "Рост затрат не заложен."
+        ],
+        "break_even_gross": "60000.00",
+        "maximum_discount": "0.5000",
+        "basis": "КП offer.pdf; расходы: operator expense worksheet; налоги: Explicit test tax model"
+      },
+      {
+        "kind": "realistic",
+        "revenue_net": "95000.00",
+        "costs_net": "50000.00",
+        "profit": "45000.00",
+        "margin": "0.4737",
+        "assumptions": [
+          "Снижение цены: 0.05.",
+          "Рост затрат не заложен."
+        ],
+        "break_even_gross": "60000.00",
+        "maximum_discount": "0.5000",
+        "basis": "КП offer.pdf; расходы: operator expense worksheet; налоги: Explicit test tax model"
+      },
+      {
+        "kind": "conservative",
+        "revenue_net": "90000.00",
+        "costs_net": "55000.00",
+        "profit": "35000.00",
+        "margin": "0.3889",
+        "assumptions": [
+          "Снижение цены: 0.10.",
+          "Рост затрат: 0.10."
+        ],
+        "break_even_gross": "66000.00",
+        "maximum_discount": "0.4500",
+        "basis": "КП offer.pdf; расходы: operator expense worksheet; налоги: Explicit test tax model"
+      }
+    ],
+    "reasons": [
+      "Сравнение основано на опубликованной НМЦК и расходах, введённых поставщиком.",
+      "При заданных расходах консервативный сценарий не убыточен.",
+      "ТЗ, действительное полное КП, ограничения и результат торгов ещё не подтверждены."
+    ],
+    "participation": "UNKNOWN"
+  },
+  "source_reasons": [],
+  "revenue_source": {
+    "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "locator": "/source/nmck",
+    "extractor": "api",
+    "confidence": 1.0
+  },
+  "source_status": "CHECKED",
+  "declaration_kind": "USER_DECLARED_QUOTE_AND_COSTS"
+}

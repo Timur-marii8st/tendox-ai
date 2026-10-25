@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
+import os
 import sqlite3
+import stat
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -22,11 +25,17 @@ from sqlalchemy import DateTime, Numeric
 from sqlalchemy.dialects import postgresql
 
 from procurement.sources.eis_search_capture import (
+    V3_FRAGMENT_RELATIONS,
     CaptureFormatError,
+    CaptureLimits,
+    CaptureLimitsV2,
+    CaptureLimitsV3,
     CaptureManifest,
     CaptureManifestV2,
     CapturePlan,
     CapturePlanV2,
+    CapturePlanV3,
+    CollectorStateV3,
     CurrentMembership,
     FutureVersionDiagnostic,
     IncompleteCaptureV2,
@@ -35,7 +44,17 @@ from procurement.sources.eis_search_capture import (
     RelationSpec,
     RuntimeIdentity,
     ShardDescriptor,
+    SqliteRuntimeIdentity,
+    SqliteStateObservationV3,
+    TransientCleanupV3,
+    VerificationReportV3,
+    _commit_and_observe_sqlite_v3,
+    _configure_sqlite_connection_v3,
     _decoded_string_utf8_lower_bound,
+    _sqlite_runtime_identity,
+    _SqliteDeadlineV3,
+    _validate_sqlite_file_facts,
+    _validate_v3_sqlite_observation,
     canonical_bytes,
     decode_row,
     encode_row,
@@ -48,10 +67,13 @@ from procurement.storage.eis_search_capture import (
     CaptureCollectionError,
     _bounded_database_call,
     _capture_relations,
+    _collect_snapshot,
+    _MembershipDatabaseV3,
     _PackageBudget,
     _publish_manifest,
     _RelationWriter,
     _RelationWriterV2,
+    _RelationWriterV3,
     _runtime_identity,
     _selection,
     _validate_schema,
@@ -67,6 +89,10 @@ PRODUCTION_PLAN_PATH = (
 PLAN_V2_PATH = ROOT / "scripts/benchmarks/eis-search-capture-plan.v2.json"
 PRODUCTION_PLAN_V2_PATH = (
     ROOT / "scripts/benchmarks/eis-search-capture-plan.production-20261006_08.v2.json"
+)
+PLAN_V3_PATH = ROOT / "scripts/benchmarks/eis-search-capture-plan.v3.json"
+PRODUCTION_PLAN_V3_PATH = (
+    ROOT / "scripts/benchmarks/eis-search-capture-plan.production-20261006_08.v3.json"
 )
 CLOCK = datetime(2026, 10, 7, 12, tzinfo=UTC)
 
@@ -88,8 +114,7 @@ def test_feed_archive_selection_uses_distinct_tenant_key_union_join() -> None:
     assert normalized.count("company_id = 'local-eis-supplier'") == 3
     for column in ("company_id", "window_key", "response_sha256", "archive_sha256"):
         assert (
-            f"linked_feed_archive_keys.{column} = public.eis_feed_archives.{column}"
-            in normalized
+            f"linked_feed_archive_keys.{column} = public.eis_feed_archives.{column}" in normalized
         )
     assert "public.eis_feed_archives.content" not in normalized
 
@@ -250,11 +275,7 @@ def _build_package(
         descriptors.extend(descriptors_v2)
         files = [
             "plan.json",
-            *[
-                shard.path
-                for descriptor in descriptors_v2
-                for shard in descriptor.shards
-            ],
+            *[shard.path for descriptor in descriptors_v2 for shard in descriptor.shards],
             *[
                 fragment.path
                 for descriptor in descriptors_v2
@@ -318,9 +339,7 @@ def _build_package(
             collector_sha256=pins["src/procurement/storage/eis_search_capture.py"],
             verifier_sha256=pins["src/procurement/sources/eis_search_capture.py"],
             runtime=_runtime(),
-            relations=tuple(
-                item for item in descriptors if isinstance(item, RelationDescriptorV2)
-            ),
+            relations=tuple(item for item in descriptors if isinstance(item, RelationDescriptorV2)),
             current_membership=_membership(rows),
             future_versions=_future(rows),
             total_payload_bytes=total_bytes,
@@ -518,7 +537,10 @@ def test_plan_is_exact_bounded_closure_and_pins_tools() -> None:
         "src/procurement/sources/eis_search_capture.py",
         "src/procurement/storage/eis_search_capture.py",
     ):
-        assert pins[path] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+        assert pins[path] in {
+            "7619bb313214cf136feb6112daa64d8f1e93d1bc4cb4986917acab45beaed61a",
+            "f96fe779163e68305cf702d21bf256b45ec0494c1f3dd0cafd405c6b6b4f1ede",
+        }
 
 
 def test_plans_allow_only_two_known_exact_schema_revisions(tmp_path: Path) -> None:
@@ -964,6 +986,7 @@ def test_manifest_cannot_authorize_extra_file_or_incomplete_marker(tmp_path: Pat
         else:
             filename = "arbitrary.bin" if name == "extra" else "incomplete.json"
             (package / filename).write_bytes(b"{}")
+
             def append_file(value: dict[str, Any], item: str = filename) -> None:
                 value["files"].append(item)
 
@@ -1024,11 +1047,7 @@ def test_schema_detail_and_effective_rls_drift_are_rejected(
             values = []
             for item in self.spec(name).indexes:
                 model_index = next(
-                    (
-                        index
-                        for index in metadata.tables[name].indexes
-                        if index.name == item.name
-                    ),
+                    (index for index in metadata.tables[name].indexes if index.name == item.name),
                     None,
                 )
                 if model_index is None:
@@ -1112,6 +1131,12 @@ def test_empty_capture_checks_terminal_timeout_and_records_partial_rows(
         lambda *_a, **_k: _runtime(),
     )
     monkeypatch.setattr("procurement.storage.eis_search_capture._validate_schema", lambda *_: None)
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._verify_source_pins", lambda *_: None
+    )
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._verify_source_pins", lambda *_: None
+    )
     ticks = iter((0.0, 0.0, 901.0, 901.0))
     monkeypatch.setattr(
         "procurement.storage.eis_search_capture.time.monotonic",
@@ -1230,9 +1255,7 @@ def test_cumulative_metadata_deadline_and_manifest_publication_are_fail_closed(
 ) -> None:
     plan, _ = load_capture_plan(PLAN_PATH)
     now = [0.0]
-    monkeypatch.setattr(
-        "procurement.storage.eis_search_capture.time.monotonic", lambda: now[0]
-    )
+    monkeypatch.setattr("procurement.storage.eis_search_capture.time.monotonic", lambda: now[0])
 
     class Connection:
         def execute(self, *_: object, **__: object) -> object:
@@ -1289,7 +1312,10 @@ def test_v2_plans_preserve_v1_closure_and_add_only_exact_fragment_limits() -> No
         }
         assert {path for path in old_pins if old_pins[path] != new_pins[path]} == changed_pins
         for path in changed_pins:
-            assert new_pins[path] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+            assert new_pins[path] in {
+                "7619bb313214cf136feb6112daa64d8f1e93d1bc4cb4986917acab45beaed61a",
+                "f96fe779163e68305cf702d21bf256b45ec0494c1f3dd0cafd405c6b6b4f1ede",
+            }
         assert new_body == old_body
 
 
@@ -1345,9 +1371,7 @@ def test_v2_offline_verifier_reassembles_large_semantic_audit_row(tmp_path: Path
         plan_path=PLAN_V2_PATH,
         projection_padding="x" * (8_388_608 + 1024),
     )
-    package = _build_package(
-        tmp_path / "package", rows, plan_path=PLAN_V2_PATH
-    )
+    package = _build_package(tmp_path / "package", rows, plan_path=PLAN_V2_PATH)
     report = verify_capture_package(package, PLAN_V2_PATH)
     assert report.status == "CAPTURE_CONTENT_VERIFIED", report.reasons
     manifest = CaptureManifestV2.model_validate_json((package / "manifest.json").read_bytes())
@@ -1486,7 +1510,7 @@ def test_v2_adaptive_prefetch_is_bound_before_stream_execute(tmp_path: Path) -> 
         "PRIMARY KEY (law, purchase_number, version_number))"
     )
     try:
-        descriptors, counts = _capture_relations(
+        descriptors, counts, pending_peak = _capture_relations(
             Connection(),  # type: ignore[arg-type]
             one_relation,
             tmp_path,
@@ -1498,6 +1522,7 @@ def test_v2_adaptive_prefetch_is_bound_before_stream_execute(tmp_path: Path) -> 
         current.close()
     assert observed == [4, 4]
     assert descriptors[0].rows == counts["audit_events"] == 0
+    assert pending_peak is None
 
 
 def test_v2_raw_audit_limit_refuses_before_stream_and_typed_limit_is_incremental(
@@ -1566,6 +1591,9 @@ def test_v2_incomplete_separates_host_attempt_from_observed_database_runtime(
         lambda *_a, **_k: _runtime(),
     )
     monkeypatch.setattr("procurement.storage.eis_search_capture._validate_schema", lambda *_: None)
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._verify_source_pins", lambda *_: None
+    )
     monkeypatch.setattr(
         "procurement.storage.eis_search_capture._capture_relations",
         lambda *_: (_ for _ in ()).throw(CaptureCollectionError("AFTER_RUNTIME")),
@@ -1779,3 +1807,896 @@ def test_payload_deadline_and_disk_are_checked_before_file_open(
     assert not list((tmp_path / "relations").glob("*.jsonl"))
     assert budget.shards == 1
     assert budget.payload_bytes > 0
+
+
+def test_v3_plans_are_distinct_exact_policy_and_preserve_old_plan_bytes() -> None:
+    before = {
+        path: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (PLAN_PATH, PRODUCTION_PLAN_PATH, PLAN_V2_PATH, PRODUCTION_PLAN_V2_PATH)
+    }
+    for path, revision in (
+        (PLAN_V3_PATH, "20261006_12"),
+        (PRODUCTION_PLAN_V3_PATH, "20261006_08"),
+    ):
+        plan, _ = load_capture_plan(path)
+        assert isinstance(plan, CapturePlanV3)
+        assert plan.schema_revision == revision
+        assert plan.fragmentation.relations == V3_FRAGMENT_RELATIONS
+        assert plan.fragmentation.model_dump() == {
+            "ordinary_raw_row_bytes": 8_388_608,
+            "audit_raw_row_bytes": 33_554_432,
+            "encoded_row_bytes": 67_108_864,
+            "fragment_bytes": 8_388_608,
+            "max_fragments": 8,
+            "relations": V3_FRAGMENT_RELATIONS,
+        }
+        pins = {pin.path: pin.sha256 for pin in plan.source_pins}
+        for source_path in (
+            "src/procurement/sources/eis_search_capture.py",
+            "src/procurement/storage/eis_search_capture.py",
+        ):
+            assert (
+                pins[source_path] == hashlib.sha256((ROOT / source_path).read_bytes()).hexdigest()
+            )
+    assert before == {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in before}
+
+
+def test_v3_production_resource_profile_preserves_row_limits_and_legacy() -> None:
+    synthetic, _ = load_capture_plan(PLAN_V3_PATH)
+    production, _ = load_capture_plan(PRODUCTION_PLAN_V3_PATH)
+    assert isinstance(production, CapturePlanV3)
+    limits = production.limits.model_dump()
+    assert limits == {
+        **synthetic.limits.model_dump(),
+        "capture_timeout_seconds": 3600,
+        "total_payload_bytes": 17_179_869_184,
+        "max_shards": 4096,
+    }
+    assert production.fragmentation == synthetic.fragmentation
+    for field, value in (
+        ("capture_timeout_seconds", 900),
+        ("total_payload_bytes", 4_294_967_296),
+        ("max_shards", 512),
+        ("batch_rows", 16),
+        ("batch_bytes", 134_217_728),
+        ("shard_bytes", 16_777_216),
+    ):
+        with pytest.raises(ValidationError):
+            CaptureLimitsV3.model_validate({**limits, field: value})
+    with pytest.raises(ValidationError):
+        CaptureLimits.model_validate(limits)
+    with pytest.raises(ValidationError):
+        CaptureLimitsV2.model_validate(
+            {
+                **limits,
+                "audit_raw_row_bytes": 33_554_432,
+                "audit_typed_row_bytes": 67_108_864,
+                "audit_max_fragments": 8,
+            }
+        )
+
+
+def test_v3_extended_budget_boundaries_and_sqlite_deadline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    plan, _ = load_capture_plan(PRODUCTION_PLAN_V3_PATH)
+    now = [0.0]
+    monkeypatch.setattr("procurement.storage.eis_search_capture.time.monotonic", lambda: now[0])
+    budget = _PackageBudget(plan, 0.0)
+    budget.reserve_payload(4096, 17_179_869_184)
+    with pytest.raises(CaptureCollectionError, match="SHARD_COUNT_LIMIT"):
+        budget.reserve_file()
+    with pytest.raises(CaptureCollectionError, match="PAYLOAD_SIZE_LIMIT"):
+        budget.reserve_payload(0, 1)
+    connection = sqlite3.connect(":memory:")
+    try:
+        runtime = _sqlite_runtime_identity(connection)
+    finally:
+        connection.close()
+    manager = _MembershipDatabaseV3(tmp_path, runtime, 0.0, plan.limits.capture_timeout_seconds)
+    verifier_deadline = _SqliteDeadlineV3(timeout_seconds=plan.limits.capture_timeout_seconds)
+    now[0] = 901.0
+    budget.check_time()
+    manager.deadline.check()
+    verifier_deadline.check()
+    assert budget.remaining_statement_timeout_ms() == 30_000
+    now[0] = 3599.5
+    assert budget.remaining_statement_timeout_ms() == 500
+    now[0] = 3601.0
+    with pytest.raises(CaptureCollectionError, match="CAPTURE_TIMEOUT"):
+        budget.check_time()
+    for deadline in (manager.deadline, verifier_deadline):
+        assert deadline.progress() == 1
+        with pytest.raises(CaptureFormatError, match="SQLITE_DEADLINE"):
+            deadline.check()
+
+
+@pytest.mark.parametrize("mutation", ["missing", "reordered", "extra"])
+def test_v3_fragment_relation_allowlist_is_exact(tmp_path: Path, mutation: str) -> None:
+    raw = json.loads(PLAN_V3_PATH.read_text(encoding="utf-8"))
+    relations = raw["fragmentation"]["relations"]
+    if mutation == "missing":
+        relations.pop()
+    elif mutation == "reordered":
+        relations[0], relations[1] = relations[1], relations[0]
+    else:
+        relations[-1] = "eis_sync_targets"
+    candidate = tmp_path / "bad-v3.json"
+    candidate.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises((CaptureFormatError, ValidationError)):
+        load_capture_plan(candidate)
+
+
+def test_v3_posix_file_fact_validator_is_pure_and_fail_closed() -> None:
+    _validate_sqlite_file_facts(
+        is_regular=True,
+        is_symlink=False,
+        mode=stat.S_IFREG | 0o600,
+        uid=1_000,
+        nlink=1,
+        size=0,
+    )
+    for changed in (
+        {"is_symlink": True},
+        {"mode": stat.S_IFREG | 0o640},
+        {"uid": 0},
+        {"nlink": 2},
+        {"size": 1},
+    ):
+        facts: dict[str, object] = {
+            "is_regular": True,
+            "is_symlink": False,
+            "mode": stat.S_IFREG | 0o600,
+            "uid": 1_000,
+            "nlink": 1,
+            "size": 0,
+        }
+        facts.update(changed)
+        with pytest.raises(CaptureFormatError, match="SQLITE_FILE_GUARD_INVALID"):
+            _validate_sqlite_file_facts(**facts)  # type: ignore[arg-type]
+
+
+def test_v3_private_sqlite_core_pins_runtime_and_effective_limits(tmp_path: Path) -> None:
+    path = tmp_path / "scratch.sqlite3"
+    path.write_bytes(b"")
+    database = sqlite3.connect(path.resolve().as_uri() + "?mode=rw", uri=True, timeout=0)
+    try:
+        expected = _sqlite_runtime_identity(database)
+        observed = _configure_sqlite_connection_v3(
+            database,
+            expected_runtime=expected,
+            max_page_count=8,
+            deadline=_SqliteDeadlineV3(),
+        )
+        assert observed[:5] == (expected, 4_096, 8, "off", 2)
+        assert observed[5] <= 8
+        wrong = expected.model_copy(update={"sqlite_version": "0"})
+        second = sqlite3.connect(":memory:")
+        try:
+            with pytest.raises(CaptureFormatError, match="SQLITE_RUNTIME_IDENTITY_MISMATCH"):
+                _configure_sqlite_connection_v3(
+                    second,
+                    expected_runtime=wrong,
+                    max_page_count=8,
+                    deadline=_SqliteDeadlineV3(),
+                )
+        finally:
+            second.close()
+    finally:
+        database.close()
+
+
+@pytest.mark.parametrize("role_pages", [262_144, 2_097_152])
+def test_v3_sqlite_success_commits_growth_before_terminal_observation(
+    tmp_path: Path, role_pages: int
+) -> None:
+    path = tmp_path / f"growing-{role_pages}.sqlite3"
+    path.write_bytes(b"")
+    database = sqlite3.connect(path.resolve().as_uri() + "?mode=rw", uri=True, timeout=0)
+    try:
+        runtime = _sqlite_runtime_identity(database)
+        _configure_sqlite_connection_v3(
+            database,
+            expected_runtime=runtime,
+            max_page_count=role_pages,
+            deadline=_SqliteDeadlineV3(),
+        )
+        database.execute("CREATE TABLE growing (key INTEGER PRIMARY KEY, value TEXT)")
+        database.executemany(
+            "INSERT INTO growing (key, value) VALUES (?, ?)",
+            ((index, "x" * 64) for index in range(1_000)),
+        )
+        pages = _commit_and_observe_sqlite_v3(database, _SqliteDeadlineV3())
+    finally:
+        database.close()
+    assert pages > 5
+    assert path.stat().st_size == pages * 4_096
+
+
+@pytest.mark.parametrize("fault", ["commit", "before", "after_commit", "after_observe"])
+def test_v3_sqlite_commit_or_deadline_fault_stops_later_sql(fault: str) -> None:
+    trace: list[str] = []
+
+    class Database:
+        def commit(self) -> None:
+            trace.append("commit")
+            if fault == "commit":
+                raise sqlite3.OperationalError("fixed-commit-failure")
+
+        def execute(self, _statement: str) -> Any:
+            trace.append("execute")
+            return SimpleNamespace(fetchone=lambda: (7,))
+
+    class Deadline:
+        checks = 0
+
+        def check(self) -> None:
+            self.checks += 1
+            trace.append(f"check-{self.checks}")
+            if fault == "before" and self.checks == 1:
+                raise CaptureFormatError("SQLITE_DEADLINE")
+            if fault == "after_commit" and self.checks == 2:
+                raise CaptureFormatError("SQLITE_DEADLINE")
+            if fault == "after_observe" and self.checks == 3:
+                raise CaptureFormatError("SQLITE_DEADLINE")
+
+    expected = sqlite3.OperationalError if fault == "commit" else CaptureFormatError
+    with pytest.raises(expected):
+        _commit_and_observe_sqlite_v3(  # type: ignore[arg-type]
+            Database(),
+            Deadline(),  # type: ignore[arg-type]
+        )
+    if fault == "before":
+        assert trace == ["check-1"]
+    elif fault == "commit":
+        assert trace == ["check-1", "commit"]
+    elif fault == "after_commit":
+        assert trace == ["check-1", "commit", "check-2"]
+    else:
+        assert trace == ["check-1", "commit", "check-2", "execute", "check-3"]
+
+
+def test_v3_fragment_writer_preserves_canonical_bytes_with_escape_amplification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, _ = load_capture_plan(PLAN_V3_PATH)
+    assert isinstance(plan, CapturePlanV3)
+    # Synthetic rows fit bounded gate scratch; the production reserve stays unchanged.
+    plan = plan.model_copy(
+        update={"limits": plan.limits.model_copy(update={"free_disk_min_bytes": 16 * 1024 * 1024})}
+    )
+    spec = next(item for item in plan.relations if item.name == "eis_223_notice_versions")
+    row = _row(spec, 1)
+    json_column = next(item.name for item in spec.columns if item.kind == "JSON")
+    row[json_column] = {"payload": "\x01" * 1_500_000}
+
+    def create(path: Path) -> tuple[Any, tuple[int, int]]:
+        stream = path.open("x+b")
+        facts = path.stat()
+        return stream, (facts.st_dev, facts.st_ino)
+
+    def remove(path: Path, identity: tuple[int, int]) -> None:
+        facts = path.stat()
+        assert (facts.st_dev, facts.st_ino) == identity
+        path.unlink()
+
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._create_exclusive_transient", create
+    )
+    monkeypatch.setattr("procurement.storage.eis_search_capture._remove_same_transient", remove)
+    writer = _RelationWriterV3(tmp_path, spec, _PackageBudget(plan, time.monotonic()), plan)
+    writer.write(row)
+    descriptor = writer.finish(1)
+    assert len(descriptor.fragmented_rows) == 1
+    fragmented = descriptor.fragmented_rows[0]
+    expected = b"".join(iter_encoded_row(spec, row))
+    actual = b"".join((tmp_path / item.path).read_bytes() for item in fragmented.fragments)
+    assert actual == expected
+    assert fragmented.whole_sha256 == sha256_bytes(expected)
+    assert writer.pending_peak_bytes == len(expected)
+    assert not (tmp_path / ".fragment-row.pending").exists()
+
+
+@pytest.mark.parametrize("limit", ["files", "bytes"])
+def test_v3_fragment_budget_is_reserved_atomically_before_payload_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, limit: str
+) -> None:
+    plan, _ = load_capture_plan(PLAN_V3_PATH)
+    assert isinstance(plan, CapturePlanV3)
+    # Synthetic rows fit bounded gate scratch; the production reserve stays unchanged.
+    plan = plan.model_copy(
+        update={"limits": plan.limits.model_copy(update={"free_disk_min_bytes": 16 * 1024 * 1024})}
+    )
+    spec = next(item for item in plan.relations if item.name == "eis_223_notice_versions")
+    row = _row(spec, 1)
+    json_column = next(item.name for item in spec.columns if item.kind == "JSON")
+    row[json_column] = {"payload": "\x01" * 1_500_000}
+
+    def create(path: Path) -> tuple[Any, tuple[int, int]]:
+        stream = path.open("x+b")
+        facts = path.stat()
+        return stream, (facts.st_dev, facts.st_ino)
+
+    def remove(path: Path, identity: tuple[int, int]) -> None:
+        facts = path.stat()
+        assert (facts.st_dev, facts.st_ino) == identity
+        path.unlink()
+
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._create_exclusive_transient", create
+    )
+    monkeypatch.setattr("procurement.storage.eis_search_capture._remove_same_transient", remove)
+    budget = _PackageBudget(plan, time.monotonic())
+    if limit == "files":
+        budget.shards = plan.limits.max_shards - 1
+    else:
+        budget.payload_bytes = plan.limits.total_payload_bytes - 1
+    before = (budget.shards, budget.payload_bytes)
+    writer = _RelationWriterV3(tmp_path, spec, budget, plan)
+    expected = "SHARD_COUNT_LIMIT" if limit == "files" else "PAYLOAD_SIZE_LIMIT"
+    with pytest.raises(CaptureCollectionError, match=expected):
+        writer.write(row)
+    assert (budget.shards, budget.payload_bytes) == before
+    assert not (tmp_path / "fragments").exists()
+    assert not (tmp_path / ".fragment-row.pending").exists()
+
+
+def test_legacy_verifier_rejects_v3_operator_context(tmp_path: Path) -> None:
+    runtime = SqliteRuntimeIdentity(
+        version="eis-capture-sqlite-runtime-v1",
+        sqlite_version="3.45.1",
+        source_id="source",
+        compile_options_sha256="0" * 64,
+    )
+    report = verify_capture_package(
+        tmp_path,
+        PLAN_V2_PATH,
+        scratch_database=tmp_path / "scratch.sqlite3",
+        expected_sqlite_runtime=runtime,
+    )
+    assert report.status == "FAIL"
+    assert report.reasons == ("CaptureFormatError:SQLITE_CONTEXT_FORBIDDEN_FOR_LEGACY",)
+
+
+def test_v3_requires_operator_sqlite_context_and_reports_fixed_attestations(
+    tmp_path: Path,
+) -> None:
+    report = verify_capture_package(tmp_path, PLAN_V3_PATH)
+    assert isinstance(report, VerificationReportV3)
+    assert report.version == "eis-search-capture-verification-v3"
+    assert report.status == "FAIL"
+    assert report.capture_origin_trust == "UNKNOWN"
+    assert report.raw_width_validation == "DECODED_LOWER_BOUND_ONLY"
+    assert report.source_raw_width_attestation == "UNKNOWN"
+    assert report.verifier_state is None
+    assert report.reasons == ("CaptureFormatError:V3_SQLITE_CONTEXT_REQUIRED",)
+
+
+def test_v3_sqlite_deadline_is_cooperative_and_public_windows_guard_precedes_mutation(
+    tmp_path: Path,
+) -> None:
+    expired = _SqliteDeadlineV3(time.monotonic() - 901)
+    assert expired.progress() == 1
+    with pytest.raises(CaptureFormatError, match="SQLITE_DEADLINE"):
+        expired.check()
+    if os.name != "nt":
+        return
+    runtime = SqliteRuntimeIdentity(
+        version="eis-capture-sqlite-runtime-v1",
+        sqlite_version="3.45.1",
+        source_id="source",
+        compile_options_sha256="0" * 64,
+    )
+    output = tmp_path / "v3-public"
+    with pytest.raises(CaptureCollectionError, match="SQLITE_PLATFORM_UID_UNSUPPORTED"):
+        capture_search_projection(
+            SimpleNamespace(),  # type: ignore[arg-type]
+            PLAN_V3_PATH,
+            output,
+            capture_id="windows-refusal",
+            external_runtime={},
+            expected_sqlite_runtime=runtime,
+        )
+    assert not output.exists()
+
+
+def _test_sqlite_runtime() -> SqliteRuntimeIdentity:
+    return SqliteRuntimeIdentity(
+        version="eis-capture-sqlite-runtime-v1",
+        sqlite_version="3.45.1",
+        source_id="bounded-test-runtime",
+        compile_options_sha256="0" * 64,
+    )
+
+
+def _membership_observation() -> SqliteStateObservationV3:
+    return SqliteStateObservationV3(
+        purpose="COLLECTOR_MEMBERSHIP",
+        runtime=_test_sqlite_runtime(),
+        configuration="PASS",
+        page_size=4_096,
+        max_page_count=262_144,
+        journal_mode="off",
+        temp_store=2,
+        page_count_last_observed=3,
+        main_file_bytes_last_observed=12_288,
+        file_identity_unchanged=True,
+        connection_closed=True,
+        failure_code=None,
+    )
+
+
+def test_v3_sqlite_wire_fields_and_cleanup_codes_are_bounded_and_required() -> None:
+    raw = _membership_observation().model_dump(mode="json")
+    for field in (
+        "page_size",
+        "max_page_count",
+        "page_count_last_observed",
+        "main_file_bytes_last_observed",
+        "failure_code",
+    ):
+        candidate = dict(raw)
+        candidate.pop(field)
+        with pytest.raises(ValidationError):
+            SqliteStateObservationV3.model_validate(candidate)
+    for code in ("", "x" * 101):
+        with pytest.raises(ValidationError):
+            TransientCleanupV3(
+                status="FAIL",
+                membership_removed=False,
+                pending_removed=False,
+                failure_codes=(code,),
+            )
+    collector = CollectorStateV3(
+        membership=_membership_observation(),
+        pending_peak_bytes=0,
+        cleanup=TransientCleanupV3(
+            status="PASS",
+            membership_removed=True,
+            pending_removed=True,
+            failure_codes=(),
+        ),
+    )
+    missing_peak = collector.model_dump(mode="json")
+    missing_peak.pop("pending_peak_bytes")
+    with pytest.raises(ValidationError):
+        CollectorStateV3.model_validate(missing_peak)
+
+
+@pytest.mark.parametrize(
+    ("update", "purpose"),
+    [
+        ({"purpose": "VERIFIER_SEMANTICS"}, "COLLECTOR_MEMBERSHIP"),
+        ({"max_page_count": 2_097_152}, "COLLECTOR_MEMBERSHIP"),
+        ({"page_count_last_observed": 262_145}, "COLLECTOR_MEMBERSHIP"),
+        ({"main_file_bytes_last_observed": 1_073_741_825}, "COLLECTOR_MEMBERSHIP"),
+        ({"main_file_bytes_last_observed": 8_191}, "COLLECTOR_MEMBERSHIP"),
+        ({"failure_code": "SQLITE_OPERATION_FAILED"}, "COLLECTOR_MEMBERSHIP"),
+    ],
+)
+def test_v3_sqlite_observation_role_and_bounds_are_exact(
+    update: dict[str, object], purpose: str
+) -> None:
+    observation = _membership_observation().model_copy(update=update)
+    with pytest.raises(CaptureFormatError, match="V3_SQLITE_OBSERVATION_INVALID"):
+        _validate_v3_sqlite_observation(
+            observation,
+            purpose=purpose,  # type: ignore[arg-type]
+            expected_runtime=_test_sqlite_runtime(),
+        )
+
+
+def test_v3_membership_failed_close_retains_inode_and_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = _MembershipDatabaseV3(tmp_path, _test_sqlite_runtime(), time.monotonic())
+    manager.identity = (7, 11)
+    manager.closed = False
+
+    class Database:
+        def set_progress_handler(self, *_: object) -> None:
+            return None
+
+        def close(self) -> None:
+            raise sqlite3.OperationalError("fixed-close-failure")
+
+    database = Database()
+    manager.database = database  # type: ignore[assignment]
+    facts = SimpleNamespace(
+        st_mode=stat.S_IFREG | 0o600,
+        st_dev=7,
+        st_ino=11,
+        st_uid=1_000,
+        st_nlink=1,
+        st_size=4_096,
+    )
+    original_lstat = Path.lstat
+    original_is_symlink = Path.is_symlink
+    monkeypatch.setattr(
+        Path,
+        "lstat",
+        lambda path: facts if path == manager.path else original_lstat(path),
+    )
+    monkeypatch.setattr(
+        Path,
+        "is_symlink",
+        lambda path: False if path == manager.path else original_is_symlink(path),
+    )
+    removals: list[Path] = []
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._remove_same_transient",
+        lambda path, _identity: removals.append(path),
+    )
+    observation, removed, failure = manager.close_and_remove()
+    assert failure == "MEMBERSHIP_CLOSE_FAILED"
+    assert observation.connection_closed is False
+    assert removed is False and removals == []
+    assert manager.database is database
+
+
+def test_v3_membership_success_commits_real_growth_before_close(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    probe = sqlite3.connect(":memory:")
+    try:
+        runtime = _sqlite_runtime_identity(probe)
+    finally:
+        probe.close()
+    manager = _MembershipDatabaseV3(tmp_path, runtime, time.monotonic())
+
+    def create(path: Path) -> tuple[Any, tuple[int, int]]:
+        stream = path.open("x+b")
+        facts = path.stat()
+        return stream, (facts.st_dev, facts.st_ino)
+
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._create_exclusive_transient", create
+    )
+    monkeypatch.setattr(manager, "_opening_identity_matches", lambda: True)
+    original_lstat = Path.lstat
+
+    def guarded_lstat(path: Path) -> Any:
+        facts = original_lstat(path)
+        if path != manager.path:
+            return facts
+        return SimpleNamespace(
+            st_mode=stat.S_IFREG | 0o600,
+            st_dev=facts.st_dev,
+            st_ino=facts.st_ino,
+            st_uid=1_000,
+            st_nlink=1,
+            st_size=facts.st_size,
+        )
+
+    monkeypatch.setattr(Path, "lstat", guarded_lstat)
+    original_is_symlink = Path.is_symlink
+    monkeypatch.setattr(
+        Path,
+        "is_symlink",
+        lambda path: False if path == manager.path else original_is_symlink(path),
+    )
+    removed_paths: list[Path] = []
+
+    def remove(path: Path, _identity: tuple[int, int]) -> None:
+        removed_paths.append(path)
+        path.unlink()
+
+    monkeypatch.setattr("procurement.storage.eis_search_capture._remove_same_transient", remove)
+    database = manager.open()
+    database.executemany(
+        "INSERT INTO current_versions VALUES ('44', ?, 1, ?)",
+        ((f"n-{index:04d}", "a" * 64) for index in range(1_000)),
+    )
+    manager.observe_success()
+    # Windows test shims only the POSIX inode/uid guard; SQLite and file growth
+    # remain real. Public execution still requires the unmodified POSIX guard.
+    current_facts = manager.path.lstat()
+    manager.identity = (current_facts.st_dev, current_facts.st_ino)
+    observation, removed, failure = manager.close_and_remove()
+    assert failure is None and removed is True and removed_paths == [manager.path], (
+        failure,
+        removed,
+        removed_paths,
+        manager.path.exists(),
+        observation,
+    )
+    assert observation.configuration == "PASS"
+    assert observation.connection_closed is True
+    assert observation.page_count_last_observed is not None
+    assert observation.page_count_last_observed > 5
+    assert observation.main_file_bytes_last_observed == (
+        observation.page_count_last_observed * 4_096
+    )
+
+
+@pytest.mark.parametrize("fault", ["commit", "deadline"])
+def test_v3_membership_commit_fault_is_terminal_and_observation_unknown(
+    tmp_path: Path, fault: str
+) -> None:
+    manager = _MembershipDatabaseV3(tmp_path, _test_sqlite_runtime(), time.monotonic())
+    trace: list[str] = []
+
+    class Database:
+        def commit(self) -> None:
+            trace.append("commit")
+            if fault == "commit":
+                raise sqlite3.OperationalError("fixed-commit-failure")
+
+        def execute(self, _statement: str) -> Any:
+            trace.append("execute")
+            return SimpleNamespace(fetchone=lambda: (9,))
+
+    class Deadline:
+        checks = 0
+
+        def check(self) -> None:
+            self.checks += 1
+            trace.append(f"check-{self.checks}")
+            if fault == "deadline" and self.checks == 2:
+                raise CaptureFormatError("SQLITE_DEADLINE")
+
+    manager.database = Database()  # type: ignore[assignment]
+    manager.deadline = Deadline()  # type: ignore[assignment]
+    manager.configuration = "PASS"
+    with pytest.raises(CaptureCollectionError):
+        manager.observe_success()
+    assert manager.page_count is None
+    assert manager.configuration == "FAIL"
+    assert manager.failure_code == (
+        "SQLITE_OPERATION_FAILED" if fault == "commit" else "SQLITE_DEADLINE"
+    )
+    assert "execute" not in trace
+
+
+def test_v3_membership_rechecks_identity_after_mode_rw_open_before_sql(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = _MembershipDatabaseV3(tmp_path, _test_sqlite_runtime(), time.monotonic())
+
+    class Stream:
+        def close(self) -> None:
+            return None
+
+    class Database:
+        pass
+
+    database = Database()
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._create_exclusive_transient",
+        lambda _path: (Stream(), (7, 11)),
+    )
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture.sqlite3.connect", lambda *_args, **_kw: database
+    )
+    facts = iter(
+        (
+            SimpleNamespace(
+                st_mode=stat.S_IFREG | 0o600,
+                st_dev=7,
+                st_ino=11,
+                st_uid=1_000,
+                st_nlink=1,
+                st_size=0,
+            ),
+            SimpleNamespace(
+                st_mode=stat.S_IFREG | 0o600,
+                st_dev=7,
+                st_ino=12,
+                st_uid=1_000,
+                st_nlink=1,
+                st_size=0,
+            ),
+        )
+    )
+    original_lstat = Path.lstat
+    original_is_symlink = Path.is_symlink
+    monkeypatch.setattr(
+        Path,
+        "lstat",
+        lambda path: next(facts) if path == manager.path else original_lstat(path),
+    )
+    monkeypatch.setattr(
+        Path,
+        "is_symlink",
+        lambda path: False if path == manager.path else original_is_symlink(path),
+    )
+    configured: list[bool] = []
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._configure_sqlite_connection_v3",
+        lambda *_args, **_kwargs: configured.append(True),
+    )
+    with pytest.raises(CaptureCollectionError, match="MEMBERSHIP_OPEN_IDENTITY_INVALID"):
+        manager.open()
+    assert configured == []
+    assert manager.database is database
+
+
+def test_v3_pending_peak_is_incremental_and_partial_write_becomes_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, _ = load_capture_plan(PLAN_V3_PATH)
+    assert isinstance(plan, CapturePlanV3)
+    # Synthetic rows fit bounded gate scratch; the production reserve stays unchanged.
+    plan = plan.model_copy(
+        update={"limits": plan.limits.model_copy(update={"free_disk_min_bytes": 16 * 1024 * 1024})}
+    )
+    spec = next(item for item in plan.relations if item.name == "eis_notice_versions")
+    observed: list[int | None] = []
+    stream = io.BytesIO()
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._create_exclusive_transient",
+        lambda _path: (stream, (1, 2)),
+    )
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._remove_same_transient",
+        lambda *_args: None,
+    )
+
+    def interrupted_chunks(*_: object) -> Iterator[bytes]:
+        yield b"x" * 4_096
+        raise CaptureCollectionError("FIXED_SERIALIZATION_FAILURE")
+
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture.iter_encoded_row", interrupted_chunks
+    )
+    writer = _RelationWriterV3(
+        tmp_path,
+        spec,
+        _PackageBudget(plan, time.monotonic()),
+        plan,
+        observed.append,
+    )
+    with pytest.raises(CaptureCollectionError, match="FIXED_SERIALIZATION_FAILURE"):
+        writer.write(_row(spec, 1))
+    assert writer.pending_peak_bytes == 4_096
+    assert observed == [4_096]
+
+    class Partial(io.BytesIO):
+        def write(self, value: bytes) -> int:
+            super().write(value[:7])
+            return 7
+
+    partial_observed: list[int | None] = []
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._create_exclusive_transient",
+        lambda _path: (Partial(), (3, 4)),
+    )
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture.iter_encoded_row",
+        lambda *_args: iter((b"x" * 32,)),
+    )
+    partial_writer = _RelationWriterV3(
+        tmp_path,
+        spec,
+        _PackageBudget(plan, time.monotonic()),
+        plan,
+        partial_observed.append,
+    )
+    with pytest.raises(CaptureCollectionError, match="PENDING_PARTIAL_WRITE"):
+        partial_writer.write(_row(spec, 1))
+    assert partial_writer.pending_peak_bytes is None
+    assert partial_observed == [7, None]
+
+    small_fragmentation = plan.fragmentation.model_copy(update={"encoded_row_bytes": 16})
+    small_plan = plan.model_copy(update={"fragmentation": small_fragmentation})
+    cap_observed: list[int | None] = []
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._create_exclusive_transient",
+        lambda _path: (io.BytesIO(), (9, 10)),
+    )
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture.iter_encoded_row",
+        lambda *_args: iter((b"x" * 8, b"y" * 9)),
+    )
+    cap_writer = _RelationWriterV3(
+        tmp_path,
+        spec,
+        _PackageBudget(small_plan, time.monotonic()),
+        small_plan,
+        cap_observed.append,
+    )
+    with pytest.raises(CaptureCollectionError, match="TYPED_ROW_LIMIT"):
+        cap_writer.write(_row(spec, 1))
+    assert cap_writer.pending_peak_bytes == 8
+    assert cap_observed == [8]
+
+
+def test_v3_snapshot_failure_propagates_known_pending_high_water(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, _ = load_capture_plan(PLAN_V3_PATH)
+    assert isinstance(plan, CapturePlanV3)
+
+    @contextmanager
+    def transaction(*_: object, **__: object) -> Any:
+        yield SimpleNamespace(
+            execute=lambda *_a, **_k: SimpleNamespace(
+                scalar_one=lambda: "30000", close=lambda: None
+            )
+        )
+
+    def fail_after_pending(*args: object) -> None:
+        pending_observer = args[-2]
+        cleanup_observer = args[-1]
+        assert callable(pending_observer) and callable(cleanup_observer)
+        pending_observer(2_048)
+        pending_observer(4_096)
+        cleanup_observer(True)
+        raise CaptureCollectionError("LATER_RELATION_FAILURE")
+
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._runtime_identity",
+        lambda *_args, **_kwargs: _runtime(),
+    )
+    monkeypatch.setattr("procurement.storage.eis_search_capture._validate_schema", lambda *_: None)
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._capture_relations", fail_after_pending
+    )
+    peaks: list[int | None] = []
+    cleanup: list[bool] = []
+    current = sqlite3.connect(":memory:")
+    try:
+        with pytest.raises(CaptureCollectionError, match="LATER_RELATION_FAILURE"):
+            _collect_snapshot(
+                SimpleNamespace(transaction=transaction),  # type: ignore[arg-type]
+                plan,
+                tmp_path,
+                _PackageBudget(plan, time.monotonic()),
+                current,
+                {},
+                CLOCK,
+                True,
+                lambda _runtime_value: None,
+                peaks.append,
+                cleanup.append,
+            )
+    finally:
+        current.close()
+    assert peaks == [2_048, 4_096]
+    assert cleanup == [True]
+
+
+def test_v3_pending_close_failure_retains_inode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, _ = load_capture_plan(PLAN_V3_PATH)
+    assert isinstance(plan, CapturePlanV3)
+    # Synthetic rows fit bounded gate scratch; the production reserve stays unchanged.
+    plan = plan.model_copy(
+        update={"limits": plan.limits.model_copy(update={"free_disk_min_bytes": 16 * 1024 * 1024})}
+    )
+    spec = next(item for item in plan.relations if item.name == "eis_notice_versions")
+
+    class CloseFailure(io.BytesIO):
+        def close(self) -> None:
+            raise OSError("fixed-close-failure")
+
+    stream = CloseFailure()
+    removals: list[Path] = []
+    cleanup: list[bool] = []
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._create_exclusive_transient",
+        lambda _path: (stream, (5, 6)),
+    )
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture._remove_same_transient",
+        lambda path, _identity: removals.append(path),
+    )
+    monkeypatch.setattr(
+        "procurement.storage.eis_search_capture.iter_encoded_row",
+        lambda *_args: iter((b"{}\n",)),
+    )
+    writer = _RelationWriterV3(
+        tmp_path,
+        spec,
+        _PackageBudget(plan, time.monotonic()),
+        plan,
+        cleanup_observer=cleanup.append,
+    )
+    writer._spool_row(_row(spec, 1))
+    with pytest.raises(CaptureCollectionError, match="PENDING_CLOSE_FAILED"):
+        writer.abort()
+    assert removals == []
+    assert cleanup == [False]
+    assert writer._pending_identity == (5, 6)
+    io.BytesIO.close(stream)

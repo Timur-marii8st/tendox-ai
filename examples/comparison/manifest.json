@@ -1,0 +1,16 @@
+{
+  "mode": "LOCAL_DEMO_SYNTHETIC",
+  "compared_at": "2026-10-14T10:00:00+03:00",
+  "profiles": [
+    "profile-v1.json",
+    "profile-v2.json",
+    "profile-v3.json"
+  ],
+  "cases": [
+    "case-1.json",
+    "case-2.json",
+    "case-3.json",
+    "case-4.json",
+    "case-5.json"
+  ]
+}

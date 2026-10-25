@@ -7,7 +7,7 @@ import {
 } from "@/lib/procurement-api";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Согласование подачи заявки — Syurai Procurement" };
+export const metadata: Metadata = { title: "Согласование подачи заявки — Tendox" };
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 
 export default async function ApplicationSubmissionApprovalPage({ searchParams }: {

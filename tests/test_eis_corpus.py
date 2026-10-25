@@ -106,6 +106,110 @@ def _ungated(monkeypatch: pytest.MonkeyPatch, keys: tuple[str, ...] = KEYS) -> N
     monkeypatch.setattr(eis_corpus.asyncio, "sleep", AsyncMock())
 
 
+def _joint_probe(monkeypatch, statuses):
+    from contextlib import contextmanager
+
+    from procurement import eis_freshness_dispatch_cli as dispatch
+    from procurement.storage import eis_223_regions
+
+    @contextmanager
+    def transaction(*_args, **_kwargs):
+        yield object()
+
+    journal = Journal()
+    journal.storage = SimpleNamespace(transaction=transaction)
+    monkeypatch.setattr(
+        eis_223_regions, "_accepted_catalog", lambda *_a: {"regions": {"50": "test"}}
+    )
+    probe = Mock(side_effect=[SimpleNamespace(status=s) for s in statuses])
+    monkeypatch.setattr(dispatch, "probe_dispatch", probe)
+    return journal, probe
+
+
+@pytest.mark.parametrize("status", ["READY", "BLOCKED"])
+def test_joint_debt_admission_precedes_expensive_history_selection(monkeypatch, status):
+    _ungated(monkeypatch)
+    journal, probe = _joint_probe(monkeypatch, [status])
+    expensive = Mock(side_effect=AssertionError("history selection must not run"))
+    source = AsyncMock()
+    monkeypatch.setattr(eis_corpus, "eligible_windows", expensive)
+    monkeypatch.setattr(eis_corpus, "sync_eis_window", source)
+    result = asyncio.run(
+        eis_corpus.run_corpus(journal, "secret", now=NOW, mandatory_fresh_first=True)
+    )
+    expensive.assert_not_called()
+    source.assert_not_awaited()
+    assert probe.call_count == 1 and not journal.records
+    assert result["selected"] == result["attempted"] == 0
+    assert result["reason"] == (
+        "MANDATORY_FRESH_WORK_READY" if status == "READY" else "MANDATORY_DEMAND_UNAVAILABLE"
+    )
+
+
+def test_debt_appearing_during_history_selection_is_rechecked_before_source(monkeypatch):
+    _ungated(monkeypatch)
+    journal, probe = _joint_probe(monkeypatch, ["IDLE", "READY"])
+    order = []
+
+    def select_history(*_a, **_k):
+        assert probe.call_count == 1
+        order.append("selection")
+        return KEYS
+
+    monkeypatch.setattr(eis_corpus, "eligible_windows", select_history)
+    source = AsyncMock()
+    monkeypatch.setattr(eis_corpus, "sync_eis_window", source)
+    result = asyncio.run(
+        eis_corpus.run_corpus(journal, "secret", now=NOW, mandatory_fresh_first=True)
+    )
+    assert order == ["selection"] and probe.call_count == 2
+    source.assert_not_awaited()
+    assert not journal.records and result["attempted"] == 0
+    assert result["reason"] == "MANDATORY_FRESH_WORK_READY"
+
+
+def test_debt_appearing_after_first_history_window_stops_the_next(monkeypatch):
+    _ungated(monkeypatch)
+    journal, probe = _joint_probe(monkeypatch, ["IDLE", "IDLE", "READY"])
+    source = AsyncMock(
+        return_value=SimpleNamespace(
+            status="NO_DATA", source_response_sha256="a" * 64, new_versions=0, new_events=0
+        )
+    )
+    monkeypatch.setattr(eis_corpus, "sync_eis_window", source)
+    result = asyncio.run(
+        eis_corpus.run_corpus(
+            journal, "secret", now=NOW, mandatory_fresh_first=True, transport=object()
+        )
+    )
+    assert probe.call_count == 3 and source.await_count == 1
+    assert result["attempted"] == 1 and len(journal.records) == 1
+    assert result["reason"] == "MANDATORY_FRESH_WORK_READY"
+
+
+@pytest.mark.parametrize("marker", ["priority", "regional"])
+def test_priority_marker_admission_also_precedes_history_selection(monkeypatch, marker):
+    _ungated(monkeypatch)
+    requested = object()
+    monkeypatch.setattr(eis_corpus, "priority_requested", lambda p, **_k: p is requested)
+    expensive = Mock(side_effect=AssertionError("selection before marker"))
+    monkeypatch.setattr(eis_corpus, "eligible_windows", expensive)
+    result = asyncio.run(
+        eis_corpus.run_corpus(
+            Journal(),
+            "secret",
+            now=NOW,
+            mandatory_fresh_first=True,
+            priority_request=requested if marker == "priority" else None,
+            regional_request=requested if marker == "regional" else None,
+        )
+    )
+    expensive.assert_not_called()
+    assert result["attempted"] == 0 and result["reason"] == (
+        "PRIORITY_REFRESH_REQUESTED" if marker == "priority" else "REGIONAL_REFRESH_REQUESTED"
+    )
+
+
 def test_one_transport_instance_is_reused_across_two_atomic_windows(monkeypatch) -> None:
     _ungated(monkeypatch)
     shared = object()

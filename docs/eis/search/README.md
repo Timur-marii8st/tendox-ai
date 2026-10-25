@@ -34,3 +34,16 @@
 - [117-eis-frozen-benchmark-capture.md](117-eis-frozen-benchmark-capture.md) — M2b: ограниченный неизменный снимок поисковых данных; trusted capture, replay и независимые labels принимаются отдельно.
 - [118-eis-benchmark-instrument-evidence.md](118-eis-benchmark-instrument-evidence.md) — M2a/M2b1: приёмка инструмента, actual isolated PG evidence и незавершённые условия реального benchmark.
 - [119-eis-capture-v3-contract.md](119-eis-capture-v3-contract.md) — Принятый контракт V3: fragments обычных строк и отдельное ограниченное SQLite состояние; actual fit не подтверждён.
+- [121-eis-active-procurement-product-plan.md](121-eis-active-procurement-product-plan.md) — План активного procurement product search.
+- [122-eis-active-census-m0.md](122-eis-active-census-m0.md) — Census M0 активных закупок.
+- [exact-registration-number-integration.md](exact-registration-number-integration.md) — Интеграция поиска по точному регистрационному номеру.
+- [exact-registration-number-search.md](exact-registration-number-search.md) — Контракт поиска по точному регистрационному номеру.
+- [unified-search-workspace.md](unified-search-workspace.md) — Unified search workspace.
+
+- [125-eis-search-recovery-review.md](125-eis-search-recovery-review.md) — Диагностика «бумага», throughput и пересмотр приоритета полезного поиска.
+- [126-eis-paper-parity.md](126-eis-paper-parity.md) — Контрольные номера ЕИС по «бумага»: пропуски базы, регулярных типов и очереди, отдельное расхождение поиска.
+- [127-eis-paper-recovery.md](127-eis-paper-recovery.md) — Офисная бумага на 3,23 млн: полный адресный intake и подтверждённое появление в HTTP поиске.
+
+- [128-eis-hybrid-recovery.md](128-eis-hybrid-recovery.md) — Первый гибридный проход: обнаружение, durable queue и автоматическое восстановление.
+
+- [129-eis-active-sweep.md](129-eis-active-sweep.md) — Расширение гибридного обхода на активные44 без товарного запроса.

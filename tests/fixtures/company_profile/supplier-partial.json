@@ -1,0 +1,294 @@
+{
+  "schema_version": "company-profile-handoff-v1",
+  "selection": {
+    "schema_version": "company-profile-selection-v1",
+    "company_id": "synthetic-example-supplier-partial",
+    "selection_id": "00000000-0000-4000-8000-000000000002",
+    "profile_ref": {
+      "company_id": "synthetic-example-supplier-partial",
+      "version": 1,
+      "snapshot_sha256": "3cf5b93ddd1d2fc7b419267dcc9b65741ddb411a5cedfd13008f1900f7323b94"
+    },
+    "selected_at": "2026-10-14T20:54:25.957725Z",
+    "selected_by": "synthetic-fixture-operator",
+    "audit_event_id": "synthetic-selection-audit-2"
+  },
+  "profile_ref": {
+    "company_id": "synthetic-example-supplier-partial",
+    "version": 1,
+    "snapshot_sha256": "3cf5b93ddd1d2fc7b419267dcc9b65741ddb411a5cedfd13008f1900f7323b94"
+  },
+  "profile_snapshot": {
+    "schema_version": "company-profile-snapshot-v1",
+    "company_id": "synthetic-example-supplier-partial",
+    "version": 1,
+    "parent_version": null,
+    "created_at": "2026-10-14T20:54:25.957725Z",
+    "created_by": "synthetic-fixture-operator",
+    "effective_at": "2026-10-14T20:54:25.957725Z",
+    "currency": "RUB",
+    "amount_basis": "EX_VAT",
+    "facts": {
+      "identity.name": {
+        "knowledge": "KNOWN",
+        "value": "ООО Синтетический поставщик",
+        "sources": [
+          {
+            "company_id": "synthetic-example-supplier-partial",
+            "provenance": {
+              "document_id": "profile-command:21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+              "locator": "identity.name",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+            "recorded_at": "2026-10-14T20:54:25.957725Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "identity.inn": {
+        "knowledge": "KNOWN",
+        "value": "1650000000",
+        "sources": [
+          {
+            "company_id": "synthetic-example-supplier-partial",
+            "provenance": {
+              "document_id": "profile-command:21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+              "locator": "identity.inn",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+            "recorded_at": "2026-10-14T20:54:25.957725Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "identity.kpp": {
+        "knowledge": "NOT_APPLICABLE",
+        "value": null,
+        "sources": [
+          {
+            "company_id": "synthetic-example-supplier-partial",
+            "provenance": {
+              "document_id": "profile-command:21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+              "locator": "identity.kpp",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+            "recorded_at": "2026-10-14T20:54:25.957725Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": "SYNTHETIC_EXAMPLE_ONLY"
+      },
+      "identity.ogrn": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "identity.legal_form": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.all_russia": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.federal_districts": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.regions": {
+        "knowledge": "KNOWN",
+        "value": [
+          "Татарстан"
+        ],
+        "sources": [
+          {
+            "company_id": "synthetic-example-supplier-partial",
+            "provenance": {
+              "document_id": "profile-command:21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+              "locator": "geography.regions",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+            "recorded_at": "2026-10-14T20:54:25.957725Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "geography.cities": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.max_distance_km": {
+        "knowledge": "KNOWN",
+        "value": "100.5",
+        "sources": [
+          {
+            "company_id": "synthetic-example-supplier-partial",
+            "provenance": {
+              "document_id": "profile-command:21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+              "locator": "geography.max_distance_km",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+            "recorded_at": "2026-10-14T20:54:25.957725Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "finance.min_contract_amount": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_contract_amount": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.min_margin": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.min_expected_profit": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_contract_without_extra_approval": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_application_security": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_performance_security": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.price_floor_margin": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "okved": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "business_description": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "supplied_goods": {
+        "knowledge": "KNOWN",
+        "value": [
+          "Бумага для офиса",
+          "Канцелярские товары"
+        ],
+        "sources": [
+          {
+            "company_id": "synthetic-example-supplier-partial",
+            "provenance": {
+              "document_id": "profile-command:21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+              "locator": "supplied_goods",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "21d53e1a224e962c4bfbe6b697f8327afd4d819842790c11e390c123389bced1",
+            "recorded_at": "2026-10-14T20:54:25.957725Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "performed_works": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "provided_services": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "enabled_platforms": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "subcontracting_allowed": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "allowed_procedure_methods": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "prohibitions": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      }
+    },
+    "critical_settings_status": "OWNER_AUTHORIZATION_UNAVAILABLE",
+    "snapshot_sha256": "3cf5b93ddd1d2fc7b419267dcc9b65741ddb411a5cedfd13008f1900f7323b94",
+    "audit_event_id": "synthetic-audit-2"
+  }
+}

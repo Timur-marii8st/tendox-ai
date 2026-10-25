@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+import json
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from decimal import Decimal
@@ -10,22 +11,28 @@ from time import perf_counter_ns
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
-from sqlalchemy import Select, and_, case, exists, func, or_, select, true, union_all
+from sqlalchemy import Select, and_, case, exists, func, or_, select, true, union, union_all
 from sqlalchemy.engine import Connection, RowMapping
 
-from procurement.sources.eis_feed_archive import EisNoticeSnapshot, EisProcedureEvent
+from procurement.sources.eis_feed_archive import (
+    EisAttachmentAlias,
+    EisNoticeSnapshot,
+    EisProcedureEvent,
+)
 from procurement.sources.eis_index_search import (
     EisComparedNotice,
+    EisIndexComparison,
     EisSearchTermEvidence,
     compare_indexed_notices,
+    exact_purchase_number,
     search_query_keys_v1,
 )
-from procurement.sources.eis_procedure_state import resolve_procedure_state
+from procurement.sources.eis_procedure_state import EisProcedureState, resolve_procedure_state
 from procurement.storage.eis_notice_hold import (
     notice_receipt_integrity_hold_clause,
     notice_variant_hold_clause,
 )
-from procurement.storage.eis_search_pagination import SearchPagination
+from procurement.storage.eis_search_pagination import PAGE_COMPARISONS, SearchPagination
 from procurement.storage.models import (
     eis_feed_windows,
     eis_notice_search_keys,
@@ -44,6 +51,7 @@ _COMPARED = TypeAdapter(EisComparedNotice)
 _SNAPSHOT_FIELDS = frozenset(EisNoticeSnapshot.__dataclass_fields__)
 _EVENT = TypeAdapter(EisProcedureEvent)
 _EVENT_FIELDS = frozenset(EisProcedureEvent.__dataclass_fields__)
+_STATES = TypeAdapter(dict[str, EisProcedureState])
 _NOTICE_PAGES = {
     "epNotificationEF2020": "ea20",
     "epNotificationEZK2020": "zk20",
@@ -57,6 +65,8 @@ class EisIndexedAttachment(BaseModel):
     filename: str
     url: str
     locator: str
+    reference_status: Literal["PASS", "UNKNOWN"] = "PASS"
+    aliases: tuple[EisAttachmentAlias, ...] = ()
 
 
 class EisIndexedLotItem(BaseModel):
@@ -106,6 +116,8 @@ class EisIndexedSearchResult(BaseModel):
     pending_windows: int = 0
     requested_region_codes: int = 0
     evaluated_candidate_notices: int = 0
+    compared_candidate_notices: int = 0
+    reused_candidate_notices: int = 0
     unindexed_versions: int = 0
     latest_source_publication: datetime | None = None
     source_freshness: Literal["UNKNOWN"] = "UNKNOWN"
@@ -159,9 +171,12 @@ def search_eis_index(
     search_scope: EisIndexSearchScope = "ALL_CACHED",
     paginate: bool = False,
     cursor: str | None = None,
+    on_matches: Callable[[tuple[EisIndexedLead, ...]], None] | None = None,
 ) -> EisIndexedSearchResult:
     """Prefilter exact current versions; compare all candidates in bounded batches."""
     started = perf_counter_ns()
+    query = query.strip()
+    number = exact_purchase_number(query)
     if (
         not company_id.strip()
         or not 1 <= limit <= 100
@@ -188,6 +203,7 @@ def search_eis_index(
     if pager is not None:
         now = pager.at
     evaluated_count = 0
+    reused_count = 0
     matched_count = 0
     strong_count = 0
     eligible_count = 0
@@ -218,19 +234,57 @@ def search_eis_index(
         eis_notice_search_keys.c.version_number == eis_notice_versions.c.version_number,
     )
     indexed = exists(select(eis_notice_search_keys.c.purchase_number).where(key_join))
+    # Deduplicate canonical refs before evaluating the expensive resolution proof.
+    # Same/newer ledger pairs are unrestricted by source time or receipt; the
+    # scope narrows proofs only, while global receipt integrity stays fail closed.
+    held_keys = union(
+        *(
+            select(table.c.purchase_number, table.c.version_number).where(
+                table.c.company_id == company_id
+            )
+            for table in (eis_notice_variants, eis_notice_variant_origins)
+        )
+    ).subquery("held_keys")
+    hold_scope = (
+        select(
+            eis_notice_versions.c.company_id,
+            eis_notice_versions.c.purchase_number,
+            eis_notice_versions.c.version_number,
+        )
+        .join(
+            held_keys,
+            and_(
+                held_keys.c.purchase_number == eis_notice_versions.c.purchase_number,
+                held_keys.c.version_number >= eis_notice_versions.c.version_number,
+            ),
+        )
+        .where(eis_notice_versions.c.company_id == company_id, current, scope)
+        .distinct()
+        .cte("search_hold_scope")
+        .prefix_with("MATERIALIZED", dialect="postgresql")
+    )
     held = notice_variant_hold_clause(
-        company_id, eis_notice_versions.c.purchase_number, eis_notice_versions.c.version_number
+        company_id,
+        eis_notice_versions.c.purchase_number,
+        eis_notice_versions.c.version_number,
+        _resolution_scope=hold_scope,
     )
     indexed_candidates = (
         select(eis_notice_versions.c.purchase_number, eis_notice_versions.c.version_number)
-        .select_from(eis_notice_versions.join(eis_notice_search_keys, key_join))
+        .select_from(
+            eis_notice_versions
+            if number is not None
+            else eis_notice_versions.join(eis_notice_search_keys, key_join)
+        )
         .where(
             and_(
                 eis_notice_versions.c.company_id == company_id,
                 current,
                 scope,
                 ~held,
-                eis_notice_search_keys.c["keys"].overlap(list(search_query_keys_v1(query))),
+                eis_notice_versions.c.purchase_number == number
+                if number is not None
+                else eis_notice_search_keys.c["keys"].overlap(list(search_query_keys_v1(query))),
             )
         )
     )
@@ -265,26 +319,19 @@ def search_eis_index(
         # Count from ledger keys rather than probing every canonical purchase.
         # Receipt-only corruption still holds the whole tenant, including rows
         # without a corresponding ledger key.
-        held_keys = union_all(
-            *(
-                select(table.c.purchase_number, table.c.version_number).where(
-                    table.c.company_id == company_id
-                )
-                for table in (eis_notice_variants, eis_notice_variant_origins)
-            )
-        ).subquery("held_keys")
         held_rows = (
             select(func.count(func.distinct(eis_notice_versions.c.purchase_number)))
             .select_from(
                 eis_notice_versions.join(
-                    held_keys,
+                    hold_scope,
                     and_(
-                        held_keys.c.purchase_number == eis_notice_versions.c.purchase_number,
-                        held_keys.c.version_number >= eis_notice_versions.c.version_number,
+                        hold_scope.c.company_id == eis_notice_versions.c.company_id,
+                        hold_scope.c.purchase_number == eis_notice_versions.c.purchase_number,
+                        hold_scope.c.version_number == eis_notice_versions.c.version_number,
                     ),
                 )
             )
-            .where(eis_notice_versions.c.company_id == company_id, current, scope, held)
+            .where(eis_notice_versions.c.company_id == company_id, held)
             .scalar_subquery()
         )
         held_count = connection.scalar(
@@ -321,7 +368,7 @@ def search_eis_index(
                     )
                 ),
             )
-            if version_count > key_count
+            if number is None and version_count > key_count
             else indexed_candidates
         ).subquery("candidates")
         completed_windows = (
@@ -401,7 +448,15 @@ def search_eis_index(
                     number: resolve_procedure_state(events, purchase_number=number, now=now)
                     for number, events in events_by_number.items()
                 }
-                compared = compare_indexed_notices(notices, query, now=now, procedure_states=states)
+                if pager is not None:
+                    compared, reused = _compare_page_batch(
+                        company_id, tuple(notices), query, now, states
+                    )
+                    reused_count += len(notices) if reused else 0
+                else:
+                    compared = compare_indexed_notices(
+                        notices, query, now=now, procedure_states=states
+                    )
                 matched_count += len(compared.matched_notices)
                 strong_count += sum(
                     item.match_quality == "STRONG" for item in compared.matched_notices
@@ -413,6 +468,13 @@ def search_eis_index(
                     and (not exclude_failed or item.application_status != "FAIL")
                 ]
                 eligible_count += len(eligible)
+                if on_matches is not None:
+                    on_matches(
+                        tuple(
+                            _indexed_lead(item, window_by_digest[item.snapshot.xml_sha256])
+                            for item in eligible
+                        )
+                    )
                 if pager is not None:
                     eligible = [
                         item
@@ -439,50 +501,7 @@ def search_eis_index(
                     if digest in kept_digests
                 }
     output = tuple(
-        EisIndexedLead(
-            purchase_number=item.snapshot.purchase_number,
-            document_type=item.snapshot.document_type,
-            version_number=item.snapshot.version_number,
-            title=item.snapshot.title,
-            notice_url=(
-                "https://zakupki.gov.ru/epz/order/notice/"
-                f"{_NOTICE_PAGES[item.snapshot.document_type]}"
-                "/view/common-info.html"
-                f"?regNumber={item.snapshot.purchase_number}"
-            ),
-            nmck_rub=item.snapshot.nmck_rub,
-            deadline=item.snapshot.deadline,
-            application_status=item.application_status,
-            economic_status=item.economics_status,
-            match_quality=item.match_quality,
-            matched_terms=item.matched_terms,
-            match_locator=item.match_locator,
-            term_evidence=item.term_evidence,
-            reasons=item.reasons,
-            source_window=source_windows[item.snapshot.xml_sha256],
-            source_member=item.snapshot.source_member,
-            xml_sha256=item.snapshot.xml_sha256,
-            lot_items=tuple(
-                EisIndexedLotItem(
-                    name=lot.name,
-                    ktru_code=lot.ktru_code,
-                    okpd2_code=lot.okpd2_code,
-                    quantity=lot.quantity,
-                    unit=lot.unit,
-                    locator=lot.locator,
-                )
-                for lot in item.snapshot.lot_items
-            ),
-            attachments=tuple(
-                EisIndexedAttachment(
-                    filename=attachment.filename,
-                    url=attachment.url,
-                    locator=attachment.locator,
-                )
-                for attachment in item.snapshot.attachments
-            ),
-        )
-        for item in leaders
+        _indexed_lead(item, source_windows[item.snapshot.xml_sha256]) for item in leaders
     )
     fingerprint, next_cursor = (
         pager.finish(
@@ -509,6 +528,8 @@ def search_eis_index(
         pending_windows=pending_windows,
         requested_region_codes=requested_region_codes,
         evaluated_candidate_notices=evaluated_count,
+        compared_candidate_notices=evaluated_count - reused_count,
+        reused_candidate_notices=reused_count,
         unindexed_versions=version_count - key_count,
         latest_source_publication=latest_source_publication,
         compared_at=now,
@@ -517,4 +538,103 @@ def search_eis_index(
         next_cursor=next_cursor,
         page_snapshot_sha256=fingerprint,
         snapshot_at=now if pager is not None else None,
+    )
+
+
+def _compare_page_batch(
+    company: str,
+    notices: tuple[EisNoticeSnapshot, ...],
+    query: str,
+    at: datetime,
+    states: dict[str, EisProcedureState],
+) -> tuple[EisIndexComparison, bool]:
+    key = PAGE_COMPARISONS.key(
+        company,
+        "44",
+        query,
+        at,
+        json.dumps(_STATES.dump_python(states, mode="json"), sort_keys=True).encode(),
+        chunks=(_SNAPSHOT.dump_json(notice) for notice in notices),
+    )
+    cached = PAGE_COMPARISONS.get(key)
+    if cached is not None:
+        data = json.loads(cached)
+        by_number = {notice.purchase_number: notice for notice in notices}
+        matched = tuple(
+            _COMPARED.validate_python(
+                dict(record["comparison"], snapshot=by_number[record["number"]])
+            )
+            for record in data["matched"]
+        )
+        return EisIndexComparison(query, data["inspected"], matched), True
+    compared = compare_indexed_notices(notices, query, now=at, procedure_states=states)
+    # Exclude the large immutable XML-derived snapshot from retained values;
+    # every page reads and validates its current source batches again.
+    PAGE_COMPARISONS.put(
+        key,
+        json.dumps(
+            {
+                "inspected": compared.inspected_current_notices,
+                "matched": [
+                    {
+                        "number": item.snapshot.purchase_number,
+                        "comparison": _COMPARED.dump_python(
+                            item, mode="json", exclude={"snapshot"}
+                        ),
+                    }
+                    for item in compared.matched_notices
+                ],
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode(),
+    )
+    return compared, False
+
+
+def _indexed_lead(item: EisComparedNotice, window: str) -> EisIndexedLead:
+    return EisIndexedLead(
+        purchase_number=item.snapshot.purchase_number,
+        document_type=item.snapshot.document_type,
+        version_number=item.snapshot.version_number,
+        title=item.snapshot.title,
+        notice_url=(
+            "https://zakupki.gov.ru/epz/order/notice/"
+            f"{_NOTICE_PAGES[item.snapshot.document_type]}"
+            "/view/common-info.html"
+            f"?regNumber={item.snapshot.purchase_number}"
+        ),
+        nmck_rub=item.snapshot.nmck_rub,
+        deadline=item.snapshot.deadline,
+        application_status=item.application_status,
+        economic_status=item.economics_status,
+        match_quality=item.match_quality,
+        matched_terms=item.matched_terms,
+        match_locator=item.match_locator,
+        term_evidence=item.term_evidence,
+        reasons=item.reasons,
+        source_window=window,
+        source_member=item.snapshot.source_member,
+        xml_sha256=item.snapshot.xml_sha256,
+        lot_items=tuple(
+            EisIndexedLotItem(
+                name=lot.name,
+                ktru_code=lot.ktru_code,
+                okpd2_code=lot.okpd2_code,
+                quantity=lot.quantity,
+                unit=lot.unit,
+                locator=lot.locator,
+            )
+            for lot in item.snapshot.lot_items
+        ),
+        attachments=tuple(
+            EisIndexedAttachment(
+                filename=attachment.filename,
+                url=attachment.url,
+                locator=attachment.locator,
+                reference_status=attachment.reference_status,
+                aliases=attachment.aliases,
+            )
+            for attachment in item.snapshot.attachments
+        ),
     )

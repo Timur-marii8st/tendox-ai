@@ -19,6 +19,38 @@ from test_eis_223_archive import xml, zip_bytes
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
 
 
+@pytest.mark.parametrize(
+    "value,query,expected",
+    [
+        ("Услуги по оценке ценных бумаг", "бумага", False),
+        ("Операции с ценными бумагами", "бумага", False),
+        ("Услуги по оценке ценных бумаг", "ценные бумаги", True),
+        ("Ценные бумаги и офисная бумага", "бумага", True),
+        ("Бумага офисная и ценные бумаги", "бумага", True),
+        ("Поставка бумаги офисной", "бумага", True),
+        ("Определение цены бумаги для печати", "бумага", True),
+        ("Мониторинг цен бумаги офисной", "бумага", True),
+    ],
+)
+def test_paper_and_securities_sense_in_223_fields(value, query, expected):
+    raw = xml().decode().replace("Поставка бумаги", value)
+    raw = raw.replace("Бумага для печати", value).replace("Бумага А4 80", value)
+    notice = parse_notice223_xml(raw.encode(), source_member="synthetic.xml")
+    lead = compare_notice223(
+        notice,
+        query,
+        now=NOW,
+        source_window="getDocsIP/RI223/77/2026-10-01+03:00/purchaseNoticeAESMBO",
+        source_response_sha256="b" * 64,
+        archive_sha256="c" * 64,
+    )
+    assert (lead is not None) is expected
+    if lead is not None:
+        assert lead.match_quality == "STRONG"
+        assert lead.application_status == "UNKNOWN"
+        assert lead.term_evidence[0].source_value == value
+
+
 @pytest.mark.parametrize("size", [0, 200, 451])
 def test_search_visits_all_bounded_batches_and_matches_global_oracle(size):
     from contextlib import contextmanager
@@ -243,13 +275,50 @@ def test_four_archive_source_set_binds_and_preflights_completely():
     }
 
 
-def test_five_complete_archives_report_count_limit_after_exact_set_binding():
-    initial, prepared, downloaded = source_set(5)
+def test_nine_complete_archives_report_count_limit_after_exact_set_binding():
+    initial, prepared, downloaded = source_set(9)
     with pytest.raises(Eis223IndexConflict, match="ARCHIVE_COUNT_LIMIT"):
         bind_notice223_window(KEY, initial, prepared, downloaded)
     downloaded.pop(next(iter(downloaded)))
     with pytest.raises(Eis223IndexConflict, match="ARCHIVE_SET_MISMATCH"):
         bind_notice223_window(KEY, initial, prepared, downloaded)
+
+
+def test_five_archives_with_433_members_form_one_complete_window():
+    initial, prepared, downloaded = source_set(5)
+    offset = 0
+    for source_url, count in zip(downloaded, (100, 100, 100, 100, 33), strict=True):
+        downloaded[source_url] = zip_bytes(
+            [
+                (
+                    f"notice-{offset + i}.xml",
+                    xml().replace(b"32600000001", f"326{offset + i:08d}".encode()),
+                )
+                for i in range(1, count + 1)
+            ]
+        )
+        offset += count
+    ready = bind_notice223_window(KEY, initial, prepared, downloaded)
+    inspections, manifest = preflight_notice223_window("tenant-a", ready)
+    assert len(inspections) == 5
+    assert sum(len(item.records) for item in inspections) == 433
+    assert len(manifest) == 64
+
+
+def test_801_members_refused_before_any_xml_parse(monkeypatch):
+    import procurement.storage.eis_223_index as subject
+
+    initial, prepared, downloaded = source_set(5)
+    for source_url, count in zip(downloaded, (200, 200, 200, 200, 1), strict=True):
+        downloaded[source_url] = zip_bytes([(f"notice-{i}.xml", xml()) for i in range(count)])
+    ready = bind_notice223_window(KEY, initial, prepared, downloaded)
+
+    def no_parse(*args, **kwargs):
+        pytest.fail("aggregate member refusal must precede XML parsing")
+
+    monkeypatch.setattr(subject, "inspect_notice223_archive", no_parse)
+    with pytest.raises(Eis223IndexConflict, match="WINDOW_MEMBER_LIMIT"):
+        preflight_notice223_window("tenant-a", ready)
 
 
 def test_duplicate_source_uid_is_set_mismatch_not_count_success():
@@ -401,3 +470,41 @@ def test_prefix_collision_is_not_a_match():
         )
         is None
     )
+
+
+def test_complete_notice_window_above32mib_is_atomic_preflight():
+    from io import BytesIO
+    from zipfile import ZIP_STORED, ZipFile
+
+    from procurement.sources.eis_223_window_limits import MAX_NOTICE_COMPRESSED_BYTES
+
+    initial, prepared, downloaded = source_set(4)
+    for i, ref in enumerate(prepared.prepared_archives, 1):
+        raw = (
+            xml().replace(b"32600000001", f"3260000000{i}".encode())
+            + b"<!--"
+            + b"x" * (8_500_000 - 7)
+            + b"-->"
+        )
+        stream = BytesIO()
+        with ZipFile(stream, "w", compression=ZIP_STORED) as z:
+            z.writestr(f"large-{i}.xml", raw)
+        downloaded[ref.url] = stream.getvalue()
+    ready = bind_notice223_window(KEY, initial, prepared, downloaded)
+    assert 32 * 1024**2 < sum(map(len, ready.archives)) < MAX_NOTICE_COMPRESSED_BYTES
+    inspected, _ = preflight_notice223_window("tenant-a", ready)
+    assert sum(len(a.records) for a in inspected) == 4
+
+
+def test_notice_window_above40mib_rejected_before_any_xml(monkeypatch):
+    import procurement.storage.eis_223_index as subject
+
+    ready = window()
+    oversized = ready.model_copy(update={"archives": (b"x" * (40 * 1024**2 + 1),)})
+    monkeypatch.setattr(
+        subject,
+        "inspect_notice223_archive",
+        lambda *a, **k: pytest.fail("must reject headers before parse"),
+    )
+    with pytest.raises(Eis223IndexConflict, match="WINDOW_BYTES_LIMIT"):
+        preflight_notice223_window("tenant-a", oversized)

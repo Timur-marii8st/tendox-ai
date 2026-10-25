@@ -52,6 +52,48 @@ def counts(storage, company):
         )
 
 
+def test_paper_sense_filters_securities_after_coarse_sql_prefilter(storage):
+    company = "paper-sense223-" + uuid4().hex
+    financial = xml().decode().replace("Поставка бумаги", "Оценка ценных бумаг")
+    financial = financial.replace("Бумага для печати", "Оценка ценных бумаг").replace(
+        "Бумага А4 80", "Оценка ценных бумаг"
+    )
+    paper = xml().replace(b"32600000001", b"32600000002")
+    price = xml().decode().replace("32600000001", "32600000003")
+    for field in ("Поставка бумаги", "Бумага для печати", "Бумага А4 80"):
+        price = price.replace(field, "Мониторинг цен бумаги офисной")
+    ingest_notice223_window(
+        storage,
+        company,
+        window(
+            zip_bytes(
+                [
+                    ("financial.xml", financial.encode()),
+                    ("paper.xml", paper),
+                    ("price.xml", price.encode()),
+                ]
+            )
+        ),
+        actor_id="test",
+        now=NOW,
+    )
+    before = counts(storage, company)
+    result = search_notice223_index(storage, company, "бумага", now=NOW, paginate=True)
+    assert result.evaluated_candidates == 3
+    assert [lead.notice.purchase_number for lead in result.matched] == [
+        "32600000002",
+        "32600000003",
+    ]
+    assert result.matched[0].match_quality == "STRONG"
+    explicit = search_notice223_index(storage, company, "ценные бумаги", now=NOW)
+    financial_lead = next(
+        lead for lead in explicit.matched if lead.notice.purchase_number == "32600000001"
+    )
+    assert financial_lead.match_quality == "STRONG"
+    assert search_notice223_index(storage, company + "-other", "бумага", now=NOW).matched_count == 0
+    assert counts(storage, company) == before
+
+
 def test_search_global_top100_after_multiple_batches_latest_tenant_and_no_writes(
     storage, monkeypatch
 ):
@@ -374,7 +416,6 @@ def test_223_quotation_intake_preserves_family_and_sql_refuses_relabelled_window
         match="223 quotation history must be preserved",
     )
     assert counts(storage, company) == before
-
 
 
 def test_schema_observations_are_exact_immutable_scoped_and_preserve_fail(storage):
@@ -930,4 +971,3 @@ def test_223_refresh_families_are_fair_bounded_and_sql_scoped(storage):
     assert counts(storage, company) == guard_before
     with storage.transaction(company, consistent_read=True) as conn:
         assert conn.scalar(select(func.count()).select_from(eis_223_sync_attempts)) == attempt_count
-

@@ -21,7 +21,14 @@ from procurement.sources.eis_223_window_limits import (
     MAX_ARCHIVE_BYTES,
     MAX_NOTICE_COMPRESSED_BYTES,
 )
-from procurement.sources.eis_feed_sync import EisFeedTransport, EisSyncError, _parsed_post, _request
+from procurement.sources.eis_feed_sync import (
+    EisFeedTransport,
+    EisSourceError,
+    EisSyncError,
+    PreparedWait,
+    _parsed_post,
+    _request,
+)
 from procurement.storage.eis_223_index import (
     Eis223ReadyWindow,
     bind_notice223_window,
@@ -34,6 +41,7 @@ class Eis223Observation:
     status: Literal["SYNCED", "NO_DATA", "PREPARING", "SERVICE_ERROR"]
     response_sha256: str
     window: Eis223ReadyWindow | None = None
+    source_error: EisSourceError | None = None
 
 
 @dataclass(frozen=True)
@@ -54,10 +62,7 @@ def window_key(
 ) -> str:
     if document_type not in SUPPORTED_DOCUMENT_TYPES:
         raise EisSyncError("DOCUMENT_TYPE_UNSUPPORTED")
-    return (
-        f"getDocsIP/RI223/{validate_region_code(region)}/"
-        f"{day.isoformat()}+03:00/{document_type}"
-    )
+    return f"getDocsIP/RI223/{validate_region_code(region)}/{day.isoformat()}+03:00/{document_type}"
 
 
 async def fetch_notice223_day(
@@ -70,6 +75,7 @@ async def fetch_notice223_day(
     document_type: Eis223DocumentType = DOCUMENT_TYPE,
     poll_attempts: int = 4,
     poll_delay_seconds: float = 10,
+    prepared_wait: PreparedWait | None = None,
 ) -> Eis223Observation:
     region = validate_region_code(region)
     key = window_key(day, document_type, region=region)
@@ -89,11 +95,19 @@ async def fetch_notice223_day(
     ):
         raise EisSyncError("INITIAL_REQUEST_MISMATCH")
     if initial.state in {"NO_DATA", "SERVICE_ERROR"}:
-        return Eis223Observation(initial.state, initial.source_sha256)
+        return Eis223Observation(
+            initial.state,
+            initial.source_sha256,
+            source_error=(
+                EisSourceError("INITIAL", service_code=initial.error_code)
+                if initial.state == "SERVICE_ERROR"
+                else None
+            ),
+        )
     if initial.state != "LINKS_PENDING":
         raise EisSyncError("INITIAL_STATE_INVALID")
     for _ in range(poll_attempts):
-        await asyncio.sleep(poll_delay_seconds)
+        await (prepared_wait or asyncio.sleep)(poll_delay_seconds)
         poll_uid = str(uuid4())
         prepared = await _parsed_post(
             transport,
@@ -109,7 +123,11 @@ async def fetch_notice223_day(
         ):
             raise EisSyncError("PREPARED_REQUEST_MISMATCH")
         if prepared.state == "SERVICE_ERROR":
-            return Eis223Observation("SERVICE_ERROR", prepared.source_sha256)
+            return Eis223Observation(
+                "SERVICE_ERROR",
+                prepared.source_sha256,
+                source_error=EisSourceError("PREPARED", service_code=prepared.error_code),
+            )
         if prepared.state == "PREPARING":
             continue
         # Verify the full set and every URL before any GET. Placeholder bytes are never ingested.
@@ -124,7 +142,22 @@ async def fetch_notice223_day(
         for ref in prepared.prepared_archives:
             status, raw = await transport.download(ref.url, token)
             if status != 200 or not raw or len(raw) > MAX_ARCHIVE_BYTES or token.encode() in raw:
-                raise EisSyncError("ARCHIVE_CONTENT_REJECTED")
+                raise EisSyncError(
+                    "ARCHIVE_CONTENT_REJECTED",
+                    source_error=EisSourceError(
+                        "ARCHIVE",
+                        http_status=status if 100 <= status <= 599 else None,
+                        category=(
+                            "HTTP_STATUS"
+                            if status != 200
+                            else "RESPONSE_EMPTY"
+                            if not raw
+                            else "RESPONSE_SIZE"
+                            if len(raw) > MAX_ARCHIVE_BYTES
+                            else "TOKEN_REFLECTION"
+                        ),
+                    ),
+                )
             compressed_bytes += len(raw)
             if compressed_bytes > MAX_NOTICE_COMPRESSED_BYTES:
                 raise EisSyncError("WINDOW_BYTES_LIMIT")

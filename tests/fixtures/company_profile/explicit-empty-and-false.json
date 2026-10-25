@@ -1,0 +1,259 @@
+{
+  "schema_version": "company-profile-handoff-v1",
+  "selection": {
+    "schema_version": "company-profile-selection-v1",
+    "company_id": "synthetic-example-explicit-empty-and-false",
+    "selection_id": "00000000-0000-4000-8000-000000000003",
+    "profile_ref": {
+      "company_id": "synthetic-example-explicit-empty-and-false",
+      "version": 1,
+      "snapshot_sha256": "e172534a5c1dc651e0846a7fec1328df130281affd22555da1739dffc007ac5c"
+    },
+    "selected_at": "2026-10-14T20:54:25.972971Z",
+    "selected_by": "synthetic-fixture-operator",
+    "audit_event_id": "synthetic-selection-audit-3"
+  },
+  "profile_ref": {
+    "company_id": "synthetic-example-explicit-empty-and-false",
+    "version": 1,
+    "snapshot_sha256": "e172534a5c1dc651e0846a7fec1328df130281affd22555da1739dffc007ac5c"
+  },
+  "profile_snapshot": {
+    "schema_version": "company-profile-snapshot-v1",
+    "company_id": "synthetic-example-explicit-empty-and-false",
+    "version": 1,
+    "parent_version": null,
+    "created_at": "2026-10-14T20:54:25.972971Z",
+    "created_by": "synthetic-fixture-operator",
+    "effective_at": "2026-10-14T20:54:25.972971Z",
+    "currency": "RUB",
+    "amount_basis": "EX_VAT",
+    "facts": {
+      "identity.name": {
+        "knowledge": "KNOWN",
+        "value": "Синтетический пример пустых списков",
+        "sources": [
+          {
+            "company_id": "synthetic-example-explicit-empty-and-false",
+            "provenance": {
+              "document_id": "profile-command:521e773c3191518fe530b587cf1003f222400cb545277f936735490d740b03bc",
+              "locator": "identity.name",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "521e773c3191518fe530b587cf1003f222400cb545277f936735490d740b03bc",
+            "recorded_at": "2026-10-14T20:54:25.972971Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "identity.inn": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "identity.kpp": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "identity.ogrn": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "identity.legal_form": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.all_russia": {
+        "knowledge": "KNOWN",
+        "value": false,
+        "sources": [
+          {
+            "company_id": "synthetic-example-explicit-empty-and-false",
+            "provenance": {
+              "document_id": "profile-command:521e773c3191518fe530b587cf1003f222400cb545277f936735490d740b03bc",
+              "locator": "geography.all_russia",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "521e773c3191518fe530b587cf1003f222400cb545277f936735490d740b03bc",
+            "recorded_at": "2026-10-14T20:54:25.972971Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "geography.federal_districts": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.regions": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.cities": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "geography.max_distance_km": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.min_contract_amount": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_contract_amount": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.min_margin": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.min_expected_profit": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_contract_without_extra_approval": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_application_security": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.max_performance_security": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "finance.price_floor_margin": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "okved": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "business_description": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "supplied_goods": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "performed_works": {
+        "knowledge": "KNOWN",
+        "value": [],
+        "sources": [
+          {
+            "company_id": "synthetic-example-explicit-empty-and-false",
+            "provenance": {
+              "document_id": "profile-command:521e773c3191518fe530b587cf1003f222400cb545277f936735490d740b03bc",
+              "locator": "performed_works",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "521e773c3191518fe530b587cf1003f222400cb545277f936735490d740b03bc",
+            "recorded_at": "2026-10-14T20:54:25.972971Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "provided_services": {
+        "knowledge": "KNOWN",
+        "value": [],
+        "sources": [
+          {
+            "company_id": "synthetic-example-explicit-empty-and-false",
+            "provenance": {
+              "document_id": "profile-command:521e773c3191518fe530b587cf1003f222400cb545277f936735490d740b03bc",
+              "locator": "provided_services",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "521e773c3191518fe530b587cf1003f222400cb545277f936735490d740b03bc",
+            "recorded_at": "2026-10-14T20:54:25.972971Z",
+            "recorded_by": "synthetic-fixture-operator",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "enabled_platforms": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "subcontracting_allowed": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "allowed_procedure_methods": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      },
+      "prohibitions": {
+        "knowledge": "UNKNOWN",
+        "value": null,
+        "sources": [],
+        "reason": "NOT_PROVIDED"
+      }
+    },
+    "critical_settings_status": "OWNER_AUTHORIZATION_UNAVAILABLE",
+    "snapshot_sha256": "e172534a5c1dc651e0846a7fec1328df130281affd22555da1739dffc007ac5c",
+    "audit_event_id": "synthetic-audit-3"
+  }
+}

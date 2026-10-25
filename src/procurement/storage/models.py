@@ -807,7 +807,8 @@ eis_223_windows = Table(
     CheckConstraint("btrim(company_id) <> ''", name="ck_eis_223_company"),
     CheckConstraint(
         "window_key ~ '^getDocsIP/RI223/[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}"
-        "[+]03:00/(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice)$'",
+        "[+]03:00/(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice)$' "
+        "OR window_key ~ '^getDocsIP/RI223/by-number/[0-9]{11}/purchaseNoticeKESMBO$'",
         name="ck_eis_223_window",
     ),
     CheckConstraint(
@@ -816,7 +817,7 @@ eis_223_windows = Table(
         name="ck_eis_223_window_hashes",
     ),
     CheckConstraint(
-        "archive_count BETWEEN 1 AND 4 AND record_count >= 1", name="ck_eis_223_counts"
+        "archive_count BETWEEN 1 AND 8 AND record_count >= 1", name="ck_eis_223_counts"
     ),
 )
 eis_223_blobs = Table(
@@ -900,9 +901,11 @@ eis_223_notice_versions = Table(
     CheckConstraint(
         "COALESCE((jsonb_typeof(snapshot) = 'object' AND snapshot->>'law' = '223' "
         "AND snapshot->>'document_type' IN "
-        "('purchaseNoticeAESMBO','purchaseNoticeZKESMBO','purchaseNotice') "
+        "('purchaseNoticeAESMBO','purchaseNoticeZKESMBO','purchaseNotice','purchaseNoticeKESMBO') "
         "AND snapshot->>'document_type' = split_part(window_key, '/', 5) "
         "AND snapshot->>'purchase_number' = purchase_number "
+        "AND (split_part(window_key, '/', 3) <> 'by-number' "
+        "OR purchase_number = split_part(window_key, '/', 4)) "
         "AND (snapshot->>'version_number')::integer = version_number "
         "AND snapshot->>'xml_sha256' = xml_sha256), false)",
         name="ck_eis_223_snapshot_identity",

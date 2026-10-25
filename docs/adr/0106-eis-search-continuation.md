@@ -82,3 +82,30 @@ production6 корпусе 223: 216 совпадений; три страниц�
 Evidence: `tmp/improvement-program/m2/overnight-20261009-v1/03-pagination`
 в основном checkout; результаты 44 и ресурсные ограничения фиксируются
 в тематическом [отчёте](../eis/search/113-eis-search-continuation.md).
+
+
+## B9 — общий порядок по цене и месту поставки (кандидат 22.10.2026)
+
+Новый read-only `/v1/tender-discovery/global-price` выбирает top100 среди всех
+совпадений сохранённого tenant-корпуса обоих законов. Оба существующих full-stream
+search читаются в одной REPEATABLE READ READ ONLY transaction; bounded observer
+сравнивает кандидатов до page limit. Legacy API/order и memo gates сохраняются.
+Общий ключ: hard block, отсутствие сопоставимой цены, отрицательный source Decimal,
+закон и номер; знак Decimal меняется без округления контекстом. 223 multi-lot,
+чужая валюта, text/formula и неподтверждённая цена не получают выдуманную сумму.
+Истёкшие 223 блокируются и идут после неблокированных; 44 сохраняет scope срока.
+
+Регион применяется до отбора страницы по exact XML delivery facts и проверенному
+GAR catalog binding, без вывода из адреса заказчика. Отсутствующий/ошибочный source
+остаётся UNKNOWN; включение таких строк требует явного checkbox. Одноразовый cache
+хранит не более одного проверенного архива50MiB и одного проверенного catalog8MiB,
+только внутри текущего read snapshot; persisted projection/новой миграции нет.
+Metadata читается batch до500 refs с тем же source hold predicate; полный archive
+binding проверяется перед reuse, архивы внутри batch сгруппированы для одного чтения.
+
+Единый cursor law=all связывает authenticated tenant, query, выбранный закон,
+регион, include-unknown, версию порядка, snapshot clock, полный evidence digest и
+последний общий ключ. Следующая страница продолжает совместный поток44/223,
+новые импорты исключены; изменение live gates/region evidence вызывает restart.
+Неоднозначная цена/UNKNOWN не является допуском, а большой бюджет — прибылью.
+Полнота сохранённой базы относительно всей ЕИС по-прежнему UNKNOWN.

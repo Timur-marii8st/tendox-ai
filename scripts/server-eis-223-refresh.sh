@@ -64,9 +64,13 @@ if [[ $(sudo -n docker inspect -f '{{.State.Health.Status}}' vibe-seller-eis-pro
   echo '{"status":"BLOCKED","reason":"PROXY_UNAVAILABLE","attempted":0}'
   exit 69
 fi
-marker_owned=1
-sudo -n docker exec vibe-seller-api-1 python -c \
-  'from pathlib import Path; Path("/var/lib/eis-browser/eis-223-refresh.request").touch()'
+# Older READY probes retain their original priority-marker contract.
+urgent=$(printf '%s' "$probe" | python3 -c 'import json,sys; print(int(json.load(sys.stdin).get("urgent", True)))')
+if [[ "$urgent" == 1 ]]; then
+  marker_owned=1
+  sudo -n docker exec vibe-seller-api-1 python -c \
+    'from pathlib import Path; Path("/var/lib/eis-browser/eis-223-refresh.request").touch()'
+fi
 exec 9>/home/syurai/vibe-seller-state/eis-import.lock
 wait_started=$SECONDS
 # wait is a shell builtin: TERM interrupts it and cleanup reaps our waiter.
@@ -86,7 +90,7 @@ lease_started=$SECONDS
 eis_metric work_start
 eis_metrics_work_active=1
 if output=$(sudo -n docker compose -p vibe-seller -f docker-compose.server.yml run --rm --no-deps \
-  -e EIS_223_REGIONAL_ENABLED=1 \
+  -e EIS_223_REGIONAL_ENABLED=1 -e EIS_JOINT_BUDGET_ENABLED=1 \
   -v /home/syurai/vibe-seller/scripts/server-eis-223-refresh.py:/tmp/refresh223.py:ro \
   worker python /tmp/refresh223.py); then exit_code=0; else exit_code=$?; fi
 if [[ "$exit_code" == 0 ]]; then work_result=SUCCESS; else work_result=ERROR; fi

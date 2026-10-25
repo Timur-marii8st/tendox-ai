@@ -7,19 +7,23 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import sqlite3
 import stat
 import tempfile
+import time
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from itertools import chain
 from pathlib import Path, PurePosixPath
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self, cast
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+FailureCode = Annotated[str, StringConstraints(min_length=1, max_length=100)]
 ColumnKind = Literal[
     "TEXT", "INTEGER", "DECIMAL", "BOOLEAN", "DATETIME", "DATE", "UUID", "JSON", "ARRAY"
 ]
@@ -62,6 +66,29 @@ FK_PARENTS = frozenset(
     }
 )
 EXPECTED_RELATIONS = RUNTIME_44 | RUNTIME_223 | FK_PARENTS
+V3_FRAGMENT_RELATIONS = (
+    "audit_events",
+    "eis_223_event_schema_checks",
+    "eis_223_events",
+    "eis_223_lot_event_schema_checks",
+    "eis_223_lot_events",
+    "eis_223_notice_versions",
+    "eis_223_schema_checks",
+    "eis_notice_projection_batches",
+    "eis_notice_projection_decisions",
+    "eis_notice_variant_receipts",
+    "eis_notice_variants",
+    "eis_notice_versions",
+)
+V3_FRAGMENT_RELATION_SET = frozenset(V3_FRAGMENT_RELATIONS)
+V3_SQLITE_IDENTITY_BYTES = 16_384
+V3_MEMBERSHIP_PAGES = 262_144
+V3_VERIFIER_PAGES = 2_097_152
+V3_PAGE_SIZE = 4_096
+V3_COLLECTOR_FREE_BYTES = 10_821_304_320
+V3_VERIFIER_FREE_BYTES = 13_975_420_928
+V3_SQLITE_TIMEOUT_SECONDS = 900
+V3_SQLITE_PROGRESS_OPCODES = 1_000
 
 
 class StrictModel(BaseModel):
@@ -121,6 +148,36 @@ class CaptureLimitsV2(CaptureLimits):
     audit_max_fragments: Literal[8]
 
 
+class CaptureLimitsV3(StrictModel):
+    shard_bytes: Literal[8_388_608]
+    metadata_bytes: Literal[16_777_216]
+    max_shards: Literal[512, 4096]
+    total_payload_bytes: Literal[4_294_967_296, 17_179_869_184]
+    max_rows_per_relation: Literal[1_000_000]
+    batch_rows: Literal[8]
+    batch_bytes: Literal[67_108_864]
+    statement_timeout_ms: Literal[30_000]
+    lock_timeout_ms: Literal[1_000]
+    capture_timeout_seconds: Literal[900, 3600]
+    free_disk_min_bytes: Literal[5_368_709_120]
+
+    @model_validator(mode="after")
+    def exact_resource_profile(self) -> Self:
+        profile = (self.capture_timeout_seconds, self.total_payload_bytes, self.max_shards)
+        if profile not in {(900, 4_294_967_296, 512), (3600, 17_179_869_184, 4096)}:
+            raise ValueError("V3_RESOURCE_PROFILE_INVALID")
+        return self
+
+
+class FragmentationPolicyV3(StrictModel):
+    ordinary_raw_row_bytes: Literal[8_388_608]
+    audit_raw_row_bytes: Literal[33_554_432]
+    encoded_row_bytes: Literal[67_108_864]
+    fragment_bytes: Literal[8_388_608]
+    max_fragments: Literal[8]
+    relations: tuple[str, ...] = Field(min_length=12, max_length=12)
+
+
 class RuntimeFilePin(StrictModel):
     path: str
     sha256: Sha256
@@ -147,6 +204,19 @@ class CapturePlanV2(StrictModel):
     read_closure_sha256: Sha256
     source_pins: tuple[RuntimeFilePin, ...] = Field(min_length=1)
     limits: CaptureLimitsV2
+    relations: tuple[RelationSpec, ...] = Field(min_length=25, max_length=25)
+
+
+class CapturePlanV3(StrictModel):
+    version: Literal["eis-search-capture-plan-v3"]
+    plan_id: Literal["m2b1-full-tenant-search-projection-v3"]
+    tenant: str = Field(min_length=1)
+    schema_revision: Literal["20261006_08", "20261006_12"]
+    postgres_major: Literal[16]
+    read_closure_sha256: Sha256
+    source_pins: tuple[RuntimeFilePin, ...] = Field(min_length=1)
+    limits: CaptureLimitsV3
+    fragmentation: FragmentationPolicyV3
     relations: tuple[RelationSpec, ...] = Field(min_length=25, max_length=25)
 
 
@@ -192,6 +262,30 @@ class RelationDescriptorV2(RelationDescriptor):
     fragmented_rows: tuple[FragmentedAuditRowDescriptor, ...] = ()
 
 
+class RowFragmentDescriptorV3(StrictModel):
+    path: str
+    ordinal: int = Field(ge=0, lt=8)
+    offset: int = Field(ge=0, lt=67_108_864)
+    bytes: int = Field(ge=1, le=8_388_608)
+    sha256: Sha256
+
+
+class FragmentedRowDescriptorV3(StrictModel):
+    kind: Literal["ROW_FRAGMENTS_V3"]
+    relation: str
+    tenant: str
+    typed_primary_key: tuple[dict[str, object], ...]
+    logical_ordinal: int = Field(ge=0, lt=1_000_000)
+    whole_bytes: int = Field(gt=8_388_608, le=67_108_864)
+    whole_sha256: Sha256
+    fragment_count: int = Field(ge=2, le=8)
+    fragments: tuple[RowFragmentDescriptorV3, ...] = Field(min_length=2, max_length=8)
+
+
+class RelationDescriptorV3(RelationDescriptor):
+    fragmented_rows: tuple[FragmentedRowDescriptorV3, ...] = ()
+
+
 class CurrentMembership(StrictModel):
     law: Literal["44", "223"]
     rows: int = Field(ge=0)
@@ -225,6 +319,41 @@ class RuntimeIdentity(StrictModel):
     role_superuser: Literal[False]
     role_bypassrls: Literal[False]
     external: dict[str, str]
+
+
+class SqliteRuntimeIdentity(StrictModel):
+    version: Literal["eis-capture-sqlite-runtime-v1"]
+    sqlite_version: str = Field(min_length=1, max_length=80)
+    source_id: str = Field(min_length=1, max_length=300)
+    compile_options_sha256: Sha256
+
+
+class SqliteStateObservationV3(StrictModel):
+    purpose: Literal["COLLECTOR_MEMBERSHIP", "VERIFIER_SEMANTICS"]
+    runtime: SqliteRuntimeIdentity | None
+    configuration: Literal["PASS", "FAIL", "UNKNOWN"]
+    page_size: int | None = Field(ge=1, le=65_536)
+    max_page_count: int | None = Field(ge=1, le=2_097_152)
+    journal_mode: Literal["off"] | None
+    temp_store: Literal[2] | None
+    page_count_last_observed: int | None = Field(ge=0, le=2_097_152)
+    main_file_bytes_last_observed: int | None = Field(ge=0, le=8_589_934_592)
+    file_identity_unchanged: bool | None
+    connection_closed: bool | None
+    failure_code: FailureCode | None
+
+
+class TransientCleanupV3(StrictModel):
+    status: Literal["PASS", "FAIL", "UNKNOWN"]
+    membership_removed: bool | None
+    pending_removed: bool | None
+    failure_codes: tuple[FailureCode, ...] = Field(max_length=8)
+
+
+class CollectorStateV3(StrictModel):
+    membership: SqliteStateObservationV3 | None
+    pending_peak_bytes: int | None = Field(ge=0, le=67_108_864)
+    cleanup: TransientCleanupV3
 
 
 class CaptureManifest(StrictModel):
@@ -263,6 +392,25 @@ class CaptureManifestV2(StrictModel):
     files: tuple[str, ...]
 
 
+class CaptureManifestV3(StrictModel):
+    version: Literal["eis-search-capture-manifest-v3"]
+    status: Literal["COMPLETE"]
+    capture_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,99}$")
+    tenant: str
+    clock: AwareDatetime
+    plan_sha256: Sha256
+    collector_sha256: Sha256
+    verifier_sha256: Sha256
+    runtime: RuntimeIdentity
+    relations: tuple[RelationDescriptorV3, ...]
+    current_membership: tuple[CurrentMembership, CurrentMembership]
+    future_versions: tuple[FutureVersionDiagnostic, FutureVersionDiagnostic]
+    total_payload_bytes: int = Field(ge=0)
+    total_shards: int = Field(ge=0)
+    files: tuple[str, ...]
+    collector_state: CollectorStateV3
+
+
 class IncompleteCapture(StrictModel):
     version: Literal["eis-search-capture-incomplete-v1"]
     status: Literal["INCOMPLETE"]
@@ -288,6 +436,22 @@ class IncompleteCaptureV2(StrictModel):
     reasons: tuple[str, ...] = Field(min_length=1)
     actual_relation_rows: dict[str, int]
     files: tuple[str, ...]
+
+
+class IncompleteCaptureV3(StrictModel):
+    version: Literal["eis-search-capture-incomplete-v3"]
+    status: Literal["INCOMPLETE"]
+    capture_id: str
+    tenant: str
+    attempted_at: AwareDatetime
+    transaction_timestamp: AwareDatetime | None
+    snapshot_id: str | None
+    runtime: RuntimeIdentity | None
+    plan_sha256: Sha256
+    reasons: tuple[str, ...] = Field(min_length=1)
+    actual_relation_rows: dict[str, int]
+    files: tuple[str, ...]
+    collector_state: CollectorStateV3
 
 
 class VerificationReport(StrictModel):
@@ -316,8 +480,52 @@ class VerificationReportV2(StrictModel):
     source_raw_width_attestation: Literal["UNKNOWN"] = "UNKNOWN"
 
 
+class VerificationReportV3(StrictModel):
+    version: Literal["eis-search-capture-verification-v3"]
+    status: Literal["CAPTURE_CONTENT_VERIFIED", "FAIL", "INCOMPLETE"]
+    capture_origin_trust: Literal["UNKNOWN"] = "UNKNOWN"
+    package_manifest_sha256: Sha256 | None
+    external_manifest_digest_match: bool | None
+    reasons: tuple[str, ...]
+    relation_rows: dict[str, int]
+    total_payload_bytes: int
+    total_shards: int
+    raw_width_validation: Literal["DECODED_LOWER_BOUND_ONLY"] = "DECODED_LOWER_BOUND_ONLY"
+    source_raw_width_attestation: Literal["UNKNOWN"] = "UNKNOWN"
+    verifier_state: SqliteStateObservationV3 | None
+
+
 class CaptureFormatError(ValueError):
     """A capture package or plan violated its frozen contract."""
+
+
+def _validate_v3_sqlite_observation(
+    observation: SqliteStateObservationV3,
+    *,
+    purpose: Literal["COLLECTOR_MEMBERSHIP", "VERIFIER_SEMANTICS"],
+    expected_runtime: SqliteRuntimeIdentity,
+) -> None:
+    max_pages = V3_MEMBERSHIP_PAGES if purpose == "COLLECTOR_MEMBERSHIP" else V3_VERIFIER_PAGES
+    max_bytes = max_pages * V3_PAGE_SIZE
+    if (
+        observation.purpose != purpose
+        or observation.runtime != expected_runtime
+        or observation.configuration != "PASS"
+        or observation.page_size != V3_PAGE_SIZE
+        or observation.max_page_count != max_pages
+        or observation.journal_mode != "off"
+        or observation.temp_store != 2
+        or observation.page_count_last_observed is None
+        or observation.page_count_last_observed > max_pages
+        or observation.main_file_bytes_last_observed is None
+        or observation.main_file_bytes_last_observed > max_bytes
+        or observation.main_file_bytes_last_observed
+        != observation.page_count_last_observed * V3_PAGE_SIZE
+        or observation.file_identity_unchanged is not True
+        or observation.connection_closed is not True
+        or observation.failure_code is not None
+    ):
+        raise CaptureFormatError("V3_SQLITE_OBSERVATION_INVALID")
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -424,6 +632,173 @@ def _read_bounded(path: Path, limit: int) -> bytes:
         os.close(descriptor)
 
 
+def load_sqlite_runtime_identity(path: Path) -> SqliteRuntimeIdentity:
+    """Read the externally staged SQLite identity without following or buffering a large file."""
+    try:
+        return SqliteRuntimeIdentity.model_validate_json(
+            _read_bounded(path, V3_SQLITE_IDENTITY_BYTES)
+        )
+    except (ValueError, UnicodeDecodeError) as error:
+        raise CaptureFormatError("SQLITE_RUNTIME_IDENTITY_INVALID") from error
+
+
+def _sqlite_runtime_identity(database: sqlite3.Connection) -> SqliteRuntimeIdentity:
+    version = database.execute("SELECT sqlite_version()").fetchone()
+    source = database.execute("SELECT sqlite_source_id()").fetchone()
+    rows = database.execute("PRAGMA compile_options").fetchall()
+    if (
+        version is None
+        or source is None
+        or not isinstance(version[0], str)
+        or not isinstance(source[0], str)
+    ):
+        raise CaptureFormatError("SQLITE_RUNTIME_OBSERVATION_INVALID")
+    options: list[str] = []
+    for row in rows:
+        if len(row) != 1 or not isinstance(row[0], str) or not 1 <= len(row[0]) <= 1_024:
+            raise CaptureFormatError("SQLITE_COMPILE_OPTION_INVALID")
+        options.append(row[0])
+    if not options or len(options) > 256 or len(options) != len(set(options)):
+        raise CaptureFormatError("SQLITE_COMPILE_OPTION_INVALID")
+    return SqliteRuntimeIdentity(
+        version="eis-capture-sqlite-runtime-v1",
+        sqlite_version=version[0],
+        source_id=source[0],
+        compile_options_sha256=sha256_bytes(canonical_bytes(sorted(options))),
+    )
+
+
+def _validate_sqlite_file_facts(
+    *,
+    is_regular: bool,
+    is_symlink: bool,
+    mode: int,
+    uid: int,
+    nlink: int,
+    size: int,
+) -> None:
+    """Pure validator used by Windows tests; the public V3 path remains POSIX-only."""
+    if (
+        not is_regular
+        or is_symlink
+        or stat.S_IMODE(mode) != 0o600
+        or uid != 1_000
+        or nlink != 1
+        or size != 0
+    ):
+        raise CaptureFormatError("SQLITE_FILE_GUARD_INVALID")
+
+
+def _posix_sqlite_file_identity(path: Path) -> tuple[int, int]:
+    if os.name != "posix" or not hasattr(os, "geteuid") or os.geteuid() != 1_000:
+        raise CaptureFormatError("SQLITE_PLATFORM_UID_UNSUPPORTED")
+    try:
+        facts = path.lstat()
+    except OSError as error:
+        raise CaptureFormatError("SQLITE_FILE_GUARD_INVALID") from error
+    _validate_sqlite_file_facts(
+        is_regular=stat.S_ISREG(facts.st_mode),
+        is_symlink=stat.S_ISLNK(facts.st_mode),
+        mode=facts.st_mode,
+        uid=facts.st_uid,
+        nlink=facts.st_nlink,
+        size=facts.st_size,
+    )
+    return facts.st_dev, facts.st_ino
+
+
+class _SqliteDeadlineV3:
+    def __init__(
+        self, started: float | None = None, *, timeout_seconds: int = V3_SQLITE_TIMEOUT_SECONDS
+    ) -> None:
+        self.started = time.monotonic() if started is None else started
+        self.timeout_seconds = timeout_seconds
+
+    def check(self) -> None:
+        if time.monotonic() - self.started > self.timeout_seconds:
+            raise CaptureFormatError("SQLITE_DEADLINE")
+
+    def progress(self) -> int:
+        return int(time.monotonic() - self.started > self.timeout_seconds)
+
+
+def _configure_sqlite_connection_v3(
+    database: sqlite3.Connection,
+    *,
+    expected_runtime: SqliteRuntimeIdentity,
+    max_page_count: int,
+    deadline: _SqliteDeadlineV3,
+) -> tuple[SqliteRuntimeIdentity, int, int, Literal["off"], Literal[2], int]:
+    """Private connection core; public callers must perform the POSIX file guard first."""
+    deadline.check()
+    database.set_progress_handler(deadline.progress, V3_SQLITE_PROGRESS_OPCODES)
+    database.execute("PRAGMA busy_timeout=0")
+    observed = _sqlite_runtime_identity(database)
+    if observed != expected_runtime:
+        raise CaptureFormatError("SQLITE_RUNTIME_IDENTITY_MISMATCH")
+    database.execute(f"PRAGMA page_size={V3_PAGE_SIZE}")
+    applied_max = database.execute(f"PRAGMA main.max_page_count={max_page_count}").fetchone()
+    journal = database.execute("PRAGMA journal_mode=OFF").fetchone()
+    database.execute("PRAGMA temp_store=MEMORY")
+    page_size = database.execute("PRAGMA page_size").fetchone()
+    read_max = database.execute("PRAGMA main.max_page_count").fetchone()
+    temp_store = database.execute("PRAGMA temp_store").fetchone()
+    deadline.check()
+    if (
+        applied_max is None
+        or page_size is None
+        or read_max is None
+        or journal is None
+        or temp_store is None
+        or int(applied_max[0]) != max_page_count
+        or int(page_size[0]) != V3_PAGE_SIZE
+        or int(read_max[0]) != max_page_count
+        or str(journal[0]).lower() != "off"
+        or int(temp_store[0]) != 2
+    ):
+        raise CaptureFormatError("SQLITE_CONFIGURATION_MISMATCH")
+    page_count = database.execute("PRAGMA page_count").fetchone()
+    if page_count is None:
+        raise CaptureFormatError("SQLITE_CONFIGURATION_MISMATCH")
+    return observed, V3_PAGE_SIZE, max_page_count, "off", 2, int(page_count[0])
+
+
+def _commit_and_observe_sqlite_v3(
+    database: sqlite3.Connection,
+    deadline: _SqliteDeadlineV3,
+) -> int:
+    """Commit successful ephemeral state before its terminal page observation."""
+    deadline.check()
+    database.commit()
+    deadline.check()
+    row = database.execute("PRAGMA page_count").fetchone()
+    if row is None:
+        raise CaptureFormatError("SQLITE_OBSERVATION_INVALID")
+    observed = int(row[0])
+    deadline.check()
+    return observed
+
+
+def _empty_sqlite_observation(
+    purpose: Literal["COLLECTOR_MEMBERSHIP", "VERIFIER_SEMANTICS"],
+    failure_code: str,
+) -> SqliteStateObservationV3:
+    return SqliteStateObservationV3(
+        purpose=purpose,
+        runtime=None,
+        configuration="UNKNOWN",
+        page_size=None,
+        max_page_count=None,
+        journal_mode=None,
+        temp_store=None,
+        page_count_last_observed=None,
+        main_file_bytes_last_observed=None,
+        file_identity_unchanged=None,
+        connection_closed=None,
+        failure_code=failure_code,
+    )
+
+
 def _resolve_regular(root: Path, relative: str) -> Path:
     parsed = PurePosixPath(relative)
     if parsed.is_absolute() or ".." in parsed.parts or "\\" in relative:
@@ -440,7 +815,14 @@ def _resolve_regular(root: Path, relative: str) -> Path:
     return resolved
 
 
-def load_capture_plan(path: Path) -> tuple[CapturePlan | CapturePlanV2, bytes]:
+CapturePlanAny = CapturePlan | CapturePlanV2 | CapturePlanV3
+RelationDescriptorAny = RelationDescriptor | RelationDescriptorV2 | RelationDescriptorV3
+CaptureManifestAny = CaptureManifest | CaptureManifestV2 | CaptureManifestV3
+IncompleteCaptureAny = IncompleteCapture | IncompleteCaptureV2 | IncompleteCaptureV3
+VerificationReportAny = VerificationReport | VerificationReportV2 | VerificationReportV3
+
+
+def load_capture_plan(path: Path) -> tuple[CapturePlanAny, bytes]:
     try:
         path_stat = path.lstat()
     except OSError as error:
@@ -456,16 +838,18 @@ def load_capture_plan(path: Path) -> tuple[CapturePlan | CapturePlanV2, bytes]:
         raise CaptureFormatError("PLAN_JSON_INVALID")
     version = raw.get("version")
     if version == "eis-search-capture-plan-v1":
-        plan: CapturePlan | CapturePlanV2 = CapturePlan.model_validate(raw)
+        plan: CapturePlanAny = CapturePlan.model_validate(raw)
     elif version == "eis-search-capture-plan-v2":
         plan = CapturePlanV2.model_validate(raw)
+    elif version == "eis-search-capture-plan-v3":
+        plan = CapturePlanV3.model_validate(raw)
     else:
         raise CaptureFormatError("PLAN_VERSION_UNSUPPORTED")
     validate_plan(plan)
     return plan, content
 
 
-def validate_plan(plan: CapturePlan | CapturePlanV2) -> None:
+def validate_plan(plan: CapturePlanAny) -> None:
     names = [relation.name for relation in plan.relations]
     if len(names) != len(set(names)) or set(names) != EXPECTED_RELATIONS:
         raise CaptureFormatError("PLAN_RELATION_ALLOWLIST_MISMATCH")
@@ -512,6 +896,22 @@ def validate_plan(plan: CapturePlan | CapturePlanV2) -> None:
     }
     if omissions != {"eis_feed_archives": ("content",), "eis_223_blobs": ("content",)}:
         raise CaptureFormatError("PLAN_BINARY_PROJECTION_INVALID")
+    if isinstance(plan, CapturePlanV3):
+        policy = plan.fragmentation
+        if policy.relations != V3_FRAGMENT_RELATIONS:
+            raise CaptureFormatError("V3_FRAGMENT_RELATION_ALLOWLIST_MISMATCH")
+        specs = {relation.name: relation for relation in plan.relations}
+        for name in V3_FRAGMENT_RELATIONS:
+            relation = specs[name]
+            if name == "audit_events":
+                if relation.selection != "LINKED_AUDIT":
+                    raise CaptureFormatError("V3_FRAGMENT_RELATION_POLICY_INVALID")
+            elif (
+                relation.selection != "FULL_TENANT"
+                or relation.role == "FK_PARENT"
+                or not any(column.kind == "JSON" for column in relation.columns)
+            ):
+                raise CaptureFormatError("V3_FRAGMENT_RELATION_POLICY_INVALID")
     pin_paths = [pin.path for pin in plan.source_pins]
     if len(pin_paths) != len(set(pin_paths)) or any(
         PurePosixPath(path).is_absolute() or ".." in PurePosixPath(path).parts or "\\" in path
@@ -673,8 +1073,23 @@ def iter_encoded_row(spec: RelationSpec, row: Mapping[str, object]) -> Iterator[
     values = [encode_value(row[column.name], column.kind) for column in spec.columns]
     by_name = dict(zip((column.name for column in spec.columns), values, strict=True))
     payload = {"primary_key": [by_name[name] for name in spec.primary_key], "values": values}
-    yield from iter_canonical_bytes(payload)
-    yield b"\n"
+    # Bound physical writes and their disk/deadline checks without changing JSONL bytes.
+    chunk_bytes = 65_536
+    buffer = bytearray()
+    for chunk in chain(iter_canonical_bytes(payload), (b"\n",)):
+        if len(buffer) + len(chunk) < chunk_bytes:
+            buffer.extend(chunk)
+            continue
+        offset = 0
+        while offset < len(chunk):
+            amount = min(chunk_bytes - len(buffer), len(chunk) - offset)
+            buffer.extend(chunk[offset : offset + amount])
+            offset += amount
+            if len(buffer) == chunk_bytes:
+                yield bytes(buffer)
+                buffer.clear()
+    if buffer:
+        yield bytes(buffer)
 
 
 def decode_row(spec: RelationSpec, line: bytes) -> tuple[tuple[object, ...], dict[str, object]]:
@@ -786,9 +1201,12 @@ def _verification_failure(
     manifest_sha: str | None = None,
     *,
     version: Literal[
-        "eis-search-capture-verification-v1", "eis-search-capture-verification-v2"
+        "eis-search-capture-verification-v1",
+        "eis-search-capture-verification-v2",
+        "eis-search-capture-verification-v3",
     ] = "eis-search-capture-verification-v1",
-) -> VerificationReport | VerificationReportV2:
+    verifier_state: SqliteStateObservationV3 | None = None,
+) -> VerificationReportAny:
     values: dict[str, object] = dict(
         status=status,
         package_manifest_sha256=manifest_sha,
@@ -800,15 +1218,24 @@ def _verification_failure(
     )
     if version == "eis-search-capture-verification-v2":
         return VerificationReportV2(version=version, **values)
+    if version == "eis-search-capture-verification-v3":
+        return VerificationReportV3(version=version, verifier_state=verifier_state, **values)
     return VerificationReport(version=version, **values)
 
 
 def _verification_report(
-    version: Literal["eis-search-capture-verification-v1", "eis-search-capture-verification-v2"],
+    version: Literal[
+        "eis-search-capture-verification-v1",
+        "eis-search-capture-verification-v2",
+        "eis-search-capture-verification-v3",
+    ],
     **values: object,
-) -> VerificationReport | VerificationReportV2:
+) -> VerificationReportAny:
     if version == "eis-search-capture-verification-v2":
         return VerificationReportV2(version=version, **values)
+    if version == "eis-search-capture-verification-v3":
+        values.setdefault("verifier_state", None)
+        return VerificationReportV3(version=version, **values)
     return VerificationReport(version=version, **values)
 
 
@@ -817,21 +1244,40 @@ def verify_capture_package(
     plan_path: Path,
     *,
     expected_manifest_sha256: str | None = None,
-) -> VerificationReport | VerificationReportV2:
+    scratch_database: Path | None = None,
+    expected_sqlite_runtime: SqliteRuntimeIdentity | None = None,
+) -> VerificationReportAny:
     """Verify package bytes offline. External digest matching never self-asserts origin trust."""
     report_version: Literal[
-        "eis-search-capture-verification-v1", "eis-search-capture-verification-v2"
+        "eis-search-capture-verification-v1",
+        "eis-search-capture-verification-v2",
+        "eis-search-capture-verification-v3",
     ] = "eis-search-capture-verification-v1"
+    verifier_state: SqliteStateObservationV3 | None = None
     try:
         candidate_plan, _ = load_capture_plan(plan_path)
         if isinstance(candidate_plan, CapturePlanV2):
             report_version = "eis-search-capture-verification-v2"
+        elif isinstance(candidate_plan, CapturePlanV3):
+            report_version = "eis-search-capture-verification-v3"
+        if isinstance(candidate_plan, CapturePlanV3):
+            if scratch_database is None or expected_sqlite_runtime is None:
+                raise CaptureFormatError("V3_SQLITE_CONTEXT_REQUIRED")
+        elif scratch_database is not None or expected_sqlite_runtime is not None:
+            raise CaptureFormatError("SQLITE_CONTEXT_FORBIDDEN_FOR_LEGACY")
         return _verify_capture_package(
-            package_root, plan_path, expected_manifest_sha256=expected_manifest_sha256
+            package_root,
+            plan_path,
+            expected_manifest_sha256=expected_manifest_sha256,
+            scratch_database=scratch_database,
+            expected_sqlite_runtime=expected_sqlite_runtime,
         )
     except (CaptureFormatError, OSError, ValueError) as error:
         return _verification_failure(
-            "FAIL", type(error).__name__ + ":" + str(error), version=report_version
+            "FAIL",
+            type(error).__name__ + ":" + str(error),
+            version=report_version,
+            verifier_state=verifier_state,
         )
 
 
@@ -866,9 +1312,7 @@ def _validate_fragment_declarations(
             raise CaptureFormatError("FRAGMENT_COUNT_INVALID")
         offset = 0
         for index, fragment in enumerate(row.fragments):
-            expected_path = (
-                f"fragments/audit_events-{row.logical_ordinal:07d}-{index:02d}.bin"
-            )
+            expected_path = f"fragments/audit_events-{row.logical_ordinal:07d}-{index:02d}.bin"
             expected_bytes = min(plan.limits.shard_bytes, row.whole_bytes - offset)
             if (
                 fragment.path != expected_path
@@ -883,12 +1327,164 @@ def _validate_fragment_declarations(
             raise CaptureFormatError("FRAGMENT_LENGTH_INVALID")
 
 
+def _validate_fragment_declarations_v3(
+    descriptor: RelationDescriptorV3,
+    spec: RelationSpec,
+    plan: CapturePlanV3,
+) -> None:
+    rows = descriptor.fragmented_rows
+    if spec.name not in V3_FRAGMENT_RELATION_SET and rows:
+        raise CaptureFormatError("FRAGMENT_RELATION_FORBIDDEN")
+    ordinals = [row.logical_ordinal for row in rows]
+    if ordinals != sorted(set(ordinals)) or any(value >= descriptor.rows for value in ordinals):
+        raise CaptureFormatError("FRAGMENT_LOGICAL_ORDINAL_INVALID")
+    for row in rows:
+        if (
+            row.kind != "ROW_FRAGMENTS_V3"
+            or row.relation != spec.name
+            or row.relation not in V3_FRAGMENT_RELATION_SET
+            or row.tenant != plan.tenant
+            or len(row.typed_primary_key) != len(spec.primary_key)
+            or row.whole_bytes <= plan.fragmentation.fragment_bytes
+            or row.whole_bytes > plan.fragmentation.encoded_row_bytes
+        ):
+            raise CaptureFormatError("FRAGMENT_ROW_BINDING_INVALID")
+        expected_count = (
+            row.whole_bytes + plan.fragmentation.fragment_bytes - 1
+        ) // plan.fragmentation.fragment_bytes
+        if (
+            row.fragment_count != expected_count
+            or len(row.fragments) != expected_count
+            or expected_count > plan.fragmentation.max_fragments
+        ):
+            raise CaptureFormatError("FRAGMENT_COUNT_INVALID")
+        offset = 0
+        for index, fragment in enumerate(row.fragments):
+            expected_path = f"fragments/{spec.name}-{row.logical_ordinal:07d}-{index:02d}.bin"
+            expected_bytes = min(plan.fragmentation.fragment_bytes, row.whole_bytes - offset)
+            if (
+                fragment.path != expected_path
+                or fragment.ordinal != index
+                or fragment.offset != offset
+                or fragment.bytes != expected_bytes
+                or (
+                    index < expected_count - 1
+                    and fragment.bytes != plan.fragmentation.fragment_bytes
+                )
+            ):
+                raise CaptureFormatError("FRAGMENT_SEQUENCE_INVALID")
+            offset += fragment.bytes
+        if offset != row.whole_bytes:
+            raise CaptureFormatError("FRAGMENT_LENGTH_INVALID")
+
+
+def _initialize_verifier_database(database: sqlite3.Connection) -> None:
+    statements = (
+        "CREATE TABLE keys (relation_name TEXT, key_name TEXT, key_value BLOB, "
+        "PRIMARY KEY (relation_name, key_name, key_value))",
+        "CREATE TABLE references_needed (relation_name TEXT, key_name TEXT, "
+        "key_value BLOB, PRIMARY KEY (relation_name, key_name, key_value))",
+        "CREATE TABLE current_versions (law TEXT, purchase_number TEXT, "
+        "version_number INTEGER, source_sha TEXT, PRIMARY KEY (law, purchase_number))",
+        "CREATE TABLE future_versions (law TEXT, purchase_number TEXT, "
+        "version_number INTEGER, source_sha TEXT, ingested_at TEXT, "
+        "PRIMARY KEY (law, purchase_number, version_number))",
+        "CREATE TABLE audit_semantics (company_id TEXT, event_id TEXT, "
+        "event_type TEXT, object_type TEXT, object_id TEXT, basis BLOB, "
+        "PRIMARY KEY (company_id, event_id))",
+        "CREATE TABLE projection_batches (company_id TEXT, batch_id TEXT, "
+        "audit_event_id TEXT, receipt_id TEXT, payload_sha256 TEXT, "
+        "pair_count INTEGER, row_value BLOB, PRIMARY KEY (company_id, batch_id))",
+        "CREATE TABLE projection_decisions (company_id TEXT, batch_id TEXT, "
+        "purchase_number TEXT, version_number INTEGER, row_value BLOB, "
+        "PRIMARY KEY (company_id, batch_id, purchase_number, version_number))",
+        "CREATE TABLE receipts (company_id TEXT, receipt_id TEXT, receipt_sha256 TEXT, "
+        "row_value BLOB, PRIMARY KEY (company_id, receipt_id))",
+        "CREATE TABLE variant_facts (company_id TEXT, purchase_number TEXT, "
+        "version_number INTEGER, document_type TEXT, xml_sha256 TEXT, facts BLOB, "
+        "PRIMARY KEY (company_id, purchase_number, version_number, "
+        "document_type, xml_sha256))",
+        "CREATE TABLE variant_origins (company_id TEXT, receipt_id TEXT, "
+        "archive_ordinal INTEGER, member_filename TEXT, purchase_number TEXT, "
+        "version_number INTEGER, document_type TEXT, xml_sha256 TEXT, row_value BLOB, "
+        "PRIMARY KEY (company_id, receipt_id, archive_ordinal, member_filename))",
+    )
+    for statement in statements:
+        database.execute(statement)
+
+
+def _verify_relations_and_semantics(
+    root: Path,
+    plan: CapturePlanAny,
+    manifest: CaptureManifestAny,
+    specs: Mapping[str, RelationSpec],
+    descriptors: Mapping[str, RelationDescriptorAny],
+    database: sqlite3.Connection,
+    deadline: _SqliteDeadlineV3 | None = None,
+) -> tuple[
+    dict[str, int],
+    int,
+    int,
+    tuple[CurrentMembership, CurrentMembership],
+    tuple[FutureVersionDiagnostic, FutureVersionDiagnostic],
+]:
+    _initialize_verifier_database(database)
+    relation_rows: dict[str, int] = {}
+    total_bytes = 0
+    total_shards = 0
+    for name in sorted(EXPECTED_RELATIONS):
+        if deadline is not None:
+            deadline.check()
+        spec = specs[name]
+        descriptor = descriptors[name]
+        if descriptor.source_count != descriptor.rows:
+            raise CaptureFormatError("RELATION_SOURCE_COUNT_MISMATCH")
+        if isinstance(plan, CapturePlanV3):
+            assert deadline is not None
+            if not isinstance(descriptor, RelationDescriptorV3):
+                raise CaptureFormatError("V3_RELATION_DESCRIPTOR_REQUIRED")
+            count, size, physical_files = _verify_relation_v3(
+                root, spec, descriptor, plan, database, manifest.clock, deadline
+            )
+        elif isinstance(plan, CapturePlanV2):
+            if not isinstance(descriptor, RelationDescriptorV2):
+                raise CaptureFormatError("V2_RELATION_DESCRIPTOR_REQUIRED")
+            count, size, physical_files = _verify_relation_v2(
+                root, spec, descriptor, plan, database, manifest.clock
+            )
+        else:
+            count, size = _verify_relation(root, spec, descriptor, plan, database, manifest.clock)
+            physical_files = len(descriptor.shards)
+        relation_rows[name] = count
+        total_bytes += size
+        total_shards += physical_files
+    for check in (
+        _verify_foreign_keys,
+        lambda connection: _verify_exact_parent_sets(connection, plan),
+        _verify_exact_audit_set,
+        _verify_receipt_audits,
+        _verify_projection_audits,
+    ):
+        if deadline is not None:
+            deadline.check()
+        check(database)
+        if deadline is not None:
+            deadline.check()
+    current = _current_membership(database, deadline)
+    future = _future_diagnostics(database, deadline)
+    if deadline is not None:
+        deadline.check()
+    return relation_rows, total_bytes, total_shards, current, future
+
+
 def _verify_capture_package(
     package_root: Path,
     plan_path: Path,
     *,
     expected_manifest_sha256: str | None,
-) -> VerificationReport | VerificationReportV2:
+    scratch_database: Path | None,
+    expected_sqlite_runtime: SqliteRuntimeIdentity | None,
+) -> VerificationReportAny:
     if package_root.is_symlink():
         raise CaptureFormatError("PACKAGE_SYMLINK_REJECTED")
     root = package_root.resolve(strict=True)
@@ -896,11 +1492,17 @@ def _verify_capture_package(
         raise CaptureFormatError("PACKAGE_ROOT_INVALID")
     plan, plan_content = load_capture_plan(plan_path)
     report_version: Literal[
-        "eis-search-capture-verification-v1", "eis-search-capture-verification-v2"
+        "eis-search-capture-verification-v1",
+        "eis-search-capture-verification-v2",
+        "eis-search-capture-verification-v3",
     ] = (
-        "eis-search-capture-verification-v2"
-        if isinstance(plan, CapturePlanV2)
-        else "eis-search-capture-verification-v1"
+        "eis-search-capture-verification-v3"
+        if isinstance(plan, CapturePlanV3)
+        else (
+            "eis-search-capture-verification-v2"
+            if isinstance(plan, CapturePlanV2)
+            else "eis-search-capture-verification-v1"
+        )
     )
     files = _all_regular_files(root)
     if "manifest.json" not in files:
@@ -908,11 +1510,14 @@ def _verify_capture_package(
             incomplete_content = _read_bounded(
                 _resolve_regular(root, "incomplete.json"), plan.limits.metadata_bytes
             )
-            incomplete = (
-                IncompleteCaptureV2.model_validate_json(incomplete_content)
-                if isinstance(plan, CapturePlanV2)
-                else IncompleteCapture.model_validate_json(incomplete_content)
-            )
+            if isinstance(plan, CapturePlanV3):
+                incomplete: IncompleteCaptureAny = IncompleteCaptureV3.model_validate_json(
+                    incomplete_content
+                )
+            elif isinstance(plan, CapturePlanV2):
+                incomplete = IncompleteCaptureV2.model_validate_json(incomplete_content)
+            else:
+                incomplete = IncompleteCapture.model_validate_json(incomplete_content)
             if incomplete.plan_sha256 != sha256_bytes(plan_content):
                 raise CaptureFormatError("PLAN_SHA_MISMATCH")
             return _verification_report(
@@ -949,12 +1554,36 @@ def _verify_capture_package(
         raise CaptureFormatError("MANIFEST_JSON_INVALID") from error
     if not isinstance(raw_manifest, dict):
         raise CaptureFormatError("MANIFEST_JSON_INVALID")
-    if isinstance(plan, CapturePlanV2):
+    if isinstance(plan, CapturePlanV3):
+        if raw_manifest.get("version") != "eis-search-capture-manifest-v3":
+            raise CaptureFormatError("MANIFEST_VERSION_MISMATCH")
+        manifest: CaptureManifestAny = CaptureManifestV3.model_validate(raw_manifest)
+        assert isinstance(manifest, CaptureManifestV3)
+        if expected_sqlite_runtime is None:
+            raise CaptureFormatError("V3_SQLITE_CONTEXT_REQUIRED")
+        state = manifest.collector_state
+        if state.membership is None:
+            raise CaptureFormatError("V3_COLLECTOR_STATE_INCOMPLETE")
+        try:
+            _validate_v3_sqlite_observation(
+                state.membership,
+                purpose="COLLECTOR_MEMBERSHIP",
+                expected_runtime=expected_sqlite_runtime,
+            )
+        except CaptureFormatError as error:
+            raise CaptureFormatError("V3_COLLECTOR_STATE_INCOMPLETE") from error
+        if (
+            state.pending_peak_bytes is None
+            or state.cleanup.status != "PASS"
+            or state.cleanup.membership_removed is not True
+            or state.cleanup.pending_removed is not True
+            or state.cleanup.failure_codes
+        ):
+            raise CaptureFormatError("V3_COLLECTOR_STATE_INCOMPLETE")
+    elif isinstance(plan, CapturePlanV2):
         if raw_manifest.get("version") != "eis-search-capture-manifest-v2":
             raise CaptureFormatError("MANIFEST_VERSION_MISMATCH")
-        manifest: CaptureManifest | CaptureManifestV2 = CaptureManifestV2.model_validate(
-            raw_manifest
-        )
+        manifest = CaptureManifestV2.model_validate(raw_manifest)
     else:
         if raw_manifest.get("version") != "eis-search-capture-manifest-v1":
             raise CaptureFormatError("MANIFEST_VERSION_MISMATCH")
@@ -991,7 +1620,7 @@ def _verify_capture_package(
     declared_fragments = [
         fragment.path
         for descriptor in manifest.relations
-        if isinstance(descriptor, RelationDescriptorV2)
+        if isinstance(descriptor, (RelationDescriptorV2, RelationDescriptorV3))
         for row in descriptor.fragmented_rows
         for fragment in row.fragments
     ]
@@ -1025,15 +1654,22 @@ def _verify_capture_package(
                 raise CaptureFormatError("CAPTURE_DECLARED_LIMIT")
         fragmented_rows = (
             descriptor.fragmented_rows
-            if isinstance(descriptor, RelationDescriptorV2)
+            if isinstance(descriptor, (RelationDescriptorV2, RelationDescriptorV3))
             else ()
         )
-        if fragmented_rows and not isinstance(plan, CapturePlanV2):
+        if fragmented_rows and not isinstance(plan, (CapturePlanV2, CapturePlanV3)):
             raise CaptureFormatError("FRAGMENTS_FORBIDDEN_IN_V1")
-        if spec.name != "audit_events" and fragmented_rows:
+        if isinstance(plan, CapturePlanV2) and spec.name != "audit_events" and fragmented_rows:
             raise CaptureFormatError("FRAGMENT_RELATION_FORBIDDEN")
         if isinstance(plan, CapturePlanV2):
+            if not isinstance(descriptor, RelationDescriptorV2):
+                raise CaptureFormatError("V2_RELATION_DESCRIPTOR_REQUIRED")
             _validate_fragment_declarations(descriptor, spec, plan)
+        elif isinstance(plan, CapturePlanV3):
+            if not isinstance(descriptor, RelationDescriptorV3):
+                raise CaptureFormatError("V3_RELATION_DESCRIPTOR_REQUIRED")
+            _validate_fragment_declarations_v3(descriptor, spec, plan)
+        if isinstance(plan, (CapturePlanV2, CapturePlanV3)):
             for row in fragmented_rows:
                 for fragment in row.fragments:
                     declared_bytes += fragment.bytes
@@ -1050,90 +1686,142 @@ def _verify_capture_package(
         or declared_shard_count != manifest.total_shards
     ):
         raise CaptureFormatError("MANIFEST_DECLARED_TOTAL_MISMATCH")
-    relation_rows: dict[str, int] = {}
-    total_bytes = 0
-    total_shards = 0
-    with tempfile.TemporaryDirectory(prefix="eis-capture-verify-") as temporary:
-        database = sqlite3.connect(Path(temporary) / "keys.sqlite3")
+    verifier_state: SqliteStateObservationV3 | None = None
+    if isinstance(plan, CapturePlanV3):
+        if scratch_database is None or expected_sqlite_runtime is None:
+            raise CaptureFormatError("V3_SQLITE_CONTEXT_REQUIRED")
+        if scratch_database.as_posix() != "/capture/scratch/keys.sqlite3":
+            raise CaptureFormatError("V3_SCRATCH_PATH_INVALID")
+        identity = _posix_sqlite_file_identity(scratch_database)
+        if shutil.disk_usage(scratch_database.parent).free < 13 * 1_073_741_824:
+            raise CaptureFormatError("V3_VERIFIER_DISK_ADMISSION")
+        deadline = _SqliteDeadlineV3(timeout_seconds=plan.limits.capture_timeout_seconds)
+        database: sqlite3.Connection | None = None
+        runtime: SqliteRuntimeIdentity | None = None
+        configuration: Literal["PASS", "FAIL", "UNKNOWN"] = "UNKNOWN"
+        page_size: int | None = None
+        max_pages: int | None = None
+        journal_mode: Literal["off"] | None = None
+        temp_store: Literal[2] | None = None
+        page_count: int | None = None
+        main_bytes: int | None = 0
+        identity_unchanged: bool | None = None
+        closed: bool | None = None
+        failure_code: str | None = None
+        caught_error: Exception | None = None
         try:
-            database.execute(
-                "CREATE TABLE keys (relation_name TEXT, key_name TEXT, key_value BLOB, "
-                "PRIMARY KEY (relation_name, key_name, key_value))"
+            database = sqlite3.connect(
+                "file:/capture/scratch/keys.sqlite3?mode=rw", uri=True, timeout=0
             )
-            database.execute(
-                "CREATE TABLE references_needed (relation_name TEXT, key_name TEXT, "
-                "key_value BLOB, PRIMARY KEY (relation_name, key_name, key_value))"
+            if _posix_sqlite_file_identity(scratch_database) != identity:
+                raise CaptureFormatError("SQLITE_FILE_IDENTITY_CHANGED")
+            (
+                runtime,
+                page_size,
+                max_pages,
+                journal_mode,
+                temp_store,
+                page_count,
+            ) = _configure_sqlite_connection_v3(
+                database,
+                expected_runtime=expected_sqlite_runtime,
+                max_page_count=V3_VERIFIER_PAGES,
+                deadline=deadline,
             )
-            database.execute(
-                "CREATE TABLE current_versions (law TEXT, purchase_number TEXT, "
-                "version_number INTEGER, source_sha TEXT, PRIMARY KEY (law, purchase_number))"
+            configuration = "PASS"
+            (
+                relation_rows,
+                total_bytes,
+                total_shards,
+                current,
+                future,
+            ) = _verify_relations_and_semantics(
+                root, plan, manifest, specs, descriptors, database, deadline
             )
-            database.execute(
-                "CREATE TABLE future_versions (law TEXT, purchase_number TEXT, "
-                "version_number INTEGER, source_sha TEXT, ingested_at TEXT, "
-                "PRIMARY KEY (law, purchase_number, version_number))"
-            )
-            database.execute(
-                "CREATE TABLE audit_semantics (company_id TEXT, event_id TEXT, "
-                "event_type TEXT, object_type TEXT, object_id TEXT, basis BLOB, "
-                "PRIMARY KEY (company_id, event_id))"
-            )
-            database.execute(
-                "CREATE TABLE projection_batches (company_id TEXT, batch_id TEXT, "
-                "audit_event_id TEXT, receipt_id TEXT, payload_sha256 TEXT, "
-                "pair_count INTEGER, row_value BLOB, PRIMARY KEY (company_id, batch_id))"
-            )
-            database.execute(
-                "CREATE TABLE projection_decisions (company_id TEXT, batch_id TEXT, "
-                "purchase_number TEXT, version_number INTEGER, row_value BLOB, "
-                "PRIMARY KEY (company_id, batch_id, purchase_number, version_number))"
-            )
-            database.execute(
-                "CREATE TABLE receipts (company_id TEXT, receipt_id TEXT, receipt_sha256 TEXT, "
-                "row_value BLOB, PRIMARY KEY (company_id, receipt_id))"
-            )
-            database.execute(
-                "CREATE TABLE variant_facts (company_id TEXT, purchase_number TEXT, "
-                "version_number INTEGER, document_type TEXT, xml_sha256 TEXT, facts BLOB, "
-                "PRIMARY KEY (company_id, purchase_number, version_number, "
-                "document_type, xml_sha256))"
-            )
-            database.execute(
-                "CREATE TABLE variant_origins (company_id TEXT, receipt_id TEXT, "
-                "archive_ordinal INTEGER, member_filename TEXT, purchase_number TEXT, "
-                "version_number INTEGER, document_type TEXT, xml_sha256 TEXT, row_value BLOB, "
-                "PRIMARY KEY (company_id, receipt_id, archive_ordinal, member_filename))"
-            )
-            for name in sorted(EXPECTED_RELATIONS):
-                spec = specs[name]
-                descriptor = descriptors[name]
-                if descriptor.source_count != descriptor.rows:
-                    raise CaptureFormatError("RELATION_SOURCE_COUNT_MISMATCH")
-                if isinstance(plan, CapturePlanV2):
-                    if not isinstance(descriptor, RelationDescriptorV2):
-                        raise CaptureFormatError("V2_RELATION_DESCRIPTOR_REQUIRED")
-                    count, size, physical_files = _verify_relation_v2(
-                        root, spec, descriptor, plan, database, manifest.clock
-                    )
-                else:
-                    if not isinstance(descriptor, RelationDescriptor):
-                        raise CaptureFormatError("V1_RELATION_DESCRIPTOR_REQUIRED")
-                    count, size = _verify_relation(
-                        root, spec, descriptor, plan, database, manifest.clock
-                    )
-                    physical_files = len(descriptor.shards)
-                relation_rows[name] = count
-                total_bytes += size
-                total_shards += physical_files
-            _verify_foreign_keys(database)
-            _verify_exact_parent_sets(database, plan)
-            _verify_exact_audit_set(database)
-            _verify_receipt_audits(database)
-            _verify_projection_audits(database)
-            current = _current_membership(database)
-            future = _future_diagnostics(database)
+            page_count = None
+            page_count = _commit_and_observe_sqlite_v3(database, deadline)
+        except (CaptureFormatError, sqlite3.Error, OSError, ValueError) as error:
+            caught_error = error
+            if isinstance(error, sqlite3.Error):
+                configuration = "FAIL"
+                failure_code = (
+                    "SQLITE_DEADLINE" if deadline.progress() else "SQLITE_OPERATION_FAILED"
+                )
+            elif isinstance(error, CaptureFormatError) and str(error) == "SQLITE_DEADLINE":
+                configuration = "FAIL"
+                failure_code = "SQLITE_DEADLINE"
         finally:
-            database.close()
+            if database is not None:
+                try:
+                    database.set_progress_handler(None, 0)
+                    database.close()
+                    closed = True
+                except sqlite3.Error:
+                    closed = False
+                    failure_code = failure_code or "SQLITE_CLOSE_FAILED"
+                    caught_error = caught_error or CaptureFormatError(failure_code)
+            try:
+                after = scratch_database.lstat()
+                identity_unchanged = (
+                    stat.S_ISREG(after.st_mode)
+                    and not scratch_database.is_symlink()
+                    and (after.st_dev, after.st_ino) == identity
+                    and after.st_uid == 1_000
+                    and stat.S_IMODE(after.st_mode) == 0o600
+                    and after.st_nlink == 1
+                )
+                main_bytes = after.st_size
+            except OSError:
+                identity_unchanged = False
+                main_bytes = None
+            verifier_state = SqliteStateObservationV3(
+                purpose="VERIFIER_SEMANTICS",
+                runtime=runtime,
+                configuration=configuration,
+                page_size=page_size,
+                max_page_count=max_pages,
+                journal_mode=journal_mode,
+                temp_store=temp_store,
+                page_count_last_observed=page_count,
+                main_file_bytes_last_observed=main_bytes,
+                file_identity_unchanged=identity_unchanged,
+                connection_closed=closed,
+                failure_code=failure_code,
+            )
+        if verifier_state.file_identity_unchanged is not True and caught_error is None:
+            failure_code = "SQLITE_FILE_IDENTITY_CHANGED"
+            verifier_state = verifier_state.model_copy(
+                update={"configuration": "FAIL", "failure_code": failure_code}
+            )
+            caught_error = CaptureFormatError(failure_code)
+        if caught_error is not None:
+            reason = (
+                "CaptureFormatError:" + str(caught_error)
+                if isinstance(caught_error, CaptureFormatError) and len(str(caught_error)) <= 100
+                else "CaptureFormatError:" + (failure_code or "VERIFICATION_FAILED")
+            )
+            return _verification_failure(
+                "FAIL",
+                reason,
+                manifest_sha,
+                version="eis-search-capture-verification-v3",
+                verifier_state=verifier_state,
+            )
+    else:
+        with tempfile.TemporaryDirectory(prefix="eis-capture-verify-") as temporary:
+            database = sqlite3.connect(Path(temporary) / "keys.sqlite3")
+            try:
+                (
+                    relation_rows,
+                    total_bytes,
+                    total_shards,
+                    current,
+                    future,
+                ) = _verify_relations_and_semantics(
+                    root, plan, manifest, specs, descriptors, database
+                )
+            finally:
+                database.close()
     if total_bytes != manifest.total_payload_bytes or total_shards != manifest.total_shards:
         raise CaptureFormatError("MANIFEST_TOTAL_MISMATCH")
     if total_bytes > plan.limits.total_payload_bytes or total_shards > plan.limits.max_shards:
@@ -1146,16 +1834,35 @@ def _verify_capture_package(
         sorted(manifest.future_versions, key=lambda item: item.law)
     ):
         raise CaptureFormatError("FUTURE_VERSION_DIAGNOSTIC_MISMATCH")
-    return _verification_report(
-        report_version,
-        status="CAPTURE_CONTENT_VERIFIED",
-        package_manifest_sha256=manifest_sha,
-        external_manifest_digest_match=True if expected_manifest_sha256 is not None else None,
-        reasons=(),
-        relation_rows=relation_rows,
-        total_payload_bytes=total_bytes,
-        total_shards=total_shards,
-    )
+    if report_version == "eis-search-capture-verification-v3":
+        try:
+            if verifier_state is None or expected_sqlite_runtime is None:
+                raise CaptureFormatError("V3_VERIFIER_STATE_INCOMPLETE")
+            _validate_v3_sqlite_observation(
+                verifier_state,
+                purpose="VERIFIER_SEMANTICS",
+                expected_runtime=expected_sqlite_runtime,
+            )
+        except CaptureFormatError:
+            return _verification_failure(
+                "FAIL",
+                "CaptureFormatError:V3_VERIFIER_STATE_INCOMPLETE",
+                manifest_sha,
+                version="eis-search-capture-verification-v3",
+                verifier_state=verifier_state,
+            )
+    report_values: dict[str, object] = {
+        "status": "CAPTURE_CONTENT_VERIFIED",
+        "package_manifest_sha256": manifest_sha,
+        "external_manifest_digest_match": (True if expected_manifest_sha256 is not None else None),
+        "reasons": (),
+        "relation_rows": relation_rows,
+        "total_payload_bytes": total_bytes,
+        "total_shards": total_shards,
+    }
+    if report_version == "eis-search-capture-verification-v3":
+        report_values["verifier_state"] = verifier_state
+    return _verification_report(report_version, **report_values)
 
 
 def _key_blob(values: Sequence[object]) -> bytes:
@@ -1177,8 +1884,7 @@ def _verify_relation(
     first_descriptor: tuple[object, ...] | None = None
     last_descriptor: tuple[object, ...] | None = None
     expected_paths = [
-        f"relations/{spec.name}-{index:05d}.jsonl"
-        for index in range(1, len(descriptor.shards) + 1)
+        f"relations/{spec.name}-{index:05d}.jsonl" for index in range(1, len(descriptor.shards) + 1)
     ]
     if [item.path for item in descriptor.shards] != expected_paths:
         raise CaptureFormatError("SHARD_PATH_SEQUENCE_INVALID")
@@ -1251,8 +1957,8 @@ def _verify_relation(
 def _iter_verified_inline_rows(
     root: Path,
     spec: RelationSpec,
-    descriptor: RelationDescriptorV2,
-    plan: CapturePlanV2,
+    descriptor: RelationDescriptorV2 | RelationDescriptorV3,
+    plan: CapturePlanV2 | CapturePlanV3,
     stats: dict[str, int],
 ) -> Iterator[tuple[bytes, tuple[object, ...], dict[str, object]]]:
     expected_paths = [
@@ -1391,6 +2097,113 @@ def _verify_relation_v2(
     return count, inline_stats["bytes"] + fragment_bytes, physical_files
 
 
+def _read_fragmented_row_v3(
+    root: Path,
+    spec: RelationSpec,
+    row: FragmentedRowDescriptorV3,
+    plan: CapturePlanV3,
+    deadline: _SqliteDeadlineV3,
+) -> tuple[bytes, tuple[object, ...], dict[str, object]]:
+    content = bytearray()
+    digest = hashlib.sha256()
+    for fragment in row.fragments:
+        deadline.check()
+        part = _read_bounded(
+            _resolve_regular(root, fragment.path), plan.fragmentation.fragment_bytes
+        )
+        if len(part) != fragment.bytes or sha256_bytes(part) != fragment.sha256:
+            raise CaptureFormatError("FRAGMENT_CONTENT_MISMATCH")
+        content.extend(part)
+        digest.update(part)
+        if len(content) > row.whole_bytes or len(content) > plan.fragmentation.encoded_row_bytes:
+            raise CaptureFormatError("FRAGMENT_REASSEMBLY_LIMIT")
+    if len(content) != row.whole_bytes or digest.hexdigest() != row.whole_sha256:
+        raise CaptureFormatError("FRAGMENTED_ROW_DIGEST_MISMATCH")
+    line = bytes(content)
+    key, decoded = decode_row(spec, line)
+    columns = {column.name: column for column in spec.columns}
+    typed_key = tuple(
+        cast(dict[str, object], encode_value(decoded[name], columns[name].kind))
+        for name in spec.primary_key
+    )
+    if typed_key != row.typed_primary_key:
+        raise CaptureFormatError("FRAGMENTED_ROW_PRIMARY_KEY_MISMATCH")
+    return line, key, decoded
+
+
+def _verify_relation_v3(
+    root: Path,
+    spec: RelationSpec,
+    descriptor: RelationDescriptorV3,
+    plan: CapturePlanV3,
+    database: sqlite3.Connection,
+    clock: datetime,
+    deadline: _SqliteDeadlineV3,
+) -> tuple[int, int, int]:
+    _validate_fragment_declarations_v3(descriptor, spec, plan)
+    inline_stats = {"rows": 0, "bytes": 0}
+    inline = iter(_iter_verified_inline_rows(root, spec, descriptor, plan, inline_stats))
+    fragments = {row.logical_ordinal: row for row in descriptor.fragmented_rows}
+    unique_targets: set[tuple[tuple[str, ...], str]] = {(spec.primary_key, "PK")}
+    for relation in plan.relations:
+        for foreign_key in relation.foreign_keys:
+            if foreign_key.target_relation == spec.name:
+                unique_targets.add(
+                    (foreign_key.target_columns, "FK:" + ",".join(foreign_key.target_columns))
+                )
+    relation_digest = hashlib.sha256()
+    previous: tuple[tuple[str, object], ...] | None = None
+    count = 0
+    fragment_bytes = 0
+    for logical_ordinal in range(descriptor.rows):
+        deadline.check()
+        fragmented = fragments.get(logical_ordinal)
+        if fragmented is None:
+            try:
+                line, key, row = next(inline)
+            except StopIteration as error:
+                raise CaptureFormatError("INLINE_ROW_MISSING") from error
+        else:
+            line, key, row = _read_fragmented_row_v3(root, spec, fragmented, plan, deadline)
+            fragment_bytes += fragmented.whole_bytes
+        if spec.name in V3_FRAGMENT_RELATION_SET:
+            raw_cap = (
+                plan.fragmentation.audit_raw_row_bytes
+                if spec.name == "audit_events"
+                else plan.fragmentation.ordinary_raw_row_bytes
+            )
+            _decoded_string_utf8_lower_bound(row.values(), raw_cap)
+        if row["company_id"] != plan.tenant:
+            raise CaptureFormatError("ROW_TENANT_MISMATCH")
+        token = _key_token(key)
+        if previous is not None and token <= previous:
+            raise CaptureFormatError("ROW_ORDER_OR_DUPLICATE_INVALID")
+        previous = token
+        relation_digest.update(len(line).to_bytes(8, "big") + line)
+        count += 1
+        _record_keys(database, spec, row, unique_targets)
+        _record_references(database, spec, row)
+        _record_current(database, spec.name, row, clock)
+        _record_semantics(database, spec.name, row)
+        deadline.check()
+    try:
+        next(inline)
+    except StopIteration:
+        pass
+    else:
+        raise CaptureFormatError("INLINE_ROW_UNDECLARED")
+    if inline_stats["rows"] + len(fragments) != count:
+        raise CaptureFormatError("RELATION_ROW_COUNT_MISMATCH")
+    if count != descriptor.rows or count > spec.max_rows:
+        raise CaptureFormatError("RELATION_ROW_COUNT_MISMATCH")
+    if relation_digest.hexdigest() != descriptor.ordered_rows_sha256:
+        raise CaptureFormatError("RELATION_DIGEST_MISMATCH")
+    physical_files = len(descriptor.shards) + sum(
+        row.fragment_count for row in descriptor.fragmented_rows
+    )
+    return count, inline_stats["bytes"] + fragment_bytes, physical_files
+
+
 def _record_keys(
     database: sqlite3.Connection,
     spec: RelationSpec,
@@ -1472,9 +2285,7 @@ def _verify_foreign_keys(database: sqlite3.Connection) -> None:
         raise CaptureFormatError("FOREIGN_KEY_DEPENDENCY_MISSING")
 
 
-def _verify_exact_parent_sets(
-    database: sqlite3.Connection, plan: CapturePlan | CapturePlanV2
-) -> None:
+def _verify_exact_parent_sets(database: sqlite3.Connection, plan: CapturePlanAny) -> None:
     for spec in plan.relations:
         if spec.role != "FK_PARENT":
             continue
@@ -1570,9 +2381,9 @@ def _record_semantics(
         )
     elif relation == "eis_notice_variants":
         if row["facts_sha256"] != sha256_bytes(
-            json.dumps(
-                row["facts"], sort_keys=True, separators=(",", ":"), default=str
-            ).encode("utf-8")
+            json.dumps(row["facts"], sort_keys=True, separators=(",", ":"), default=str).encode(
+                "utf-8"
+            )
         ):
             raise CaptureFormatError("VARIANT_FACTS_HASH_MISMATCH")
         database.execute(
@@ -1794,6 +2605,7 @@ def _verify_projection_audits(database: sqlite3.Connection) -> None:
 
 def _current_membership(
     database: sqlite3.Connection,
+    deadline: _SqliteDeadlineV3 | None = None,
 ) -> tuple[CurrentMembership, CurrentMembership]:
     result = []
     for law in ("44", "223"):
@@ -1804,6 +2616,8 @@ def _current_membership(
             "WHERE law=? ORDER BY purchase_number",
             (law,),
         ):
+            if deadline is not None:
+                deadline.check()
             line = canonical_bytes([law, number, version, source_sha]) + b"\n"
             digest.update(len(line).to_bytes(8, "big"))
             digest.update(line)
@@ -1816,6 +2630,7 @@ def _current_membership(
 
 def _future_diagnostics(
     database: sqlite3.Connection,
+    deadline: _SqliteDeadlineV3 | None = None,
 ) -> tuple[FutureVersionDiagnostic, FutureVersionDiagnostic]:
     result = []
     for law in ("44", "223"):
@@ -1827,6 +2642,8 @@ def _future_diagnostics(
             (law,),
         )
         for number, version, source_sha, ingested_at in rows:
+            if deadline is not None:
+                deadline.check()
             line = canonical_bytes([law, number, version, source_sha, ingested_at]) + b"\n"
             digest.update(len(line).to_bytes(8, "big") + line)
             count += 1

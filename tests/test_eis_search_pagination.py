@@ -5,7 +5,11 @@ from decimal import Decimal
 
 import pytest
 
-from procurement.storage.eis_search_pagination import SearchPageError, SearchPagination
+from procurement.storage.eis_search_pagination import (
+    SearchComparisonMemo,
+    SearchPageError,
+    SearchPagination,
+)
 
 NOW = datetime(2026, 10, 7, 6, tzinfo=UTC)
 
@@ -92,3 +96,71 @@ def test_removed_boundary_or_matching_notice_does_not_silently_continue():
 def test_malformed_cursor_is_bounded_and_typed(value):
     with pytest.raises(SearchPageError, match="SEARCH_PAGE_INVALID"):
         pager(value)
+
+
+def test_memo_boundaries_expiry_and_eviction_are_misses_not_truncation(monkeypatch):
+    import procurement.storage.eis_search_pagination as module
+
+    clock = [100.0]
+    monkeypatch.setattr(module, "monotonic", lambda: clock[0])
+    memo = SearchComparisonMemo(max_bytes=8, max_entries=2)
+    key = memo.key("tenant-a", "44", "paper", NOW, b"source", b"events")
+    for company, law, query, at, source, events in (
+        ("tenant-b", "44", "paper", NOW, b"source", b"events"),
+        ("tenant-a", "223", "paper", NOW, b"source", b"events"),
+        ("tenant-a", "44", "other", NOW, b"source", b"events"),
+        ("tenant-a", "44", "paper", NOW + timedelta(seconds=1), b"source", b"events"),
+        ("tenant-a", "44", "paper", NOW, b"new-source", b"events"),
+        ("tenant-a", "44", "paper", NOW, b"source", b"new-events"),
+    ):
+        assert memo.key(company, law, query, at, source, events) != key
+    memo.put(key, b"1234")
+    assert memo.get(key) == b"1234"
+    memo.put("second", b"5678")
+    memo.put("third", b"abcd")
+    assert memo.get(key) is None
+    assert memo.get("second") == b"5678"
+    memo.put("oversize", b"123456789")
+    assert memo.get("oversize") is None and memo.get("third") == b"abcd"
+    clock[0] += 901
+    assert memo.get("third") is None
+    memo.clear()
+    assert memo.get("second") is None
+
+
+def test_cached_44_comparison_is_exact_and_changed_state_recompares(monkeypatch):
+    from dataclasses import replace
+
+    from procurement.sources.eis_procedure_state import EisProcedureState
+    from procurement.storage import eis_index_query as query
+    from test_eis_index_search import _notice
+
+    notices = (
+        replace(
+            _notice("0848300054826000154", "Поставка бумаги А4"),
+            deadline=NOW + timedelta(days=1),
+        ),
+    )
+    memo = SearchComparisonMemo()
+    monkeypatch.setattr(query, "PAGE_COMPARISONS", memo)
+    original = query.compare_indexed_notices
+    calls = []
+
+    def compare(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(query, "compare_indexed_notices", compare)
+    first, reused = query._compare_page_batch("a", notices, "бумага", NOW, {})
+    second, reused2 = query._compare_page_batch("a", notices, "бумага", NOW, {})
+    assert not reused and reused2 and first == second and len(calls) == 1
+    assert first.matched_notices[0].application_status == "UNKNOWN"
+    blocked, reused3 = query._compare_page_batch(
+        "a",
+        notices,
+        "бумага",
+        NOW,
+        {notices[0].purchase_number: EisProcedureState("FAIL", ("cancel",))},
+    )
+    assert not reused3 and blocked.matched_notices[0].application_status == "FAIL"
+    assert len(calls) == 2

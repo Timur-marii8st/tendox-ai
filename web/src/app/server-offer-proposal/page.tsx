@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ServerOfferProposalForm } from "./form";
 
 export const metadata: Metadata = {
-  title: "Exact BOM и КП — Syurai Procurement",
+  title: "Exact BOM и КП — Tendox",
   description: "Operator proposal exact server configuration and commercial terms",
 };
 

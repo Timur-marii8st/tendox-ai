@@ -38,6 +38,7 @@ def deps(monkeypatch):
     gate = SimpleNamespace(blocked_reasons=())
     document = SimpleNamespace(
         filename="document.pdf",
+        reference_status="PASS",
         fetch_status="RECEIVED",
         reasons=("ANALYSIS_NOT_AVAILABLE",),
         content_uid="doc",
@@ -190,3 +191,23 @@ def test_filename_review_failure_respects_late_source_hold(deps):
     result = run(Storage([[], [row()]]), downloader=download)
     assert result == {"status": "BLOCKED", "reason": HOLD, "attempted": 0}
     download.assert_not_called()
+
+
+@pytest.mark.parametrize("probe", [False, True])
+def test_ambiguous_attachment_never_downloads(deps, probe):
+    deps.document.reference_status = "UNKNOWN"
+    deps.document.fetch_status = "PENDING"
+    deps.document.reasons = ()
+    download = Mock(side_effect=AssertionError("ambiguous reference"))
+    result = run(Storage([[], [row()]]), downloader=download, probe_only=probe)
+    assert result == {
+        "status": "BLOCKED",
+        "reason": "ATTACHMENT_REFERENCE_REQUIRES_REVIEW",
+        "attempted": 0,
+    }
+    download.assert_not_called()
+    deps.reanalyze_received_document.assert_not_called()
+    if probe:
+        deps.record_document_outcome.assert_not_called()
+    else:
+        assert deps.record_document_outcome.call_args.kwargs["failure_code"] == result["reason"]

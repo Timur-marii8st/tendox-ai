@@ -10,7 +10,7 @@ import {
 } from "@/lib/procurement-api";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Hard gates — Syurai Procurement" };
+export const metadata: Metadata = { title: "Hard gates — Tendox" };
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 
 function failure(error: unknown): string {

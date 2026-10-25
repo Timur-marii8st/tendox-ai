@@ -49,7 +49,7 @@ _BY_NUMBER = re.compile(r"^getDocsIP/PRIZ/by-number/(?P<number>[0-9]{19,23})$")
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 MAX_WINDOW_ARCHIVES = 20
 MAX_WINDOW_COMPRESSED_BYTES = 64 * 1024 * 1024
-MAX_WINDOW_EXPANDED_BYTES = 128 * 1024 * 1024
+MAX_WINDOW_EXPANDED_BYTES = 320 * 1024 * 1024
 
 
 class EisIndexConflict(ValueError):

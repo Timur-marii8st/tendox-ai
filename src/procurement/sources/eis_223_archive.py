@@ -20,15 +20,23 @@ from procurement.domain.provenance import Extractor, Provenance
 PURCHASE_NS = "http://zakupki.gov.ru/223fz/purchase/1"
 TYPES_NS = "http://zakupki.gov.ru/223fz/types/1"
 DOCUMENT_TYPE: Literal["purchaseNoticeAESMBO"] = "purchaseNoticeAESMBO"
-Eis223DocumentType = Literal["purchaseNoticeAESMBO", "purchaseNoticeZKESMBO", "purchaseNotice"]
+TARGETED_DOCUMENT_TYPE: Literal["purchaseNoticeKESMBO"] = "purchaseNoticeKESMBO"
+Eis223DocumentType = Literal[
+    "purchaseNoticeAESMBO", "purchaseNoticeZKESMBO", "purchaseNotice", "purchaseNoticeKESMBO"
+]
 SUPPORTED_DOCUMENT_TYPES: tuple[Eis223DocumentType, ...] = (
     DOCUMENT_TYPE,
     "purchaseNoticeZKESMBO",
     "purchaseNotice",
 )
-PARSABLE_DOCUMENT_TYPES: tuple[Eis223DocumentType, ...] = SUPPORTED_DOCUMENT_TYPES
+PARSABLE_DOCUMENT_TYPES: tuple[Eis223DocumentType, ...] = (
+    *SUPPORTED_DOCUMENT_TYPES,
+    TARGETED_DOCUMENT_TYPE,
+)
 MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
-MAX_XML_BYTES = 4 * 1024 * 1024
+MAX_XML_BYTES = 4 * 1024 * 1024  # Shared event/lot-event contract remains unchanged.
+MAX_NOTICE_XML_BYTES = 12 * 1024 * 1024
+MAX_NOTICE_ITEMS = 6000
 MAX_EXPANDED_BYTES = 32 * 1024 * 1024
 MAX_MEMBERS = 200
 BASE = f"{DOCUMENT_TYPE}/p:body/p:item/p:{DOCUMENT_TYPE}Data"
@@ -233,10 +241,10 @@ class Eis223NoticeSnapshot(SourceModel):
                     raise ValueError("selected deadline must retain exact notice deadline")
             elif self.selected_deadline.value is not None:
                 raise ValueError("lot-oriented or unknown schedule has no selected deadline")
-            hidden = (
-                self.hide_purchase_raw.value not in {None, "false"}
-                or self.hide_purchase_customer_accredited_raw.value not in {None, "false"}
-            )
+            hidden = self.hide_purchase_raw.value not in {
+                None,
+                "false",
+            } or self.hide_purchase_customer_accredited_raw.value not in {None, "false"}
             for attachment in self.attachments:
                 if attachment.not_placement_raw is None:
                     raise ValueError("generic attachment flags are required")
@@ -440,7 +448,7 @@ def parse_notice223_xml(
     base = f"{document_type}/p:body/p:item/p:{document_type}Data"
     if (
         not raw
-        or len(raw) > MAX_XML_BYTES
+        or len(raw) > MAX_NOTICE_XML_BYTES
         or b"\x00" in raw
         or any(s in raw.upper() for s in (b"<!DOCTYPE", b"<!ENTITY"))
     ):
@@ -574,8 +582,7 @@ def parse_notice223_xml(
                 currency_consistent = code.value is None and numeric.value is None
             elif code.value is not None:
                 currency_consistent = (
-                    code.value in numeric_by_code
-                    and numeric_by_code[code.value] == numeric.value
+                    code.value in numeric_by_code and numeric_by_code[code.value] == numeric.value
                 )
             else:
                 currency_consistent = False
@@ -600,6 +607,8 @@ def parse_notice223_xml(
                     detail_path + "/t:forSmallOrMiddle",
                 ),
             }
+        if document_type == TARGETED_DOCUMENT_TYPE:
+            source_fields["guid"] = _text(lot, TYPES_NS, "guid", sha, path + "/t:guid")
         items_parent = _optional(detail, TYPES_NS, "lotItems")
         items = []
         for item_index, item in enumerate(
@@ -659,9 +668,7 @@ def parse_notice223_xml(
         path = base + f"/p:attachments/t:document[{index}]"
         uid = _text(item, TYPES_NS, "contentUid", sha, path + "/t:contentUid")
         url = _text(item, TYPES_NS, "url", sha, path + "/t:url")
-        not_placement = _text(
-            item, TYPES_NS, "notPlacement", sha, path + "/t:notPlacement"
-        )
+        not_placement = _text(item, TYPES_NS, "notPlacement", sha, path + "/t:notPlacement")
         try:
             parts = urlsplit(url.raw or "")
             query = parse_qs(parts.query, keep_blank_values=True)
@@ -703,9 +710,7 @@ def parse_notice223_xml(
                 Eis223ManifestReference(
                     kind="DOCUMENT_FS",
                     guid=_text(item, TYPES_NS, "guid", sha, path + "/t:guid"),
-                    content_uid=_text(
-                        item, TYPES_NS, "contentUid", sha, path + "/t:contentUid"
-                    ),
+                    content_uid=_text(item, TYPES_NS, "contentUid", sha, path + "/t:contentUid"),
                     provenance=_provenance(sha, path),
                 )
             )
@@ -737,7 +742,7 @@ def parse_notice223_xml(
     )
     if (
         len(lots) > 100
-        or sum(len(lot.items) for lot in lots) > 5000
+        or sum(len(lot.items) for lot in lots) > MAX_NOTICE_ITEMS
         or len(attachments) + len(manifest_references) > 200
     ):
         raise Eis223ContractError("NOTICE_COLLECTION_LIMIT")
@@ -765,6 +770,13 @@ def parse_notice223_xml(
             "selected_deadline": selected_deadline,
             "manifest_additional_count": additional_count,
             "manifest_references": tuple(manifest_references),
+        }
+    if document_type == TARGETED_DOCUMENT_TYPE:
+        generic_fields = {
+            "purchase_guid": _text(data, PURCHASE_NS, "guid", sha, base + "/p:guid"),
+            "for_small_or_middle_raw": _text(
+                data, PURCHASE_NS, "forSmallOrMiddle", sha, base + "/p:forSmallOrMiddle"
+            ),
         }
     return Eis223NoticeSnapshot(
         document_type=document_type,
@@ -839,10 +851,10 @@ def inspect_notice223_archive(
                 ):
                     raise Eis223ContractError("ARCHIVE_MEMBER_REJECTED")
                 seen.add(name)
-                if member.file_size > MAX_XML_BYTES:
+                if member.file_size > MAX_NOTICE_XML_BYTES:
                     raise Eis223ContractError("XML_BYTES_LIMIT")
                 with archive.open(member) as stream:
-                    content = stream.read(MAX_XML_BYTES + 1)
+                    content = stream.read(MAX_NOTICE_XML_BYTES + 1)
                 if len(content) != member.file_size:
                     raise Eis223ContractError("XML_BYTES_INVALID")
                 records.append(

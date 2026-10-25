@@ -254,6 +254,7 @@ class Runner:
             COMPANY,
             "--actor-id",
             "server-corpus-worker",
+            "--mandatory-fresh-first",
         ]
         captured = bytearray()
         digest = hashlib.sha256()

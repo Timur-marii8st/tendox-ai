@@ -10,9 +10,10 @@ from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from procurement.eis_joint_budget import NATIONAL_RECOVERY_START, JointStartBudget
 from procurement.sources.eis_corpus import EisCorpusScope, resource_gate
 from procurement.sources.eis_feed_archive import SUPPORTED_NOTICE_TYPES, EisFeedArchiveError
 from procurement.sources.eis_feed_sync import (
@@ -69,6 +70,9 @@ class EisFreshnessScope:
     document_types: tuple[str, ...] = SUPPORTED_NOTICE_TYPES
     utc_offset_hours: int = 3
     reconcile_days: int = 3
+    checkpointed: bool = False
+    mandatory_only: bool = False
+    urgent_only: bool = False
 
     def targets(self, now: datetime) -> tuple[FreshnessTarget, ...]:
         if now.tzinfo is None or now.utcoffset() is None:
@@ -150,6 +154,8 @@ def eligible_freshness(
     """Persist the worker's scope, then select with the same rules as its read probe."""
     if not 1 <= limit <= 1000:
         raise ValueError("FRESHNESS_LIMIT_INVALID")
+    if scope.checkpointed:
+        return checkpoint_due_freshness(journal, scope, now=now, limit=limit, plan=True)
     targets = scope.targets(now)
     selections = tuple(target.selection for target in targets)
     for offset in range(0, len(selections), 31):
@@ -163,6 +169,8 @@ def read_due_freshness(
     """Read attempts without planning; a missing target is unattempted due work."""
     if not 1 <= limit <= 1000:
         raise ValueError("FRESHNESS_LIMIT_INVALID")
+    if scope.checkpointed:
+        return checkpoint_due_freshness(journal, scope, now=now, limit=limit, plan=False)
     targets = scope.targets(now)
     attempt = eis_sync_attempts
     with journal.storage.transaction(journal.company_id, consistent_read=True) as connection:
@@ -213,6 +221,469 @@ def read_due_freshness(
     return tuple(due[:limit])
 
 
+def checkpoint_due_freshness(
+    journal: EisSyncJournal,
+    scope: EisFreshnessScope,
+    *,
+    now: datetime,
+    limit: int,
+    plan: bool,
+) -> tuple[FreshnessTarget, ...]:
+    """Bounded urgent lookup precedes and survives deferred historical work."""
+    scope.targets(now)
+    journal.freshness_recovery_reason = None
+    zone = timezone(timedelta(hours=scope.utc_offset_hours))
+    latest = (now.astimezone(zone) - timedelta(hours=2, minutes=5)).replace(
+        minute=0, second=0, microsecond=0
+    )
+    candidates = tuple(
+        FreshnessTarget(
+            EisHourSelection(r, h.date(), h.hour, scope.utc_offset_hours, k),
+            "RECENT_HOUR",
+            timedelta(days=1),
+        )
+        for h in ((latest, latest - timedelta(hours=1)) if scope.urgent_only else (latest,))
+        for r in scope.regions
+        for k in scope.document_types
+    )
+    with journal.storage.transaction(journal.company_id, consistent_read=True) as conn:
+        conn.execute(text("SET LOCAL statement_timeout = '5000ms'"))
+        rows = (
+            conn.execute(
+                select(eis_sync_attempts)
+                .where(
+                    eis_sync_attempts.c.company_id == journal.company_id,
+                    eis_sync_attempts.c.window_key.in_(
+                        [t.selection.window_key for t in candidates]
+                    ),
+                )
+                .distinct(eis_sync_attempts.c.window_key)
+                .order_by(
+                    eis_sync_attempts.c.window_key,
+                    eis_sync_attempts.c.attempted_at.desc(),
+                    eis_sync_attempts.c.attempt_id.desc(),
+                )
+            )
+            .mappings()
+            .all()
+        )
+    observed = {r["window_key"]: r for r in rows}
+    fresh = []
+    for t in candidates:
+        row = observed.get(t.selection.window_key)
+        if row and row["outcome"] in {"SYNCED", "NO_DATA"} and row["source_response_sha256"]:
+            continue
+        if due_target(
+            t,
+            now=now,
+            attempted_at=row["attempted_at"] if row else None,
+            outcome=row["outcome"] if row else None,
+            reason=row["reason_code"] if row else None,
+        ):
+            fresh.append(t)
+    if plan:
+        selections = [t.selection for t in candidates] + [
+            EisDateSelection(
+                r, now.astimezone(zone).date() - timedelta(days=1), scope.utc_offset_hours, k
+            )
+            for r in scope.regions
+            for k in scope.document_types
+        ]
+        for offset in range(0, len(selections), 31):
+            journal.plan(tuple(selections[offset : offset + 31]))
+    if scope.urgent_only:
+        return tuple(fresh[:limit])
+    if len(fresh) >= limit:
+        journal.freshness_recovery_reason = "DEFERRED_FOR_NEW_HOURS"
+        return tuple(fresh[:limit])
+    try:
+        return _checkpoint_recovery_due(journal, scope, now=now, limit=limit, plan=plan)
+    except SQLAlchemyError as error:
+        if getattr(getattr(error, "orig", None), "sqlstate", None) != "57014":
+            raise
+        journal.freshness_recovery_reason = "RECOVERY_QUERY_TIMEOUT"
+        return tuple(fresh)
+
+
+def _checkpoint_recovery_due(
+    journal: EisSyncJournal,
+    scope: EisFreshnessScope,
+    *,
+    now: datetime,
+    limit: int,
+    plan: bool,
+) -> tuple[FreshnessTarget, ...]:
+    """Durable coordinate observations; missing hours recover through full days.
+
+    No cursor acknowledges source data. Each available hour is planned before
+    capture; missed calendar dates become durable daily reconciliation debt.
+    An evidenced final-day observation closes debt, without claiming coverage.
+    """
+    if not 1 <= limit <= 1000:
+        raise ValueError("FRESHNESS_LIMIT_INVALID")
+    scope.targets(now)
+    zone = timezone(timedelta(hours=scope.utc_offset_hours))
+    local = now.astimezone(zone)
+    latest = (local - timedelta(hours=2, minutes=5)).replace(minute=0, second=0, microsecond=0)
+    latest_targets = tuple(
+        FreshnessTarget(
+            EisHourSelection(r, latest.date(), latest.hour, scope.utc_offset_hours, k),
+            "RECENT_HOUR",
+            timedelta(days=1),
+        )
+        for r in scope.regions
+        for k in scope.document_types
+    )
+    params = {
+        "co": journal.company_id,
+        "regions": list(scope.regions),
+        "types": list(scope.document_types),
+        "now": now,
+        "yesterday": local.date() - timedelta(days=1),
+        "blocked_reasons": list(_SOURCE_CONFLICTS | _LOCAL_WINDOW_LIMITS),
+        "offset": f"{scope.utc_offset_hours:+03d}:00",
+        "limit": 1000,
+        "mandatory": scope.mandatory_only,
+        "reconcile_days": scope.reconcile_days,
+        "recovery_start": NATIONAL_RECOVERY_START,
+    }
+    # All rowsets and database phases are bounded. Old terminal hourly history
+    # never enters Python. The fixed SQL deadline is part of the240s start budget.
+    hour_pattern = (
+        r"^getDocsIP/PRIZ/[0-9]{1,2}/[0-9]{4}-[0-9]{2}-[0-9]{2}/"
+        r"[0-9]{2}[+-][0-9]{2}:00(/[^/]+)?$"
+    )
+    day_pattern = (
+        r"^getDocsIP/PRIZ/[0-9]{1,2}/[0-9]{4}-[0-9]{2}-[0-9]{2}"
+        r"[+-][0-9]{2}:00(/[^/]+)?$"
+    )
+    # Latest observations and evidenced successes are scanned once per bounded
+    # phase, rather than once for every retained target. Keep DISTINCT ON inline:
+    # materializing it loses its uniqueness and can multiply planner estimates.
+    observations = """
+        WITH observations AS NOT MATERIALIZED (
+            SELECT DISTINCT ON (window_key) window_key,attempted_at,outcome,
+                   reason_code,source_response_sha256,
+                   max(attempted_at) FILTER (WHERE outcome IN ('SYNCED','NO_DATA')
+                       AND source_response_sha256 IS NOT NULL)
+                       OVER (PARTITION BY window_key) AS last_evidenced
+            FROM eis_sync_attempts WHERE company_id=:co
+            ORDER BY window_key,attempted_at DESC,attempt_id DESC
+        )
+    """
+    latest_attempt = "LEFT JOIN observations a ON a.window_key=t.window_key"
+    rows = []
+    with journal.storage.transaction(journal.company_id, consistent_read=True) as conn:
+        conn.execute(text("SET LOCAL statement_timeout = '5000ms'"))
+        # Earliest retained coordinate start is never advanced past a missing
+        # completed date. Index-ordered first-row lookups avoid full-ledger reads.
+        missing = (
+            conn.execute(
+                text("""
+            WITH starts AS MATERIALIZED (
+                SELECT split_part(window_key,'/',3) AS r,
+                       COALESCE(NULLIF(split_part(window_key,'/',6),''),
+                                'epNotificationEF2020') AS k,
+                       min(substring(window_key,'[0-9]{4}-[0-9]{2}-[0-9]{2}'))::date
+                           AS first_day
+                FROM eis_sync_targets WHERE company_id=:co AND window_key ~ :hour_pattern
+                  AND split_part(window_key,'/',3)=ANY(:regions)
+                  AND right(split_part(window_key,'/',5),6)=:offset
+                  AND COALESCE(NULLIF(split_part(window_key,'/',6),''),
+                               'epNotificationEF2020')=ANY(:types)
+                GROUP BY r,k
+            )
+            SELECT 'getDocsIP/PRIZ/'||r||'/'||to_char(d,'YYYY-MM-DD')||:offset||
+                   CASE WHEN k='epNotificationEF2020' THEN '' ELSE '/'||k END AS window_key
+            FROM starts JOIN LATERAL generate_series(first_day::timestamp,
+                 CAST(:yesterday AS timestamp),interval '1 day') d ON true
+            WHERE NOT EXISTS(
+                SELECT 1 FROM eis_sync_targets t WHERE company_id=:co
+                AND window_key='getDocsIP/PRIZ/'||r||'/'||to_char(d,'YYYY-MM-DD')||:offset||
+                    CASE WHEN k='epNotificationEF2020' THEN '' ELSE '/'||k END
+            )
+            ORDER BY d,r,k LIMIT 31
+        """),
+                {**params, "hour_pattern": hour_pattern},
+            )
+            .scalars()
+            .all()
+        )
+        for pattern, suffix, hourly in ((hour_pattern, 6, True), (day_pattern, 5, False)):
+            condition = (
+                "(a.outcome IS NULL OR a.outcome NOT IN ('SYNCED','NO_DATA') "
+                "OR a.source_response_sha256 IS NULL)"
+                if hourly
+                else "(a.outcome IS NULL OR a.outcome NOT IN ('SYNCED','NO_DATA') "
+                "OR a.source_response_sha256 IS NULL "
+                "OR a.attempted_at < ((substring(t.window_key,"
+                "'[0-9]{4}-[0-9]{2}-[0-9]{2}')||'T00:00:00'||:offset)::timestamptz"
+                "+interval '1 day 2 hours 5 minutes') "
+                "OR (substring(t.window_key,'[0-9]{4}-[0-9]{2}-[0-9]{2}')::date"
+                ">=CAST(:yesterday AS date)-2 AND a.attempted_at<=:now-interval '24 hours'))"
+            )
+            cutoff = (
+                "((substring(t.window_key,'[0-9]{4}-[0-9]{2}-[0-9]{2}')"
+                "||'T00:00:00'||:offset)::timestamptz+interval '1 day 2 hours 5 minutes')"
+            )
+            final_debt = (
+                "false"
+                if hourly
+                else (
+                    f"({cutoff} <= :now AND (a.last_evidenced < {cutoff} OR "
+                    "(a.last_evidenced IS NULL AND substring(t.window_key,"
+                    "'[0-9]{4}-[0-9]{2}-[0-9]{2}')::date >= :recovery_start)))"
+                )
+            )
+            day_key = (
+                "'getDocsIP/PRIZ/'||split_part(t.window_key,'/',3)||'/'||"
+                "split_part(t.window_key,'/',4)||:offset||CASE "
+                "WHEN split_part(t.window_key,'/',6)='' THEN '' "
+                "ELSE '/'||split_part(t.window_key,'/',6) END"
+            )
+            daily_join = f"LEFT JOIN observations d ON d.window_key={day_key}" if hourly else ""
+            daily_credit = (
+                f"AND (d.last_evidenced IS NULL OR d.last_evidenced < {cutoff})" if hourly else ""
+            )
+            horizon = (
+                "CAST(:yesterday AS date)"
+                if hourly
+                else "CAST(:yesterday AS date)+1-:reconcile_days"
+            )
+            day_order = "DESC" if hourly else "ASC"
+            statement = (
+                observations
+                + f"""
+                SELECT t.window_key,a.attempted_at,a.outcome,a.reason_code,
+                       a.source_response_sha256,COALESCE({final_debt},false) AS final_debt
+                FROM eis_sync_targets t {latest_attempt} {daily_join}
+                WHERE t.company_id=:co
+                  AND split_part(t.window_key,'/',3)=ANY(:regions)
+                  AND COALESCE(NULLIF(split_part(t.window_key,'/',{suffix}),''),
+                               'epNotificationEF2020')=ANY(:types)
+                  AND t.window_key ~ :pattern AND {condition} {daily_credit}
+                  AND right(split_part(t.window_key,'/',{5 if hourly else 4}),6)=:offset
+                  AND (NOT :mandatory OR
+                       substring(t.window_key,'[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}')::date
+                       >= {horizon} OR {final_debt})
+                  AND (a.attempted_at IS NULL OR a.outcome IN ('SYNCED','NO_DATA')
+                       OR a.attempted_at <= :now-CASE
+                         WHEN a.outcome='FAILED' AND a.reason_code=ANY(:blocked_reasons)
+                         THEN interval '24 hours' ELSE interval '15 minutes' END)
+                  AND substring(t.window_key,'[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}')::date
+                      <= CAST(:yesterday AS date)+1
+                ORDER BY substring(t.window_key,'[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}') {day_order},
+                         split_part(t.window_key,'/',5) DESC,t.window_key
+                LIMIT :limit
+            """
+            )
+            rows += list(conn.execute(text(statement), {**params, "pattern": pattern}).mappings())
+    # Current/latest full-day debt is materialized even when an outage created
+    # no hourly targets at all. The existing durable daily planner covers old
+    # dates before this national scope's retained start.
+    yesterday_targets = tuple(
+        EisDateSelection(r, local.date() - timedelta(days=1), scope.utc_offset_hours, k)
+        for r in scope.regions
+        for k in scope.document_types
+    )
+
+    def selection(key: str) -> EisSelection:
+        pieces = key.split("/")
+        day = datetime.fromisoformat(pieces[3][:10]).date()
+        if len(pieces[3]) == 10:
+            return EisHourSelection(
+                pieces[2],
+                day,
+                int(pieces[4][:2]),
+                scope.utc_offset_hours,
+                pieces[5] if len(pieces) == 6 else "epNotificationEF2020",
+            )
+        return EisDateSelection(
+            pieces[2],
+            day,
+            scope.utc_offset_hours,
+            pieces[4] if len(pieces) == 5 else "epNotificationEF2020",
+        )
+
+    missing_days = tuple(selection(k) for k in missing)
+    if plan:
+        pending = (
+            [t.selection for t in latest_targets] + list(yesterday_targets) + list(missing_days)
+        )
+        pending = list({s.window_key: s for s in pending}.values())
+        for offset in range(0, len(pending), 31):
+            journal.plan(tuple(pending[offset : offset + 31]))
+    attempts = {r["window_key"]: r for r in rows}
+    candidates = {r["window_key"]: selection(r["window_key"]) for r in rows}
+    candidates.update((s.window_key, s) for s in (*yesterday_targets, *missing_days))
+    candidates.update((t.selection.window_key, t.selection) for t in latest_targets)
+    # Read terminal latest-hour observations too: their absence from the
+    # outstanding SQL result must not mean they have never been captured.
+    with journal.storage.transaction(journal.company_id, consistent_read=True) as conn:
+        conn.execute(text("SET LOCAL statement_timeout = '5000ms'"))
+        for row in conn.execute(
+            select(eis_sync_attempts)
+            .where(
+                eis_sync_attempts.c.company_id == journal.company_id,
+                eis_sync_attempts.c.window_key.in_(
+                    [t.selection.window_key for t in latest_targets]
+                    + [s.window_key for s in yesterday_targets]
+                ),
+            )
+            .distinct(eis_sync_attempts.c.window_key)
+            .order_by(
+                eis_sync_attempts.c.window_key,
+                eis_sync_attempts.c.attempted_at.desc(),
+                eis_sync_attempts.c.attempt_id.desc(),
+            )
+        ).mappings():
+            attempts[row["window_key"]] = row
+    fresh: list[FreshnessTarget] = []
+    recovery: list[FreshnessTarget] = []
+    reconciliation: list[FreshnessTarget] = []
+    for key, s in candidates.items():
+        observed = attempts.get(key)
+        terminal = bool(
+            observed
+            and observed["outcome"] in {"SYNCED", "NO_DATA"}
+            and observed["source_response_sha256"]
+        )
+        if isinstance(s, EisHourSelection) and terminal:
+            continue
+        hour = datetime.combine(s.day, datetime.min.time(), zone) + timedelta(
+            hours=getattr(s, "hour", 0)
+        )
+        if isinstance(s, EisHourSelection) and hour > latest:
+            continue
+        lane: Literal["RECENT_HOUR", "RECONCILE_DAY", "EARLIER_HOUR"] = (
+            "RECENT_HOUR"
+            if isinstance(s, EisHourSelection) and hour >= latest - timedelta(hours=1)
+            else "EARLIER_HOUR"
+            if isinstance(s, EisHourSelection)
+            else "RECONCILE_DAY"
+        )
+        t = FreshnessTarget(s, lane, timedelta(days=1))
+        final_cutoff = datetime.combine(s.day, datetime.min.time(), zone) + timedelta(
+            days=1, hours=2, minutes=5
+        )
+        final_debt = (
+            isinstance(s, EisDateSelection)
+            and observed is not None
+            and (
+                observed.get("final_debt", False)
+                or (terminal and observed["attempted_at"] < final_cutoff <= now)
+            )
+        )
+        # A missed final observation remains mandatory even after a long restart.
+        # Other old coordinates have the existing historical executor.
+        if (
+            scope.mandatory_only
+            and not final_debt
+            and s.day
+            < local.date()
+            - timedelta(days=scope.reconcile_days if isinstance(s, EisDateSelection) else 1)
+        ):
+            continue
+        if not (final_debt and terminal) and not due_target(
+            t,
+            now=now,
+            attempted_at=observed["attempted_at"] if observed else None,
+            outcome=observed["outcome"] if observed else None,
+            reason=observed["reason_code"] if observed else None,
+        ):
+            continue
+        (
+            fresh
+            if lane == "RECENT_HOUR"
+            else recovery
+            if lane == "EARLIER_HOUR"
+            else reconciliation
+        ).append(t)
+    fresh.sort(key=lambda t: (t.selection.day, getattr(t.selection, "hour", -1)), reverse=True)
+    if scope.mandatory_only:
+        # Mandatory daily rechecks share the turn, not an arbitrary one-eighth
+        # residue. Older coordinates remain persisted for the historical lane.
+        return tuple((fresh + reconciliation + recovery)[:limit])
+    chosen = fresh[:limit]
+    chosen += reconciliation[: min(limit - len(chosen), max(1, limit // 8))]
+    chosen += recovery[: limit - len(chosen)]
+    return tuple(chosen)
+
+
+def read_due_reconciliation(
+    journal: EisSyncJournal,
+    scope: EisFreshnessScope,
+    *,
+    now: datetime,
+    limit: int,
+) -> tuple[FreshnessTarget, ...]:
+    """Read only recent completed-day coordinates, with no historical-ledger scan."""
+    scope.targets(now)
+    if not 1 <= limit <= 1000:
+        raise ValueError("FRESHNESS_LIMIT_INVALID")
+    zone = timezone(timedelta(hours=scope.utc_offset_hours))
+    local_day = now.astimezone(zone).date()
+    selections = tuple(
+        EisDateSelection(region, local_day - timedelta(days=days), scope.utc_offset_hours, kind)
+        for days in range(1, scope.reconcile_days + 1)
+        for region in scope.regions
+        for kind in scope.document_types
+        if datetime.combine(local_day - timedelta(days=days), datetime.min.time(), zone)
+        + timedelta(days=1, hours=2, minutes=5)
+        <= now
+    )
+    with journal.storage.transaction(journal.company_id, consistent_read=True) as conn:
+        conn.execute(text("SET LOCAL statement_timeout = '5000ms'"))
+        rows = (
+            conn.execute(
+                select(eis_sync_attempts)
+                .where(
+                    eis_sync_attempts.c.company_id == journal.company_id,
+                    eis_sync_attempts.c.window_key.in_([s.window_key for s in selections]),
+                )
+                .distinct(eis_sync_attempts.c.window_key)
+                .order_by(
+                    eis_sync_attempts.c.window_key,
+                    eis_sync_attempts.c.attempted_at.desc(),
+                    eis_sync_attempts.c.attempt_id.desc(),
+                )
+            )
+            .mappings()
+            .all()
+        )
+    attempts = {row["window_key"]: row for row in rows}
+    due = []
+    for selection in selections:
+        row = attempts.get(selection.window_key)
+        target = FreshnessTarget(selection, "RECONCILE_DAY", timedelta(days=1))
+        cutoff = datetime.combine(selection.day, datetime.min.time(), zone) + timedelta(
+            days=1,
+            hours=2,
+            minutes=5,
+        )
+        terminal = row and row["outcome"] in {"SYNCED", "NO_DATA"} and row["source_response_sha256"]
+        if (terminal and row["attempted_at"] < cutoff) or due_target(
+            target,
+            now=now,
+            attempted_at=row["attempted_at"] if row else None,
+            outcome=row["outcome"] if row else None,
+            reason=row["reason_code"] if row else None,
+        ):
+            due.append(target)
+    due.sort(
+        key=lambda t: (
+            0
+            if t.selection.window_key not in attempts
+            else 2
+            if attempts[t.selection.window_key]["outcome"] in {"SYNCED", "NO_DATA"}
+            else 1,
+            -t.selection.day.toordinal(),
+            t.selection.window_key,
+        )
+    )
+    return tuple(due[:limit])
+
+
 @dataclass(frozen=True)
 class EisFreshnessReport:
     status: Literal["PARTIAL", "BLOCKED"]
@@ -237,6 +708,7 @@ class EisFreshnessReport:
     partial_windows: int = 0
     held_pairs: int = 0
     replayed_projection_batches: int = 0
+    recovery_reason: str | None = None
 
 
 def _observe(
@@ -299,7 +771,10 @@ async def run_freshness(
     min_free_bytes: int = 40 * 1024**3,
     transport: EisFeedTransport | None = None,
     include_requests: bool = False,
+    paced_transport: bool = False,
+    joint_budget: JointStartBudget | None = None,
 ) -> EisFreshnessReport:
+    started = time.monotonic()
     scope.targets(now)  # Validate time/scope even when a resource gate blocks intake.
     if not 1 <= max_seconds <= 3600 or not 1 <= max_windows <= 1000:
         raise ValueError("FRESHNESS_BUDGET_INVALID")
@@ -322,7 +797,35 @@ async def run_freshness(
         targets = fair_targets(
             pending_refresh_targets(journal, now=now), targets, limit=max_windows
         )
-    started = time.monotonic()
+    pending_reconciliation: tuple[Literal["44", "223"], ...] = ()
+    if (
+        not stopped
+        and joint_budget is not None
+        and joint_budget.protected_reconciliation is True
+        and scope.checkpointed
+        and not scope.urgent_only
+    ):
+        from procurement.storage.eis_223_regions import regional_due_windows
+
+        daily = read_due_reconciliation(journal, scope, now=now, limit=max_windows)
+        daily223 = regional_due_windows(
+            journal.storage,
+            journal.company_id,
+            now,
+            limit=2,
+            fresh_first=True,
+            reconciliation_only=True,
+        )
+        pending_reconciliation = tuple(
+            law for law, due in (("44", daily), ("223", daily223)) if due
+        )
+        if daily and joint_budget.recovery_reserved("44"):
+            prefix = daily[: max(1, max_windows // 4)]
+            for offset in range(0, len(prefix), 31):
+                journal.plan(tuple(t.selection for t in prefix[offset : offset + 31]))
+            selected = {t.selection.window_key for t in prefix}
+            targets = prefix + tuple(t for t in targets if t.selection.window_key not in selected)
+            targets = targets[:max_windows]
     expired = 0
     for target in targets:
         if target.expires_at is not None and datetime.now(UTC) >= target.expires_at:
@@ -339,6 +842,56 @@ async def run_freshness(
         )
         if stopped:
             break
+        recovery_law = "44" if target.lane != "RECENT_HOUR" else None
+        if joint_budget is not None:
+            borrow = False
+            protected = (
+                target.lane == "RECONCILE_DAY" and joint_budget.recovery_reserved("44") is True
+            )
+            if recovery_law and not protected:
+                from procurement.storage.eis_223_regions import regional_due_windows
+
+                if regional_due_windows(
+                    journal.storage,
+                    journal.company_id,
+                    datetime.now(UTC),
+                    limit=2,
+                    fresh_first=True,
+                    fresh_only=True,
+                ):
+                    stopped = "FRESH_223_WORK_READY"
+                    break
+                borrow = True
+            if (
+                recovery_law
+                and not protected
+                and read_due_freshness(
+                    journal,
+                    EisFreshnessScope(
+                        scope.regions,
+                        scope.document_types,
+                        scope.utc_offset_hours,
+                        checkpointed=True,
+                        mandatory_only=True,
+                        urgent_only=True,
+                    ),
+                    now=datetime.now(UTC),
+                    limit=1,
+                )
+            ):
+                stopped = "FRESH_WORK_READY"
+                break
+            if not joint_budget.can_start(
+                recovery_law,
+                borrow=borrow,
+                pending_reconciliation=pending_reconciliation,
+            ):
+                stopped = "JOINT_START_BUDGET_REACHED"
+                break
+            joint_budget.begin_window(recovery_law)
+        if time.monotonic() - started >= max_seconds:
+            stopped = "RUN_TIME_BUDGET_REACHED"
+            break
         key = target.selection.window_key
         attempted += 1
         keys.append(key)
@@ -346,7 +899,7 @@ async def run_freshness(
         window_started = time.monotonic()
         try:
             if transport is None:
-                result = await sync_eis_window_via_browser(
+                request = sync_eis_window_via_browser(
                     journal.storage,
                     journal.company_id,
                     journal.actor_id,
@@ -355,7 +908,7 @@ async def run_freshness(
                     refresh=True,
                 )
             else:
-                result = await sync_eis_window(
+                request = sync_eis_window(
                     journal.storage,
                     journal.company_id,
                     journal.actor_id,
@@ -364,6 +917,13 @@ async def run_freshness(
                     transport,
                     refresh=True,
                 )
+            if joint_budget is None:
+                result = await request
+            else:
+                try:
+                    result = await asyncio.wait_for(request, timeout=180)
+                except TimeoutError as error:
+                    raise EisSyncError("RUN_TIME_BUDGET_REACHED") from error
         except (EisSyncError, EisFeedArchiveError, EisIndexConflict) as error:
             raw = str(error)
             reason = raw if _SAFE.fullmatch(raw) else "SOURCE_FAILURE"
@@ -441,7 +1001,10 @@ async def run_freshness(
             if result.status == "SERVICE_ERROR":
                 stopped = "SOURCE_SERVICE_ERROR"
                 break
-        await asyncio.sleep(2)
+        if joint_budget is not None:
+            joint_budget.end_window()
+        if not paced_transport:
+            await asyncio.sleep(2)
     return EisFreshnessReport(
         "BLOCKED" if stopped else "PARTIAL",
         journal.company_id,
@@ -465,4 +1028,5 @@ async def run_freshness(
         partial_windows=partial_windows,
         held_pairs=held_pairs,
         replayed_projection_batches=replayed_projection_batches,
+        recovery_reason=journal.freshness_recovery_reason if scope.checkpointed else None,
     )

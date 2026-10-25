@@ -4,7 +4,7 @@ import Link from "next/link";
 import { OcrReviewWorkspace } from "./review-workspace";
 
 export const metadata: Metadata = {
-  title: "Проверка OCR-разметки — Syurai Procurement",
+  title: "Проверка OCR-разметки — Tendox",
   description: "Локальное человеческое подтверждение эталонной OCR-разметки",
 };
 

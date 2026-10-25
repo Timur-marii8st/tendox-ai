@@ -31,13 +31,13 @@ def regional_wrapper(tmp_path: Path) -> tuple[Path, Path, Path, dict[str, str]]:
         helper = (ROOT / "scripts" / name).read_text()
         helper = helper.replace("/home/syurai/vibe-seller-state", str(state))
         (scripts / name).write_text(helper)
-    source = (ROOT / "scripts/server-eis-223-refresh.sh").read_text()
-    source = source.replace("/home/syurai/vibe-seller-state", str(state))
-    source = source.replace("/home/syurai/vibe-seller", str(workspace))
-    source = source.replace("/var/lib/eis-browser/eis-223-refresh.request", str(marker))
-    source = source.replace("flock -w 300 9", "flock -w 2 9")
+    source = (ROOT / "scripts/server-eis-223-refresh.sh").read_bytes()
+    source = source.replace(b"/home/syurai/vibe-seller-state", str(state).encode())
+    source = source.replace(b"/home/syurai/vibe-seller", str(workspace).encode())
+    source = source.replace(b"/var/lib/eis-browser/eis-223-refresh.request", str(marker).encode())
+    source = source.replace(b"flock -w 300 9", b"flock -w 2 9")
     wrapper = scripts / "server-eis-223-refresh.sh"
-    wrapper.write_text(source)
+    wrapper.write_bytes(source)
     wrapper.chmod(0o700)
     (scripts / "server-eis-223-refresh.py").write_text("# synthetic probe input\n")
     sudo = bindir / "sudo"
@@ -86,7 +86,7 @@ esac
 
 def run(wrapper: Path, env: dict[str, str], **updates: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", str(wrapper)],
+        [str(wrapper)],
         env={**env, **updates},
         text=True,
         capture_output=True,
@@ -152,7 +152,7 @@ def test_duplicate_dispatch_cannot_remove_owner_marker_and_owner_cleans_after_lo
     try:
         wait_for(ready)
         owner = subprocess.Popen(
-            ["bash", str(wrapper)],
+            [str(wrapper)],
             env=env,
             text=True,
             stdout=subprocess.PIPE,
@@ -208,7 +208,7 @@ def test_term_while_waiting_cleans_marker_and_leaves_no_waiter(regional_wrapper)
     try:
         wait_for(ready)
         waiter = subprocess.Popen(
-            ["bash", str(wrapper)],
+            [str(wrapper)],
             env=env,
             text=True,
             stdout=subprocess.PIPE,

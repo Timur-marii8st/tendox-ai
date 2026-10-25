@@ -407,6 +407,11 @@ class ReleaseGateController:
             candidate, source_dir = seal_candidate_bundle(
                 self.bundle, self.expected_sha256, run_dir, policy
             )
+            bound_source = policy.raw.get("candidate_identity")
+            if bound_source is not None and any(
+                candidate.as_dict().get(key) != value for key, value in bound_source.items()
+            ):
+                raise GateError("candidate differs from exact branch policy binding")
             context = GateContext(
                 run_id=run_id,
                 run_dir=run_dir,
@@ -1275,10 +1280,11 @@ class DockerGateExecutor:
             f"""FROM {image["reference"]}
 LABEL {SESSION_LABEL}={self.ctx.run_id} {ROLE_LABEL}=python-runtime
 USER 0
-RUN python -m pip install --no-cache-dir uv=={uv_version}
+RUN python -m pip install --timeout 300 --no-cache-dir uv=={uv_version}
 COPY pyproject.toml uv.lock /opt/dependencies/
 WORKDIR /opt/dependencies
-RUN UV_PROJECT_ENVIRONMENT=/opt/venv UV_CACHE_DIR=/opt/uv-cache UV_LINK_MODE=copy \\
+RUN UV_HTTP_TIMEOUT=300 \\
+    UV_PROJECT_ENVIRONMENT=/opt/venv UV_CACHE_DIR=/opt/uv-cache UV_LINK_MODE=copy \\
     uv sync --frozen --extra dev --no-install-project
 ENV VIRTUAL_ENV=/opt/venv PATH=/opt/venv/bin:$PATH PYTHONPATH=/workspace/src:/workspace \\
     UV_PROJECT_ENVIRONMENT=/opt/venv UV_CACHE_DIR=/test/uv-cache \\
@@ -1495,7 +1501,12 @@ CMD ["sleep", "infinity"]
         timeout = int(self.ctx.policy.raw["limits"]["command_timeout_seconds"]) + 30
         self._stage(
             "docs-navigation",
-            self._python_command("python", "scripts/check_docs.py"),
+            self._python_command(
+                "python", "scripts/check_docs.py",
+                *(["--layout", "legacy-flat"] if self.ctx.policy.raw.get(
+                    "documentation_layout"
+                ) == "legacy-flat" else []),
+            ),
             timeout=timeout,
         )
         scope = self._stage(
@@ -1508,7 +1519,12 @@ CMD ["sleep", "infinity"]
         _atomic_json(inventory_report, inventory)
         self.stages[-1]["reports"].append(_report_reference(inventory_report, self.ctx.run_dir))
         scope_output = scope.stdout.decode("utf-8", errors="replace")
-        if "PostgreSQL: 60 executable modules in 15 fresh-DB groups" not in scope_output:
+        groups = inventory["postgres_groups"]
+        scope_marker = (
+            f"PostgreSQL: {sum(len(group['paths']) for group in groups)} executable modules "
+            f"in {len(groups)} fresh-DB groups"
+        )
+        if scope_marker not in scope_output:
             raise GateError("candidate quality-scope report does not confirm mandatory PG scope")
         self._stage(
             "lock-check",
@@ -2080,9 +2096,18 @@ GRANT USAGE ON SCHEMA public TO procurement_app;
         self._start_postgres()
         self._start_python_runner()
         self._python_quality()
+        sequential = self.ctx.policy.raw.get("postgres_before_web", False)
+        if sequential:
+            self._postgres_quality()
+            # Keep inspected identities for normal cleanup, release worker RAM before Node/build.
+            self._docker_capture("stop", "--time", "10", str(self.python_runner_id))
+            self._docker_capture("stop", "--time", "10", str(self.pg_id))
         self._start_node_runner()
         self._web_quality()
-        self._postgres_quality()
+        if sequential:
+            self._docker_capture("stop", "--time", "10", str(self.node_runner_id))
+        else:
+            self._postgres_quality()
         self._build_artifact("api")
         self._build_artifact("web")
         self.artifacts["worker"] = {

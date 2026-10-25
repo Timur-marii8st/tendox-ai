@@ -9,7 +9,7 @@ import subprocess
 
 SCRIPT = "/home/syurai/vibe-seller/scripts/server-eis-223-refresh.sh"
 COMMAND = SCRIPT + " >> /home/syurai/vibe-seller-state/eis-223-refresh.log 2>&1"
-ENTRY = "1,11,21,31,41,51 * * * * " + COMMAND
+ENTRY = "5,15,25,35,45,55 * * * * " + COMMAND
 
 
 def updated_crontab(current: str) -> str:

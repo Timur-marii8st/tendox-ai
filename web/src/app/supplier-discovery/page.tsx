@@ -13,7 +13,7 @@ import {
 import { DocumentSupplierSearch } from "./document-search";
 
 export const metadata: Metadata = {
-  title: "Источники поиска поставщиков — Syurai Procurement",
+  title: "Источники поиска поставщиков — Tendox",
 };
 
 type Source = {

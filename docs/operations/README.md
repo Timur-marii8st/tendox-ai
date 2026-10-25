@@ -24,3 +24,14 @@
 - [115-candidate-quality-workflow.md](115-candidate-quality-workflow.md) — M1: подготовительный runbook candidate-triggered quality gate, receipts и граница активации.
 - [121-eis-production-readiness.md](121-eis-production-readiness.md) — диагностика NO_DATA 19 октября, исправление отчёта и условия готовности API.
 - [122-eis-no-data-overflow.md](122-eis-no-data-overflow.md) — восстановление записи NO_DATA через второй ограниченный сегмент.
+
+- [123-beta-shortlist.md](123-beta-shortlist.md) — acceptance и подготовка сквозной беты подбора закупок.
+
+- [124-beta-invitations.md](124-beta-invitations.md) — B11: вход по приглашению, профиль/КП и изоляция компаний.
+- [125-spec-remediation.md](125-spec-remediation.md) — сверка исходников с R4, точная маржа, owner confirmation и оптимизация чтения архивов.
+
+- [126-backup-rotation.md](126-backup-rotation.md) — ежедневный проверенный дамп и безопасная ротация двух последних копий с сохранением исходной.
+- [127-eis-223-selector.md](127-eis-223-selector.md) — Устранение SQL timeout выбора очередной партии 223-ФЗ.
+- [130-eis-throughput-diagnosis.md](130-eis-throughput-diagnosis.md) — Транспортные сбои, стоимость пустых проверок и блокировка исторической загрузки.
+- [131-eis-source-errors.md](131-eis-source-errors.md) — Доступ во время регламентных работ и сохранение безопасных кодов отказов.
+- [132-eis-timeout-recovery.md](132-eis-timeout-recovery.md) — Проверка восстановления доступа, шесть новых закупок и HTTP search.

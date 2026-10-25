@@ -260,3 +260,16 @@ def test_forward_slash_source_display_label_matches_shared_parser_predicate():
     assert report.archives[0].parser_status == "NO_ERROR_OBSERVED"
     assert report.finding_count == 0 and report.inspected_attachment_count == 1
     assert "source/display-label.pdf" not in report.model_dump_json()
+
+
+def test_equal_uid_reference_is_reported_as_alias_without_parser_failure():
+    xml = _notice_with_attachments(NUMBER, 1)
+    start = xml.index(b"<attachmentInfo>")
+    end = xml.index(b"</attachmentInfo>") + len(b"</attachmentInfo>")
+    xml = xml[:end] + xml[start:end] + xml[end:]
+    report = diagnose(window(_archive(("a.xml", xml))))
+    assert report.archives[0].parser_status == "NO_ERROR_OBSERVED"
+    assert report.finding_count == 1
+    assert report.findings[0].reason == "ATTACHMENT_REFERENCE_ALIAS"
+    assert report.findings[0].failure_flags == ("DUPLICATE_UID",)
+    assert report.canonical_admission == "NOT_ENABLED"

@@ -110,6 +110,8 @@ def _source(
     if len(matches) != 1:
         raise LookupError("DOCUMENT_ATTACHMENT_NOT_FOUND")
     attachment = matches[0]
+    if attachment.reference_status == "UNKNOWN":
+        raise ValueError("ATTACHMENT_REFERENCE_REQUIRES_REVIEW")
     if document_filename_requires_review(attachment.filename):
         raise ValueError("ATTACHMENT_FILENAME_REQUIRES_REVIEW")
     if not attachment.filename.lower().endswith(".docx"):

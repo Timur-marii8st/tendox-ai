@@ -306,3 +306,74 @@ def test_pages_recover_entire_retained_text_including_large_block(storage: Postg
             assert block.text and block.character_start == len(rebuilt[block.block_index])
             rebuilt[block.block_index] += block.text
     assert list(rebuilt.values()) == texts
+
+
+def test_ambiguous_reference_blocks_review_before_receipt(storage):
+    company = f"ambiguous-review-{uuid.uuid4()}"
+    content = docx_bytes()
+    ref = admit(storage, company, len(content), ambiguous_attachment=True)
+    request = ReviewDocumentRequest(
+        notice=ref, content_uid=UID, expected_document_sha256=hashlib.sha256(content).hexdigest()
+    )
+    with pytest.raises(ValueError, match="ATTACHMENT_REFERENCE_REQUIRES_REVIEW"):
+        prepare_review_document(storage, company, request, actor_id="test")
+
+
+def test_ambiguous_metadata_cannot_reuse_cached_analysis_or_review(storage, monkeypatch):
+    """Simulate legacy readers ignoring aliases, without mutating immutable notices."""
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from procurement.storage import eis_document_review as review
+    from procurement.storage import eis_document_store as documents
+
+    company = f"cached-ambiguous-{uuid.uuid4()}"
+    content = docx_bytes()
+    ref = admit(storage, company, len(content), ambiguous_attachment=True)
+    plan_document_job(storage, company, ref, actor_id="test")
+    request = ReviewDocumentRequest(
+        notice=ref, content_uid=UID, expected_document_sha256=hashlib.sha256(content).hexdigest()
+    )
+    original_load, original_adapter = documents.load_notice, review._ATTACHMENTS
+
+    def legacy_load(*args):
+        notice = original_load(*args)
+        return replace(
+            notice, attachments=tuple(replace(a, aliases=()) for a in notice.attachments)
+        )
+
+    with monkeypatch.context() as legacy:
+        legacy.setattr(documents, "load_notice", legacy_load)
+        legacy.setattr(
+            review,
+            "_ATTACHMENTS",
+            SimpleNamespace(
+                validate_python=lambda raw: tuple(
+                    replace(a, aliases=()) for a in original_adapter.validate_python(raw)
+                )
+            ),
+        )
+        record_document_outcome(storage, company, ref, UID, actor_id="test", content=content)
+        prepare_review_document(storage, company, request, actor_id="test")
+    get_document_status = documents.get_document_status
+    reanalyze_received_document = documents.reanalyze_received_document
+    status = get_document_status(storage, company, request.notice)
+    assert status.extraction_status == "UNKNOWN"
+    assert status.documents[0].reasons == ("ATTACHMENT_REFERENCE_REQUIRES_REVIEW",)
+    from procurement.storage.eis_evidence_bridge import get_eis_evidence_bridge
+
+    bridge = get_eis_evidence_bridge(storage, company, request.notice)
+    assert bridge.documents[0].conditions == ()
+    assert bridge.collection.extraction_status == "UNKNOWN"
+    assert "ATTACHMENT_REFERENCE_REQUIRES_REVIEW" in bridge.review_gaps
+    calls = (
+        lambda: get_document_analysis(storage, company, request.notice, UID),
+        lambda: reanalyze_received_document(storage, company, request.notice, UID, actor_id="test"),
+        lambda: record_document_outcome(
+            storage, company, request.notice, UID, actor_id="test", content=content
+        ),
+        lambda: prepare_review_document(storage, company, request, actor_id="test"),
+    )
+    for call in calls:
+        with pytest.raises(ValueError, match="ATTACHMENT_REFERENCE_REQUIRES_REVIEW"):
+            call()

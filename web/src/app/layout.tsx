@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Syurai Procurement — закупки и решения",
+  title: "Tendox — закупки и решения",
   description: "Внутренний пилот виртуального тендерного отдела",
 };
 

@@ -30,8 +30,31 @@ _INTENT_WORDS = frozenset(
 )
 # Query-only exclusion: persisted title/item v1 keys must not change without reindex.
 _QUERY_FUNCTION_WORDS = frozenset({"для", "при", "или", "как", "это", "что"})
+_SECURITIES_ADJECTIVES = frozenset(
+    {
+        "ценный",
+        "ценная",
+        "ценное",
+        "ценные",
+        "ценного",
+        "ценной",
+        "ценным",
+        "ценному",
+        "ценную",
+        "ценными",
+        "ценных",
+        "ценном",
+    }
+)
 EisSearchValueKind = Literal[
-    "TITLE", "ITEM_NAME", "CHARACTERISTIC_NAME", "TEXT", "MINIMUM", "MAXIMUM", "UNIT"
+    "TITLE",
+    "ITEM_NAME",
+    "CHARACTERISTIC_NAME",
+    "TEXT",
+    "MINIMUM",
+    "MAXIMUM",
+    "UNIT",
+    "PURCHASE_NUMBER",
 ]
 
 
@@ -125,13 +148,33 @@ def search_query_keys_v1(text: str) -> tuple[str, ...]:
     )
 
 
+def exact_purchase_number(query: str) -> str | None:
+    """Полный номер 223/44-ФЗ остаётся строкой, включая ведущие нули."""
+    query = query.strip()
+    return query if re.fullmatch(r"(?:[0-9]{11}|[0-9]{19,23})", query) else None
+
+
 def _evidence(
     parts: Iterable[tuple[str, str, EisSearchValueKind]],
     query_terms: tuple[str, ...],
 ) -> tuple[EisSearchTermEvidence, ...]:
     found: dict[str, EisSearchTermEvidence] = {}
+    query_keys = {_comparison_key(term) for term in query_terms}
+    exclude_securities = "бумаг" in query_keys and not any(
+        term in _SECURITIES_ADJECTIVES for term in query_terms
+    )
     for value, locator, kind in parts:
         keys = {_comparison_key(word) for word in _detail_tokens(value)}
+        if exclude_securities and "бумаг" in keys:
+            # Preserve occurrences: a field can mention securities and office paper.
+            # Persisted v1 keys remain an unchanged, deliberately broad prefilter.
+            words = _WORD.findall(value.casefold().replace("ё", "е"))
+            if not any(
+                _comparison_key(word) == "бумаг"
+                and (index == 0 or words[index - 1] not in _SECURITIES_ADJECTIVES)
+                for index, word in enumerate(words)
+            ):
+                keys.remove("бумаг")
         for term in query_terms:
             if term not in found and _comparison_key(term) in keys:
                 found[term] = EisSearchTermEvidence(term, locator, value, kind)
@@ -183,6 +226,8 @@ def compare_indexed_notices(
     """Keep the latest version, then compare exact evidence and optional costs."""
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("NOW_TIMEZONE_MISSING")
+    query = query.strip()
+    number = exact_purchase_number(query)
     query_terms = _query_tokens(query)
     if not query_terms or not search_query_keys_v1(query) or len(query) > 120:
         raise ValueError("QUERY_INVALID")
@@ -202,10 +247,22 @@ def compare_indexed_notices(
         notice_keys = set(search_keys_v1(notice.title))
         for item in notice.lot_items:
             notice_keys.update(search_keys_v1(item.name))
-        if not anchor_keys & notice_keys:
+        if number is not None and notice.purchase_number != number:
             continue
-        match_locator = f"{notice.document_type}/commonInfo/purchaseObjectInfo"
-        evidence = _evidence(((notice.title, match_locator, "TITLE"),), query_terms)
+        if number is None and not anchor_keys & notice_keys:
+            continue
+        match_locator = f"{notice.document_type}/commonInfo/" + (
+            "purchaseNumber" if number is not None else "purchaseObjectInfo"
+        )
+        evidence = (
+            (
+                EisSearchTermEvidence(
+                    number, match_locator, notice.purchase_number, "PURCHASE_NUMBER"
+                ),
+            )
+            if number is not None
+            else _evidence(((notice.title, match_locator, "TITLE"),), query_terms)
+        )
         hits = tuple(item.term for item in evidence)
         for item in notice.lot_items:
             if len(evidence) == len(query_terms):
@@ -229,7 +286,11 @@ def compare_indexed_notices(
         if procedure is not None and procedure.application_status == "FAIL":
             status = "FAIL"
         reasons = [
-            f"Совпадение слов: {', '.join(hits)}; XML: {match_locator}.",
+            (
+                f"Точный регистрационный номер: {number}; XML: {match_locator}."
+                if number is not None
+                else f"Совпадение слов: {', '.join(hits)}; XML: {match_locator}."
+            ),
             (
                 f"Источник: XML {notice.xml_sha256}, файл {notice.source_member}, "
                 f"версия {notice.version_number}."
@@ -244,7 +305,7 @@ def compare_indexed_notices(
         if procedure is not None:
             reasons.extend(procedure.reasons)
         for part in evidence:
-            if part.value_kind not in {"TITLE", "ITEM_NAME"}:
+            if part.value_kind not in {"TITLE", "ITEM_NAME", "PURCHASE_NUMBER"}:
                 reasons.append(f"Уточнение {part.term}: {part.source_value}; XML: {part.locator}.")
         if any(part.value_kind in {"MINIMUM", "MAXIMUM"} for part in evidence):
             reasons.append(

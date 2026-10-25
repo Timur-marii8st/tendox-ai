@@ -1,0 +1,41 @@
+{
+  "schema_version": "company-profile-save-command-v1",
+  "expected_version": 0,
+  "changes": {
+    "identity.name": {
+      "knowledge": "KNOWN",
+      "value": "ООО Синтетический поставщик",
+      "reason": null
+    },
+    "identity.inn": {
+      "knowledge": "KNOWN",
+      "value": "1650000000",
+      "reason": null
+    },
+    "identity.kpp": {
+      "knowledge": "NOT_APPLICABLE",
+      "value": null,
+      "reason": "SYNTHETIC_EXAMPLE_ONLY"
+    },
+    "supplied_goods": {
+      "knowledge": "KNOWN",
+      "value": [
+        "Бумага для офиса",
+        "Канцелярские товары"
+      ],
+      "reason": null
+    },
+    "geography.regions": {
+      "knowledge": "KNOWN",
+      "value": [
+        "Татарстан"
+      ],
+      "reason": null
+    },
+    "geography.max_distance_km": {
+      "knowledge": "KNOWN",
+      "value": "100.50",
+      "reason": null
+    }
+  }
+}

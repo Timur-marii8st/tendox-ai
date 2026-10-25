@@ -1,40 +1,44 @@
 ﻿# Покрытие нового ТЗ партнёра
 
-Ревизия 2026-09-17 по состоянию сорокового ограниченного среза S4.
-«Частично» означает, что проверяемая часть требования реализована, но полного
-production-сценария ещё нет. Нумерация сохранена по исходнику; пункт 24 не
-предоставлен. Детальный live-статус и evidence проверок находятся в
+Ревизия 2026-10-23 по текущему ограниченному beta-срезу. В таблице различены
+`LIVE SCOPED` (работает в ограниченном beta/production scope), `LOCALLY TESTED`
+(механизм проверен изолированно) и `MISSING SCOPE` (нужна отдельная реализация,
+интеграция или production evidence). Нумерация сохранена по исходнику; пункт 24
+не предоставлен. Наблюдение на 23Oct: профиль 0 KNOWN/27 UNKNOWN и 0 реальных
+КП; это датированный beta-факт, а не постоянный статус. Автоматический расчёт
+доставки отложен пользователем 23Oct; ручные расходы сохраняются. B11 invitations
+имеет отдельный статус `NOT_INSTALLED` и в эту таблицу не добавляет production
+PASS. Детальный live-статус и evidence проверок находятся в
 [плане реализации](../15-implementation-plan.md).
 
 | Пункт | Требование / имеющийся код | Недостающая работа и критерий приёмки | Этап |
 |---|---|---|---|
-| 1 | Профиль — частично: CompanyProfile и его снимок внутри tenant-scoped версии кейса; UI импортирует полный JSON кейса | Самостоятельные CRUD/API/форма профиля отсутствуют; [контракт до реализации](../architecture/07-company-profile-contract.md). Нужны evidence полей, owner/diff, лицензии/допуски и сравнение exact версии | MVP |
-| 1.2 | Запреты LEGAL/COMMERCIAL — частично | Реестр предикатов с источниками и датами; отдельный вывод для каждого запрета, UNKNOWN без контекста | MVP |
-| 2 | Мониторинг — отсутствует; immutable tenant-scoped hybrid index/API и server-side UI ищут последние версии документов по названию, имени, нативному тексту и отдельным vision-тегам | ЕИС и согласованные источники, production full-text backend, checkpoints, дедупликация, ручной/постоянный запуск; повторный импорт не дублирует кейс | MVP/v1 |
-| 3 | Оценка — частично: `decisions.py`, immutable case/evaluation snapshots, evidence и факторы | Автоматический сбор всех входов и полный production workflow; расчёт воспроизводится из сохранённых версий | MVP/v1 |
-| 4 | Экономика — частично: полнота расходов, КП и три обязательных сценария проверяются | Утверждённая налоговая политика, cash-flow и прогноз-факт; отсутствующая доставка продолжает блокировать рекомендацию | MVP |
-| 5 | Поиск поставщика — отсутствует; Candidate только товар | Производители, опт, подрядчики, маркетплейсы, разрешённые страны; сравнение полной стоимости и резервный поставщик | MVP/v1 |
-| 6 | RFQ/КП — частично: `quotes.py`/`cases.py`, tenant-scoped версия одного полного КП в RUB | Нужны RFQ thread/отправка после approval, Quote Analyzer и сравнение нескольких КП | MVP |
-| 7 | Парсер — частично: безопасные PDF/DOCX/XLSX и ZIP, native extraction, локальный OCR PDF и связанных DOCX-media, tenant-scoped persistence производных, AI-assisted visual review, локальная human-review страница с exact digest, routing небезопасного OCR в native-source/vision-approval, отдельный human gate и immutable hybrid discovery index/API | Human-confirmed production-калибровка OCR на репрезентативных разрешённых закупочных сканах, одобренный vision provider/retention policy и исполнитель exact-payload approval, расширение типов фактов и пользовательское резюме; каждый факт сохраняет страницу/абзац/ячейку/media/участника архива | MVP |
-| 8 | Обучение — отсутствует | Причины решений и tenant-scoped предпочтения; сигналы не меняют hard policy | v2 |
-| 9 | Заявка — отсутствует | Versioned ApplicationPackage, минимальный комплект; решение участвовать не разрешает отправку | v1 |
-| 10 | География — частично, DeliveryPlan | Плечи, количество/даты по адресам, плательщик и услуги; два города считаются отдельно, неизвестная цена не ноль | MVP |
-| 11 | Способы — частично, ProcedureMethod | Правила заказчика и применимость; закрытые выключены до разрешения и проверки допуска | MVP/v1 |
-| 12 | Умный поиск — частично: нормализация единиц, пользовательский hybrid search и immutable tenant-scoped exact model→brand catalog с official PDF bytes/SHA-256; публикация доступна только через append-only `DRAFT → APPROVED/REJECTED` с разными автором и reviewer | Reviewer UI, маркировка/повторный review legacy catalogs, production IAM и разрешённый fetch официального URL; затем синонимы, морфология, КТРУ/ОКПД2, параметры категории, аналоги и ранжирование | MVP |
-| 13 | Срок подачи — частично: `SubmissionWindow`, серверная оценка и отображение timezone/deadline | Ingestion, видимая свежесть и таймер; закрытая/истёкшая/только опубликованная процедура не зелёная | MVP |
-| 14 | Юридический фильтр — частично: типизированные обязательные проверки и fail-closed compliance | Versioned Legal Rules Registry, №1875 и исключения с официальными источниками/effective date; код категории сам не выдаёт FAIL/PASS | MVP |
-| 15 | Договоры — отсутствуют | Сравнение заказчик↔поставщик, замечания, signed version; расхождения по срокам/цене/ответственности видны человеку | v1 |
-| 16 | Риски — частично, RiskFinding | Сбор доказательств, каталог и действия; отсутствие данных не означает «рисков нет» | MVP/v1 |
-| 17 | Контроль победы — частично, lifecycle.py | БД, scheduler, адресные этапы, уведомления; предупреждение за 7 дней и просроченная оплата | v1 |
-| 18 | Полная экономика — частично, `ScenarioSet` в case evaluator | S1 проверяет полноту затрат, явные нули и все три сценария; нужны налоги, cash-flow и прогноз-факт | MVP/v1 |
-| 19 | Рейтинг — частично, TenderRating | Версия весов и источники; цвет из Recommendation, высокий балл не отменяет отказ | MVP |
-| 20 | Конкуренция — отсутствует | История аналогов, победители, время/регион/количество, диапазон и выборка; без данных UNKNOWN, без калибровки нет вероятности | v1/v2 |
-| 21 | Главный экран — частично: внутренний S3 показывает список/карточки, gates, provenance, экономику и evaluation | Полная воронка, согласования, контракты, дебиторка и production-сессии; число зелёных совпадает с актуальными рекомендациями после КП | MVP/v1 |
-| 22 | Автопилот — отсутствует | SearchPlan, orchestrator, jobs, лимиты; анализирует, но не расширяет автономию | MVP/v1 |
-| 23 | Аналитика/SaaS — частично: tenant-scoped persisted aggregates, audit events и PostgreSQL RLS | Production RBAC/IAM, read models и отчёт за всё время одним действием с временем обновления | MVP/v1 |
-| 25 | Полный сценарий — частично: immutable `ProcurementCase`, persistence/API, ручной импорт, первый UI и document pipeline | Нужны мониторинг, полноценные state transitions, поставщики/RFQ, application workflow и путь до оплаты/прогноз-факт | MVP/v1 |
-| 26 | Ограничения — частично, actions.py | Одноразовый transactional approval, price floor в Executor, receipts и роли; повтор/изменение операции запрещены | MVP/v1 |
-| 27 | Объяснимость — частично: checks/reasons/factors, case digest, audit, UI, document/OCR provenance, fail-closed compliance gate, persisted exact-evidence review одного native-ТЗ, immutable evidence manifest и терминальное независимое решение по exact комплекту с проверкой конфликтов | Явная связь выбранного terminal document-set review с версиями case/ruleset, production reviewer sessions, OCR calibration и полный пользовательский review | MVP |
+| 1 | `LIVE SCOPED`/`LOCALLY TESTED`: CompanyProfile, independent immutable versions, reload/edit diff и exact profile selection реализованы в API/UI; beta profile flow проверен | Полные evidence полей, лицензии/допуски, production owner authorization и последующее exact comparison остаются scope [контракта](../architecture/07-company-profile-contract.md); 23Oct наблюдались 27 UNKNOWN | MVP |
+| 1.2 | `LOCALLY TESTED`: typed LEGAL/COMMERCIAL checks и UNKNOWN без контекста | Versioned predicate registry с источниками/effective dates и полная policy coverage | MVP |
+| 2 | `LIVE SCOPED`: scheduled EIS ingestion, immutable tenant-scoped index/API и beta discovery по сохранённым версиям | Национальная полнота, устойчивая свежесть, production coverage/full-text и качество корпуса остаются UNKNOWN; checkpoints/dedup не означают полный охват | MVP/v1 |
+| 3 | `LOCALLY TESTED`: core `decisions.py`/case evaluation snapshots, evidence и factors; financial shortlist использует отдельный financial order | Автоматический сбор всех входов и полный production workflow; financial shortlist eligibility остаётся `UNKNOWN` и не является core evaluator PASS | MVP/v1 |
+| 4 | `LIVE SCOPED`: manual full quotes, 17 expenses и три сценария; Decimal/gates проверены | Реальные КП/расходы отсутствуют в наблюдении 23Oct; налоговая policy, cash-flow/forecast-fact и отложенный auto-delivery calculation остаются scope | MVP |
+| 5 | `LOCALLY TESTED`/`LIVE SCOPED`: manufacturer search API и bounded S223–S226 (`suppliers111`) дают supplier candidates, pages, products и terms | Полное покрытие источников/стран, contract-backed access, cost comparison и резервный supplier остаются scope; supplier identity/linkage может быть UNKNOWN | MVP/v1 |
+| 6 | `LOCALLY TESTED`: `quotes.py`/`cases.py`, tenant-scoped full quote и RFQ draft связаны exact evidence | RFQ dispatch после approval, Quote Analyzer и multi-quote comparison не выпущены; 0 реальных КП — датированное beta-наблюдение | MVP |
+| 7 | `LOCALLY TESTED`/`LIVE SCOPED`: безопасные PDF/DOCX/XLSX/ZIP, native extraction, bounded OCR/visual review, human gate, derived persistence и immutable discovery index/API | Human-confirmed production calibration, approved vision provider/retention policy, executor exact-payload approval, расширение типов фактов и пользовательское резюме | MVP |
+| 8 | `MISSING SCOPE`: обучение/предпочтения не заявлены | Tenant-scoped причины и сигналы, не меняющие hard policy | v2 |
+| 9 | `LOCALLY TESTED`: versioned `ApplicationPackage` и application review существуют; execution status явно `ADMITTED_NO_DISPATCH` | Реальная подача/dispatch, внешний канал и подтверждённое исполнение не реализованы | v1 |
+| 10 | `LIVE SCOPED`: `DeliveryPlan` и регион поставки участвуют в beta shortlist | Полные плечи, количество/даты, плательщик/услуги и доставка; неизвестная цена не ноль, auto-delivery calculation отложен | MVP |
+| 11 | `LOCALLY TESTED`: `ProcedureMethod` и typed applicability checks | Полные правила заказчика и production applicability evidence; закрытые методы не получают допуск автоматически | MVP/v1 |
+| 12 | `LIVE SCOPED`/`LOCALLY TESTED`: unit normalization, tenant hybrid search и immutable exact model→brand catalog с official PDF bytes/SHA-256 | Reviewer UI/IAM, legacy re-review, разрешённый official fetch, морфология/КТРУ/ОКПД2, аналоги и ranking coverage | MVP |
+| 13 | `LIVE SCOPED`: `SubmissionWindow`, timezone-aware deadline и server-side evaluation | Полная ingestion/freshness visibility/timer; закрытая, истёкшая или только опубликованная процедура не зелёная | MVP |
+| 14 | `LOCALLY TESTED`: typed mandatory checks и fail-closed compliance | Versioned Legal Rules Registry, №1875 и исключения с official sources/effective dates; category code сам не выдаёт FAIL/PASS | MVP |
+| 16 | `LOCALLY TESTED`: `RiskFinding` и evidence-backed risk reasons | Полный evidence catalog и actions; отсутствие данных остаётся UNKNOWN | MVP/v1 |
+| 17 | `LOCALLY TESTED`: `lifecycle.py` и typed lifecycle stages | Production DB/scheduler/notifications, 7-day warning и overdue-payment flow | v1 |
+| 18 | `LIVE SCOPED`/`LOCALLY TESTED`: `ScenarioSet`, completeness checks, explicit zeros и три сценария | Нужны налоговая policy, cash-flow, forecast/fact и auto-delivery calculation; ручные расходы сохраняются | MVP/v1 |
+| 19 | `LOCALLY TESTED`: `TenderRating`, versioned weights/sources и Recommendation gate | Production calibration/inputs; высокий балл не отменяет FAIL или UNKNOWN | MVP |
+| 20 | `LOCALLY TESTED`: `eis_analogs.py` извлекает bounded historical analogs/protocol evidence | Coverage, sample completeness, freshness и competition prediction остаются `UNKNOWN`; нет калиброванной вероятности | v1/v2 |
+| 21 | `LIVE SCOPED`: внутренний S3 показывает список/карточки, gates, provenance, экономику и evaluation | Полная воронка, согласования, контракты, дебиторка и production sessions; зелёные совпадения считаются после КП | MVP/v1 |
+| 22 | `MISSING SCOPE`: автономный SearchPlan/orchestrator workflow не выпущен | Jobs, лимиты и policy-bounded orchestration; анализ не расширяет автономию | MVP/v1 |
+| 23 | `LOCALLY TESTED`: tenant-scoped aggregates, audit events и PostgreSQL RLS | Production RBAC/IAM, read models и one-action all-time report с временем обновления | MVP/v1 |
+| 25 | `LIVE SCOPED`/`LOCALLY TESTED`: immutable `ProcurementCase`, persistence/API, ручной импорт, UI, document pipeline, supplier search и ApplicationPackage | Нужны полный monitoring scope, state transitions, RFQ dispatch, application execution и путь до оплаты/прогноз-факт | MVP/v1 |
+| 26 | `LOCALLY TESTED`: `actions.py`, exact transactional approval, price floor, receipts и role checks | Production execution remains approval-bound; повтор/изменение operation запрещены | MVP/v1 |
+| 27 | `LOCALLY TESTED`/`LIVE SCOPED`: checks/reasons/factors, digest, audit, UI, document/OCR provenance, fail-closed gate, evidence manifest и exact review одного native-ТЗ | Связь terminal review с case/ruleset versions, production reviewer sessions, OCR calibration и полный пользовательский review остаются scope | MVP |
 | Дополнение 04.09 | Платформы — частично, platforms.py | Sourcing и shelf sales; карточка/оферта/заказ, реестры и логистика оператора; неизвестный допуск не PASS | Этап 0/MVP, коннекторы по готовности |
 
 ## Зависимости конкретных интеграций

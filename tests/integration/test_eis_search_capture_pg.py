@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import stat
 import subprocess
 import sys
 from collections.abc import Callable
@@ -16,30 +18,39 @@ from typing import Any, cast
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
+from pydantic import TypeAdapter
 from sqlalchemy import Connection, Text, create_engine, func, insert, literal, or_, select, text
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.engine import make_url
 from test_eis_notice_projection_pg import NUMBER, prepare
 
 import procurement.storage.eis_search_capture as capture_module
+from procurement.sources.eis_223_archive import Eis223NoticeSnapshot
+from procurement.sources.eis_feed_archive import EisNoticeSnapshot
 from procurement.sources.eis_notice_conflicts import diagnose_notice_conflicts
 from procurement.sources.eis_notice_projection import (
     _snapshot_payload_bytes,
     prepare_notice_projection,
 )
 from procurement.sources.eis_search_capture import (
+    V3_FRAGMENT_RELATIONS,
     CaptureManifest,
     CaptureManifestV2,
-    CapturePlan,
+    CapturePlanAny,
     CapturePlanV2,
+    CapturePlanV3,
     RelationDescriptor,
     RelationDescriptorV2,
+    RelationDescriptorV3,
     canonical_bytes,
+    encode_value,
+    iter_encoded_row,
     iter_encoded_rows,
     load_capture_plan,
     verify_capture_package,
 )
-from procurement.storage.eis_223_index import ingest_notice223_window
+from procurement.storage.eis_223_index import _notice_keys, ingest_notice223_window
 from procurement.storage.eis_notice_hold import read_notice_source_hold
 from procurement.storage.eis_notice_projection import project_retained_notice_variants
 from procurement.storage.eis_search_capture import (
@@ -73,6 +84,7 @@ PRODUCTION_PLAN_PATH = (
     ROOT / "scripts/benchmarks/eis-search-capture-plan.production-20261006_08.json"
 )
 PLAN_V2_PATH = ROOT / "scripts/benchmarks/eis-search-capture-plan.v2.json"
+PLAN_V3_PATH = ROOT / "scripts/benchmarks/eis-search-capture-plan.v3.json"
 TENANT = "local-eis-supplier"
 OTHER_TENANT = "capture-foreign-tenant"
 CLOCK = datetime(2026, 10, 7, 12, tzinfo=UTC)
@@ -81,6 +93,106 @@ LARGE_PROJECTION_MEMBERS = 450
 LARGE_PROJECTION_TITLE_PADDING = 3_000
 LARGE_PROJECTION_ATTACHMENTS = 14
 LARGE_PROJECTION_FILENAME_PADDING = 850
+LARGE_PROJECTION_GROUPS_V3 = 8
+V3_SEED_RECEIPT = Path("/reports/capture-v3-seed-ready.json")
+V3_SEED_PENDING = Path("/reports/.capture-v3-seed-ready.pending")
+
+
+def _v3_seed_export_nonce() -> str | None:
+    flag = os.environ.get("EIS_CAPTURE_V3_SEED_EXPORT")
+    if flag is None:
+        return None
+    if flag != "1":
+        raise AssertionError("EIS_CAPTURE_V3_SEED_EXPORT_INVALID")
+    nonce = os.environ.get("EIS_CAPTURE_V3_SEED_NONCE")
+    if nonce is None or re.fullmatch(r"[0-9a-f]{24}", nonce) is None:
+        raise AssertionError("EIS_CAPTURE_V3_SEED_NONCE_INVALID")
+    return nonce
+
+
+def _write_all(descriptor: int, content: bytes) -> None:
+    offset = 0
+    while offset < len(content):
+        try:
+            written = os.write(descriptor, content[offset:])
+        except InterruptedError:
+            continue
+        if written <= 0:
+            raise AssertionError("SEED_RECEIPT_WRITE_INVALID")
+        offset += written
+
+
+def _publish_v3_seed_receipt(receipt: dict[str, object]) -> None:
+    if os.name != "posix" or not hasattr(os, "geteuid") or os.geteuid() != 1_000:
+        raise AssertionError("SEED_RECEIPT_PLATFORM_INVALID")
+    reports = V3_SEED_RECEIPT.parent
+    facts = reports.lstat()
+    if (
+        reports.is_symlink()
+        or not stat.S_ISDIR(facts.st_mode)
+        or facts.st_uid != 1_000
+        or stat.S_IMODE(facts.st_mode) & 0o077
+        or V3_SEED_RECEIPT.exists()
+        or V3_SEED_PENDING.exists()
+    ):
+        raise AssertionError("SEED_RECEIPT_PATH_INVALID")
+    content = canonical_bytes(receipt) + b"\n"
+    if len(content) > 65_536:
+        raise AssertionError("SEED_RECEIPT_SIZE_LIMIT")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(V3_SEED_PENDING, flags, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)  # type: ignore[attr-defined]
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_uid != 1_000
+            or before.st_nlink != 1
+        ):
+            raise AssertionError("SEED_RECEIPT_FILE_INVALID")
+        _write_all(descriptor, content)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    after = V3_SEED_PENDING.lstat()
+    if (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino):
+        raise AssertionError("SEED_RECEIPT_IDENTITY_CHANGED")
+    os.link(V3_SEED_PENDING, V3_SEED_RECEIPT, follow_symlinks=False)
+    linked = V3_SEED_RECEIPT.lstat()
+    if (
+        not stat.S_ISREG(linked.st_mode)
+        or linked.st_uid != 1_000
+        or stat.S_IMODE(linked.st_mode) != 0o600
+        or linked.st_nlink != 2
+        or (linked.st_dev, linked.st_ino) != (before.st_dev, before.st_ino)
+    ):
+        raise AssertionError("SEED_RECEIPT_LINK_INVALID")
+    pending_linked = V3_SEED_PENDING.lstat()
+    if (pending_linked.st_dev, pending_linked.st_ino) != (
+        before.st_dev,
+        before.st_ino,
+    ):
+        raise AssertionError("SEED_RECEIPT_PENDING_CHANGED")
+    V3_SEED_PENDING.unlink()
+    final = V3_SEED_RECEIPT.lstat()
+    if (
+        not stat.S_ISREG(final.st_mode)
+        or final.st_uid != 1_000
+        or stat.S_IMODE(final.st_mode) != 0o600
+        or final.st_nlink != 1
+        or (final.st_dev, final.st_ino) != (before.st_dev, before.st_ino)
+    ):
+        raise AssertionError("SEED_RECEIPT_FINAL_INVALID")
+    directory_descriptor = os.open(
+        reports,
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        os.fsync(directory_descriptor)
+    finally:
+        os.close(directory_descriptor)
 
 
 def _insert_feed_archive_selection_fixture(connection: Connection) -> dict[str, tuple[str, ...]]:
@@ -267,7 +379,314 @@ def _large_projection_members(group: int) -> tuple[tuple[str, bytes], ...]:
     )
 
 
-def test_large_projection_fixture_retains_bounded_titles_above_one_shard() -> None:
+def _v3_large_223_snapshot(
+    raw_snapshot: dict[str, object], purchase_number: str, xml_sha256: str
+) -> Eis223NoticeSnapshot:
+    """Synthetic model-valid stress data, not parsed XML or official origin evidence."""
+    original = Eis223NoticeSnapshot.model_validate(raw_snapshot)
+    snapshot = original.model_dump(mode="json")
+
+    def rebind(value: object) -> None:
+        if isinstance(value, dict):
+            if "document_id" in value:
+                assert value["document_id"] == original.xml_sha256
+                value["document_id"] = xml_sha256
+            for child in value.values():
+                rebind(child)
+        elif isinstance(value, list):
+            for child in value:
+                rebind(child)
+
+    rebind(snapshot)
+    snapshot["purchase_number"] = purchase_number
+    snapshot["version_number"] = 1
+    snapshot["xml_sha256"] = xml_sha256
+    snapshot["source_member"] = "capture-v3-large-ordinary.xml"
+    base = f"{original.document_type}/p:body/p:item/p:{original.document_type}Data"
+    attachments = []
+    for index in range(6_500):
+        attachment = {}
+        for name, element in (
+            ("filename", "fileName"), ("content_uid", "contentUid"), ("url", "url")
+        ):
+            # Retain the existing tiny synthetic text; use the exact field locator.
+            fact = dict(snapshot["title"])
+            fact["provenance"] = {
+                **fact["provenance"],
+                "locator": base + f"/p:attachments/t:document[{index + 1}]/t:{element}",
+            }
+            attachment[name] = fact
+        attachment["not_placement_raw"] = None
+        attachments.append(attachment)
+    snapshot["attachments"] = attachments
+    snapshot["manifest_count"] = {
+        **snapshot["manifest_count"], "value": str(len(attachments)), "raw": str(len(attachments))
+    }
+    snapshot["manifest_status"] = "COUNT_CONSISTENT"
+    return Eis223NoticeSnapshot.model_validate(snapshot)
+
+
+def _insert_v3_large_ordinary_rows(connection: Connection) -> list[tuple[str, tuple[object, ...]]]:
+    cohort: list[tuple[str, tuple[object, ...]]] = []
+    definitions = (
+        ("eis_notice_versions", "9800000000000000001"),
+        ("eis_223_notice_versions", "98000000002"),
+    )
+    for relation, purchase_number in definitions:
+        table = capture_module._table(relation)
+        source = connection.execute(
+            select(table)
+            .where(table.c.company_id == TENANT)
+            .order_by(*table.primary_key.columns)
+            .limit(1)
+        ).mappings().one()
+        row = dict(source)
+        row["purchase_number"] = purchase_number
+        row["version_number"] = 1
+        row["xml_sha256"] = hashlib.sha256(relation.encode()).hexdigest()
+        row["ingested_at"] = CLOCK
+        if relation == "eis_notice_versions":
+            row["source_member"] = "capture-v3-large-ordinary.xml"
+            row["title"] = "V3 large ordinary row"
+            row["attachments"] = [
+                {
+                    "content_uid": f"capture-v3-{index}",
+                    "filename": f"capture-v3-{index}.pdf",
+                    "byte_count": 1,
+                    "url": f"https://example.invalid/capture-v3/{index}",
+                    "kind_code": "POD",
+                    "locator": f"synthetic:capture-v3:{index}",
+                }
+                for index in range(32_000)
+            ]
+            snapshot_fields = {
+                name: row[name] for name in EisNoticeSnapshot.__dataclass_fields__
+            }
+            TypeAdapter(EisNoticeSnapshot).validate_python(snapshot_fields)
+        else:
+            raw_snapshot = row["snapshot"]
+            assert isinstance(raw_snapshot, dict)
+            validated = _v3_large_223_snapshot(raw_snapshot, purchase_number, row["xml_sha256"])
+            row["snapshot"] = validated.model_dump(mode="json")
+            row["search_keys"] = _notice_keys(validated)
+        connection.execute(insert(table).values(**row))
+        cohort.append((relation, (TENANT, purchase_number, 1)))
+    return cohort
+
+
+def _insert_v3_seed_after_legacy_capture(
+    connection: Connection,
+    seed_nonce: str | None,
+    *,
+    legacy_capture_verified: bool,
+) -> list[tuple[str, tuple[object, ...]]]:
+    if seed_nonce is None:
+        return []
+    if not legacy_capture_verified:
+        raise AssertionError("V3_SEED_BEFORE_LEGACY_CAPTURE")
+    return _insert_v3_large_ordinary_rows(connection)
+
+
+def _v3_seed_readback(
+    storage: PostgresStorage,
+    plan: CapturePlanV3,
+    nonce: str,
+    cohort: list[tuple[str, tuple[object, ...]]],
+) -> dict[str, object]:
+    assert plan.tenant == TENANT
+    assert plan.schema_revision == "20261006_12"
+    assert len(plan.relations) == 25
+    assert 4 <= len(cohort) <= 32
+    assert len(cohort) == len(set(cohort))
+    assert sum(relation == "audit_events" for relation, _ in cohort) >= 2
+    assert sum(relation != "audit_events" for relation, _ in cohort) >= 2
+    assert all(relation in V3_FRAGMENT_RELATIONS for relation, _ in cohort)
+    relation_counts: list[dict[str, object]] = []
+    large_rows: list[dict[str, object]] = []
+    with storage.transaction(TENANT, consistent_read=True) as connection:
+        runtime = connection.execute(
+            text(
+                "SELECT current_database() AS database, current_user AS role, "
+                "current_setting('transaction_read_only') AS read_only, "
+                "current_setting('transaction_isolation') AS isolation, "
+                "current_setting('app.company_id') AS tenant, "
+                "current_setting('row_security') AS row_security, "
+                "r.rolsuper AS superuser, r.rolbypassrls AS bypass_rls, "
+                "transaction_timestamp() AS transaction_timestamp, "
+                "txid_current_snapshot()::text AS snapshot_id "
+                "FROM pg_roles r WHERE r.rolname=current_user"
+            )
+        ).mappings().one()
+        assert runtime["read_only"] == "on"
+        assert runtime["isolation"] == "repeatable read"
+        assert runtime["tenant"] == TENANT
+        assert runtime["row_security"] == "on"
+        assert runtime["superuser"] is False
+        assert runtime["bypass_rls"] is False
+        assert isinstance(runtime["database"], str)
+        assert re.fullmatch(r"procurement_eis_test_[a-z0-9_]+", runtime["database"])
+        assert isinstance(runtime["role"], str) and 1 <= len(runtime["role"]) <= 128
+        assert runtime["role"] != "procurement_owner"
+        assert isinstance(runtime["snapshot_id"], str)
+        assert 1 <= len(runtime["snapshot_id"]) <= 200
+        for spec in sorted(plan.relations, key=lambda item: item.name):
+            source_count, _ = _source_count_and_max_row_bytes(
+                connection, _selection(spec, TENANT), spec
+            )
+            relation_counts.append({"name": spec.name, "source_count": source_count})
+        specs = {spec.name: spec for spec in plan.relations}
+        for relation, primary_key in cohort:
+            spec = specs[relation]
+            table = capture_module._table(relation)
+            predicate = [
+                table.c[name] == value
+                for name, value in zip(spec.primary_key, primary_key, strict=True)
+            ]
+            raw = connection.execute(_selection(spec, TENANT).where(*predicate)).mappings().one()
+            raw_bytes = sum(capture_module._raw_size(raw[column.name]) for column in spec.columns)
+            normalized = capture_module._normalize_row(spec, raw)
+            digest = hashlib.sha256()
+            encoded_bytes = 0
+            for chunk in iter_encoded_row(spec, normalized):
+                encoded_bytes += len(chunk)
+                assert encoded_bytes <= plan.fragmentation.encoded_row_bytes
+                digest.update(chunk)
+            raw_cap = (
+                plan.fragmentation.audit_raw_row_bytes
+                if relation == "audit_events"
+                else plan.fragmentation.ordinary_raw_row_bytes
+            )
+            assert 1 <= raw_bytes <= raw_cap
+            assert (
+                plan.fragmentation.fragment_bytes
+                < encoded_bytes
+                <= plan.fragmentation.encoded_row_bytes
+            )
+            columns = {column.name: column for column in spec.columns}
+            typed_key = tuple(
+                encode_value(normalized[name], columns[name].kind) for name in spec.primary_key
+            )
+            assert len(typed_key) <= 16
+            for name, value in zip(spec.primary_key, primary_key, strict=True):
+                kind = columns[name].kind
+                assert kind in {"TEXT", "INTEGER"}
+                if kind == "TEXT":
+                    assert isinstance(value, str)
+                    assert len(value.encode("utf-8")) <= 2_048
+                else:
+                    assert isinstance(value, int) and not isinstance(value, bool)
+            large_rows.append(
+                {
+                    "relation": relation,
+                    "typed_primary_key": typed_key,
+                    "sql_raw_bytes": raw_bytes,
+                    "canonical_encoded_bytes": encoded_bytes,
+                    "canonical_encoded_sha256": digest.hexdigest(),
+                }
+            )
+    transaction_timestamp = cast(datetime, runtime["transaction_timestamp"])
+    assert transaction_timestamp.utcoffset() is not None
+    large_rows.sort(
+        key=lambda item: (
+            cast(str, item["relation"]),
+            canonical_bytes(item["typed_primary_key"]),
+        )
+    )
+    assert 4 <= len(large_rows) <= 32
+    unique_keys = {
+        (item["relation"], canonical_bytes(item["typed_primary_key"]))
+        for item in large_rows
+    }
+    assert len(unique_keys) == len(large_rows)
+    assert [item["name"] for item in relation_counts] == sorted(
+        item["name"] for item in relation_counts
+    )
+    return {
+        "version": "eis-capture-v3-pg-seed-receipt-v1",
+        "status": "SEED_READY",
+        "diagnostic_nonce": nonce,
+        "capture_id": "pg-v3-layout-" + nonce,
+        "tenant": TENANT,
+        "schema_revision": "20261006_12",
+        "seed_retained": True,
+        "fixture_writers_joined": True,
+        "readback": {
+            "database": runtime["database"],
+            "role": runtime["role"],
+            "read_only": runtime["read_only"],
+            "isolation": runtime["isolation"],
+            "tenant": runtime["tenant"],
+            "row_security": runtime["row_security"],
+            "superuser": runtime["superuser"],
+            "bypass_rls": runtime["bypass_rls"],
+            "transaction_timestamp": transaction_timestamp.astimezone(UTC).isoformat(),
+            "snapshot_id": runtime["snapshot_id"],
+        },
+        "relation_counts": tuple(relation_counts),
+        "large_rows": tuple(large_rows),
+        "semantic_stress_requirement": "VERIFIER_MAIN_FILE_GT_67108864_BYTES",
+    }
+
+
+def test_large_projection_fixture_retains_bounded_titles_above_one_shard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EIS_CAPTURE_V3_SEED_EXPORT", raising=False)
+    monkeypatch.delenv("EIS_CAPTURE_V3_SEED_NONCE", raising=False)
+    assert _v3_seed_export_nonce() is None
+    monkeypatch.setenv("EIS_CAPTURE_V3_SEED_EXPORT", "true")
+    with pytest.raises(AssertionError, match="SEED_EXPORT_INVALID"):
+        _v3_seed_export_nonce()
+    monkeypatch.setenv("EIS_CAPTURE_V3_SEED_EXPORT", "1")
+    monkeypatch.setenv("EIS_CAPTURE_V3_SEED_NONCE", "A" * 24)
+    with pytest.raises(AssertionError, match="SEED_NONCE_INVALID"):
+        _v3_seed_export_nonce()
+    monkeypatch.setenv("EIS_CAPTURE_V3_SEED_NONCE", "a" * 24)
+    assert _v3_seed_export_nonce() == "a" * 24
+
+    seed_calls: list[object] = []
+
+    def insert_seed(connection: object) -> list[tuple[str, tuple[object, ...]]]:
+        seed_calls.append(connection)
+        return [("eis_notice_versions", (TENANT, "seed", 1))]
+
+    monkeypatch.setattr(sys.modules[__name__], "_insert_v3_large_ordinary_rows", insert_seed)
+    marker = object()
+    assert _insert_v3_seed_after_legacy_capture(
+        marker,  # type: ignore[arg-type]
+        None,
+        legacy_capture_verified=False,
+    ) == []
+    with pytest.raises(AssertionError, match="V3_SEED_BEFORE_LEGACY_CAPTURE"):
+        _insert_v3_seed_after_legacy_capture(
+            marker,  # type: ignore[arg-type]
+            "a" * 24,
+            legacy_capture_verified=False,
+        )
+    assert seed_calls == []
+    assert _insert_v3_seed_after_legacy_capture(
+        marker,  # type: ignore[arg-type]
+        "a" * 24,
+        legacy_capture_verified=True,
+    ) == [("eis_notice_versions", (TENANT, "seed", 1))]
+    assert seed_calls == [marker]
+
+    written = bytearray()
+    interrupted = True
+
+    def short_write(_descriptor: int, value: bytes) -> int:
+        nonlocal interrupted
+        if interrupted:
+            interrupted = False
+            raise InterruptedError
+        count = min(3, len(value))
+        written.extend(value[:count])
+        return count
+
+    monkeypatch.setattr(os, "write", short_write)
+    _write_all(7, b"bounded-write")
+    assert written == b"bounded-write"
+
     members = _large_projection_members(0)
     assert len(members) == LARGE_PROJECTION_MEMBERS
     assert max(len(content) for _, content in members) < 64 * 1024
@@ -287,16 +706,12 @@ def test_large_projection_fixture_retains_bounded_titles_above_one_shard() -> No
 
 def _rebound_test_plan(source: Path, destination: Path) -> Path:
     raw = json.loads(source.read_text(encoding="utf-8"))
-    current = {
-        path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
-        for path in (
-            "src/procurement/sources/eis_search_capture.py",
-            "src/procurement/storage/eis_search_capture.py",
-        )
-    }
+    # Rebind only this synthetic copy; production plans keep their immutable pins.
+    paths = tuple(pin["path"] for pin in raw["source_pins"])
+    assert len(paths) == len(set(paths)) == 18
     for pin in raw["source_pins"]:
-        if pin["path"] in current:
-            pin["sha256"] = current[pin["path"]]
+        pin["sha256"] = hashlib.sha256((ROOT / pin["path"]).read_bytes()).hexdigest()
+    assert tuple(pin["path"] for pin in raw["source_pins"]) == paths
     destination.write_bytes(canonical_bytes(raw) + b"\n")
     return destination
 
@@ -406,7 +821,7 @@ def _gate_urls() -> tuple[str, str]:
         or "procurement_eis_test_" not in app.database
     ):
         pytest.fail("capture integration requires one isolated procurement_eis_test_* database")
-    return cast(str, app_url), cast(str, admin_url)
+    return app_url, admin_url
 
 
 def _external_runtime() -> dict[str, str]:
@@ -429,6 +844,8 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
     monkeypatch: pytest.MonkeyPatch,
     record_property: Callable[[str, object], None],
 ) -> None:
+    seed_nonce = _v3_seed_export_nonce()
+    seed_receipt: dict[str, object] | None = None
     app_url, admin_url = _gate_urls()
     test_plan_path = _rebound_test_plan(PLAN_PATH, tmp_path / "capture-plan-v1.json")
     production_plan_path = _rebound_test_plan(
@@ -441,10 +858,28 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
     app_engine = create_engine(app_url, pool_pre_ping=True)
     storage = PostgresStorage(app_engine)
     shadow_schema: str | None = None
+    original_schema_revision: str | None = None
     try:
         with admin_engine.connect() as connection:
             assert connection.scalar(text("SELECT current_user")) == "procurement_owner"
         plan, _ = load_capture_plan(test_plan_path)
+        # Frozen capture plans exercise legacy revisions against the full current schema.
+        # Change only this disposable fixture's metadata, then restore its actual head.
+        # This validates the frozen schema-name contract, not current-head plan compatibility.
+        with admin_engine.begin() as connection:
+            heads = tuple(
+                connection.scalars(text("SELECT version_num FROM public.alembic_version"))
+            )
+            assert heads == (ScriptDirectory.from_config(config).get_current_head(),)
+            updated = connection.execute(
+                text(
+                    "UPDATE public.alembic_version SET version_num = :fixture "
+                    "WHERE version_num = :actual"
+                ),
+                {"fixture": plan.schema_revision, "actual": heads[0]},
+            )
+            assert updated.rowcount == 1
+            original_schema_revision = heads[0]
         with admin_engine.begin() as owner_connection:
             owner_connection.execute(
                 text("ALTER TABLE public.eis_sync_targets NO FORCE ROW LEVEL SECURITY")
@@ -637,13 +1072,15 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
 
         def insert_after_snapshot(
             connection: Connection,
-            plan: CapturePlan | CapturePlanV2,
+            plan: CapturePlanAny,
             root: Path,
             clock: datetime,
             budget: _PackageBudget,
             current_database: Any,
         ) -> tuple[
-            tuple[RelationDescriptor | RelationDescriptorV2, ...], dict[str, int]
+            tuple[RelationDescriptor | RelationDescriptorV2 | RelationDescriptorV3, ...],
+            dict[str, int],
+            int | None,
         ]:
             nonlocal inserted
             if not inserted:
@@ -722,7 +1159,7 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
                     actor_id="capture-later",
                     now=CLOCK,
                 )
-            return original(connection, plan, root, clock, budget, current_database)  # type: ignore[no-any-return]
+            return original(connection, plan, root, clock, budget, current_database)
 
         monkeypatch.setattr(capture_module, "_capture_relations", insert_after_snapshot)
         package = tmp_path / "capture-package"
@@ -786,7 +1223,10 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
 
         with admin_engine.begin() as connection:
             archive_selection_keys = _insert_feed_archive_selection_fixture(connection)
-        v2_plan_for_selection, _ = load_capture_plan(PLAN_V2_PATH)
+        v2_test_plan_path = _rebound_test_plan(
+            PLAN_V2_PATH, tmp_path / "capture-plan-v2.json"
+        )
+        v2_plan_for_selection, _ = load_capture_plan(v2_test_plan_path)
         archive_spec = next(
             item
             for item in v2_plan_for_selection.relations
@@ -860,12 +1300,12 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
             assert "eis_notice_versions" in explain_text
             assert "eis_procedure_events" in explain_text
 
-        # Build three projection batches from many individually small variants.
+        # Build several projection batches from many individually small variants.
         # Their exact aggregate projection audit bases exceed one physical shard,
         # matching the observed production shape without creating an oversized
         # row in any non-audit relation.
         large_audit_event_ids: list[str] = []
-        for group in range(3):
+        for group in range(LARGE_PROJECTION_GROUPS_V3):
             members = _large_projection_members(group)
             receipt, archives, _ = prepare(
                 storage,
@@ -884,7 +1324,7 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
             )
             large_audit_event_ids.append(projection.audit_event_id)
 
-        v2_plan, _ = load_capture_plan(PLAN_V2_PATH)
+        v2_plan, _ = load_capture_plan(v2_test_plan_path)
         assert isinstance(v2_plan, CapturePlanV2)
         audit_spec = next(item for item in v2_plan.relations if item.name == "audit_events")
         with storage.transaction(TENANT, consistent_read=True) as connection:
@@ -906,7 +1346,11 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
                     audit_row_bytes > v2_plan.limits.shard_bytes,
                 )
             ).one()
-            assert int(oversized_count) == len(large_audit_event_ids) == 3
+            assert (
+                int(oversized_count)
+                == len(large_audit_event_ids)
+                == LARGE_PROJECTION_GROUPS_V3
+            )
             assert int(oversized_min_bytes) > v2_plan.limits.shard_bytes
             assert int(oversized_max_bytes) <= v2_plan.limits.audit_raw_row_bytes
             audit_source_rows, audit_raw_max_bytes = _source_count_and_max_row_bytes(
@@ -927,14 +1371,14 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
         v2_package = tmp_path / "capture-package-v2"
         collector_memory = _run_measured_child(
             "capture",
-            PLAN_V2_PATH,
+            v2_test_plan_path,
             v2_package,
             tmp_path / "collector-memory.json",
             runtime=runtime_path,
         )
         verifier_memory = _run_measured_child(
             "verify",
-            PLAN_V2_PATH,
+            v2_test_plan_path,
             v2_package,
             tmp_path / "verifier-memory.json",
         )
@@ -973,9 +1417,45 @@ def test_real_pg_capture_is_tenant_scoped_snapshot_and_offline_verifiable(
         for key, value in memory_evidence.items():
             record_property("capture_v2_" + key, value)
         print(json.dumps({"v2_memory_evidence": memory_evidence}, sort_keys=True))
+
+        if seed_nonce is not None:
+            with admin_engine.begin() as connection:
+                ordinary_cohort = _insert_v3_seed_after_legacy_capture(
+                    connection,
+                    seed_nonce,
+                    legacy_capture_verified=True,
+                )
+            v3_plan, _ = load_capture_plan(PLAN_V3_PATH)
+            assert isinstance(v3_plan, CapturePlanV3)
+            audit_cohort: list[tuple[str, tuple[object, ...]]] = [
+                ("audit_events", (TENANT, event_id))
+                for event_id in large_audit_event_ids
+            ]
+            seed_receipt = _v3_seed_readback(
+                storage,
+                v3_plan,
+                seed_nonce,
+                ordinary_cohort + audit_cohort,
+            )
     finally:
+        if original_schema_revision is not None:
+            with admin_engine.begin() as connection:
+                restored = connection.execute(
+                    text(
+                        "UPDATE public.alembic_version SET version_num = :actual "
+                        "WHERE version_num = :fixture"
+                    ),
+                    {"actual": original_schema_revision, "fixture": plan.schema_revision},
+                )
+                assert restored.rowcount == 1
+                assert tuple(
+                    connection.scalars(text("SELECT version_num FROM public.alembic_version"))
+                ) == (original_schema_revision,)
         if shadow_schema is not None:
             with admin_engine.begin() as connection:
                 connection.execute(text(f"DROP SCHEMA IF EXISTS {shadow_schema} CASCADE"))
         app_engine.dispose()
         admin_engine.dispose()
+    if seed_receipt is not None:
+        seed_receipt["normal_cleanup_completed"] = True
+        _publish_v3_seed_receipt(seed_receipt)

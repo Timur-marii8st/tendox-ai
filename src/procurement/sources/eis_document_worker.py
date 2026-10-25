@@ -134,8 +134,10 @@ def run_document_step(
             late_hold = False
             if report.version_status != "STALE":
                 for document in report.documents:
-                    if document.fetch_status == "RECEIVED" and document.reasons == (
-                        "ANALYSIS_NOT_AVAILABLE",
+                    if (
+                        document.reference_status == "PASS"
+                        and document.fetch_status == "RECEIVED"
+                        and document.reasons == ("ANALYSIS_NOT_AVAILABLE",)
                     ):
                         if probe_only:
                             return {"status": "READY", "attempted": 0, "operation": "ANALYSIS"}
@@ -200,8 +202,14 @@ def run_document_step(
                 )
                 if document.observed_at and document.observed_at + delay > now:
                     continue
-                if document_filename_requires_review(document.filename):
-                    code = "ATTACHMENT_FILENAME_REQUIRES_REVIEW"
+                if document.reference_status == "UNKNOWN" or document_filename_requires_review(
+                    document.filename
+                ):
+                    code = (
+                        "ATTACHMENT_REFERENCE_REQUIRES_REVIEW"
+                        if document.reference_status == "UNKNOWN"
+                        else "ATTACHMENT_FILENAME_REQUIRES_REVIEW"
+                    )
                     if not probe_only:
                         try:
                             record_document_outcome(

@@ -4,7 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import { compareIndexed223, loadIndexed223Documents, searchIndexed223, type Indexed223State } from "./actions";
 import type { Comparison223Result, Eis223SearchResult, Document223Status, NoticeDocumentRef, Eis223RejectionState, Eis223LotCancellationState } from "@/lib/procurement-api";
 
-import { AddToMixedComparison, useMixedBasket } from "./mixed-comparison";
+import { AddToMixedComparison } from "./mixed-comparison";
 import { Comparison223, deadline223, family223Labels, sourcePrice223, Source223Limits } from "./comparison-223";
 import { Rejection223State } from "./rejection223-state";
 import { LotCancellation223State } from "./lot-cancellation223-state";
@@ -57,16 +57,15 @@ function Documents223({ notice, cancellationState, lotCancellationState }: { not
 }
 
 export function Indexed223Search() {
-  const basket = useMixedBasket();
   const [state, action, pending] = useActionState<Indexed223State, FormData>(searchIndexed223, {});
   const result = state.result;
   return <section aria-label="Поиск закупок 223-ФЗ" className="mt-8 rounded-2xl border border-slate-200 bg-white p-5">
     <h2 className="text-xl font-black">Закупки 223-ФЗ</h2>
     <p className="mt-2 text-sm text-slate-600">Поиск по сохранённым извещениям: аукционы и котировки для МСП, иной способ.
       Охват и свежесть ЕИС: UNKNOWN. Лоты сравниваются отдельно, прибыль и право участия требуют проверки.</p>
-    <form action={action} onSubmit={() => basket?.clearLaw("223")} className="mt-4 flex flex-wrap gap-3">
-      <label className="flex-1">Товар в закупках 223-ФЗ
-        <input name="query" required maxLength={120} placeholder="Спецобувь или серверное оборудование"
+    <form action={action} className="mt-4 flex flex-wrap gap-3">
+      <label className="flex-1">Товар или полный регистрационный номер 223-ФЗ
+        <input name="query" required maxLength={120} placeholder="Краны шаровые или 32616445250"
           className="mt-1 block w-full rounded-lg border p-2" />
       </label>
       <button disabled={pending} className="self-end rounded-lg bg-blue-700 px-4 py-2 font-bold text-white disabled:opacity-50">
@@ -104,7 +103,7 @@ function Results223({ result, searching, canLoad }: { result: Eis223SearchResult
       {result.matched_count === 0 && <p className="mt-3">Совпадений в сохранённой части 223-ФЗ нет. Это не доказывает отсутствие закупок в ЕИС.</p>}
       <ResultExplorer canLoad={canLoad} total={result.matched_count} entries={result.matched.map(lead => ({
         id: lead.notice.purchase_number, quality: lead.match_quality, application: lead.application_status,
-        method: family223Labels[lead.notice.document_type],
+        method: family223Labels[lead.notice.document_type] ?? "Способ закупки UNKNOWN",
       }))}>
       {visible => result.matched.filter(lead => visible.has(lead.notice.purchase_number)).map((lead) => <ResultRow
         key={lead.notice.purchase_number} title={lead.notice.title.value ?? "Название не подтверждено"}
@@ -126,7 +125,7 @@ function Results223({ result, searching, canLoad }: { result: Eis223SearchResult
         </label>
         <h3 className="font-bold">№ {lead.notice.purchase_number} · версия {lead.notice.version_number} · 223-ФЗ</h3>
         <p>{lead.notice.title.value ?? "Название UNKNOWN"}</p>
-        <p className="text-sm">{family223Labels[lead.notice.document_type]}
+        <p className="text-sm">{family223Labels[lead.notice.document_type] ?? "Способ закупки UNKNOWN"}
           {lead.notice.method_name.value && ` · ${lead.notice.method_name.value}`}</p>
         <p className="mt-2 text-sm">{lead.match_quality === "STRONG" ? "Все слова запроса найдены" : "Частичное совпадение слов"}.
           Участие: {lead.application_status}. {lead.matched_lot_ordinal && `Совпадение в лоте ${lead.matched_lot_ordinal}.`}</p>

@@ -23,7 +23,14 @@ from procurement.sources.eis_223_events import (
 )
 from procurement.sources.eis_223_regions import validate_region_code
 from procurement.sources.eis_feed import EisFeedResponse, validate_eis_archive_url
-from procurement.sources.eis_feed_sync import EisFeedTransport, EisSyncError, _parsed_post, _request
+from procurement.sources.eis_feed_sync import (
+    EisFeedTransport,
+    EisSourceError,
+    EisSyncError,
+    PreparedWait,
+    _parsed_post,
+    _request,
+)
 
 _WINDOW = re.compile(
     r"^getDocsIP/RI223/(?P<region>(?:0[1-9]|[1-9][0-9]))/"
@@ -51,13 +58,11 @@ class Eis223EventObservation:
     status: Literal["SYNCED", "NO_DATA", "PREPARING", "SERVICE_ERROR"]
     response_sha256: str
     window: Eis223EventReadyWindow | None = None
+    source_error: EisSourceError | None = None
 
 
 def event_window_key(day: date, *, region: str = "50") -> str:
-    return (
-        f"getDocsIP/RI223/{validate_region_code(region)}/"
-        f"{day.isoformat()}+03:00/{EVENT_TYPE}"
-    )
+    return f"getDocsIP/RI223/{validate_region_code(region)}/{day.isoformat()}+03:00/{EVENT_TYPE}"
 
 
 def purchase_rejection_request(
@@ -196,6 +201,7 @@ async def fetch_purchase_rejection_day(
     region: str = "50",
     poll_attempts: int = 4,
     poll_delay_seconds: float = 10,
+    prepared_wait: PreparedWait | None = None,
 ) -> Eis223EventObservation:
     region = validate_region_code(region)
     if not 1 <= poll_attempts <= 4 or not 0 <= poll_delay_seconds <= 10:
@@ -213,12 +219,20 @@ async def fetch_purchase_rejection_day(
     ):
         raise EisSyncError("INITIAL_REQUEST_MISMATCH")
     if initial.state in {"NO_DATA", "SERVICE_ERROR"}:
-        return Eis223EventObservation(initial.state, initial.source_sha256)
+        return Eis223EventObservation(
+            initial.state,
+            initial.source_sha256,
+            source_error=(
+                EisSourceError("INITIAL", service_code=initial.error_code)
+                if initial.state == "SERVICE_ERROR"
+                else None
+            ),
+        )
     if initial.state != "LINKS_PENDING":
         raise EisSyncError("INITIAL_STATE_INVALID")
     prepared: EisFeedResponse | None = None
     for _ in range(poll_attempts):
-        await asyncio.sleep(poll_delay_seconds)
+        await (prepared_wait or asyncio.sleep)(poll_delay_seconds)
         poll_uid = str(uuid4())
         reply = await _parsed_post(
             transport, _request(token, poll_uid, original_request_id=uid), token
@@ -232,7 +246,11 @@ async def fetch_purchase_rejection_day(
         ):
             raise EisSyncError("PREPARED_REQUEST_MISMATCH")
         if reply.state == "SERVICE_ERROR":
-            return Eis223EventObservation("SERVICE_ERROR", reply.source_sha256)
+            return Eis223EventObservation(
+                "SERVICE_ERROR",
+                reply.source_sha256,
+                source_error=EisSourceError("PREPARED", service_code=reply.error_code),
+            )
         if reply.state == "PREPARING":
             prepared = reply
             continue
@@ -246,7 +264,22 @@ async def fetch_purchase_rejection_day(
         for ref in prepared.prepared_archives:
             status, raw = await transport.download(ref.url, token)
             if status != 200 or not raw or len(raw) > MAX_ARCHIVE_BYTES or token.encode() in raw:
-                raise EisSyncError("ARCHIVE_CONTENT_REJECTED")
+                raise EisSyncError(
+                    "ARCHIVE_CONTENT_REJECTED",
+                    source_error=EisSourceError(
+                        "ARCHIVE",
+                        http_status=status if 100 <= status <= 599 else None,
+                        category=(
+                            "HTTP_STATUS"
+                            if status != 200
+                            else "RESPONSE_EMPTY"
+                            if not raw
+                            else "RESPONSE_SIZE"
+                            if len(raw) > MAX_ARCHIVE_BYTES
+                            else "TOKEN_REFLECTION"
+                        ),
+                    ),
+                )
             downloaded[ref.url] = raw
         ready = bind_purchase_rejection_window(key, initial, prepared, downloaded)
         preflight_purchase_rejection_window(company, ready)

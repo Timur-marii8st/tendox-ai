@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { supplierProductMatches, supplierProductRequestKey, type SupplierProductRequest, type SavedSupplierProduct } from "@/lib/eis-supplier-product";
 import { prepareSupplierProduct, loadSupplierProduct } from "./actions";
 import { SupplierProductReportView } from "./supplier-product-report";
+import { PublicUnitPrice } from "./public-unit-price";
 import { RequirementPreviewView } from "./requirement-preview";
 export function SupplierProduct({ request, expected }: { request: SupplierProductRequest; expected: { source_url: string; html_sha256: string } }) {
   const [result, setResult] = useState<SavedSupplierProduct>(), [error, setError] = useState<string>();
@@ -21,6 +22,6 @@ export function SupplierProduct({ request, expected }: { request: SupplierProduc
     <div className="flex gap-2"><button disabled={pending} type="button" className="rounded border px-2 py-1" onClick={() => load(true)}>Сопоставить условия и характеристики</button><button disabled={pending} type="button" className="rounded border px-2 py-1" onClick={() => load(false)}>Открыть сохранённое сопоставление</button></div>
     <p className="text-xs">Используется сохранённая карточка. Новых обращений к сайту нет.</p>
     {pending && <p role="status">Разбираем сохранённые условия товара…</p>}{error && <p role="alert">{error}</p>}
-    {result && <><SupplierProductReportView result={result} /><RequirementPreviewView key={result.report.run_id} product={result} /></>}
+    {result && <><SupplierProductReportView result={result} /><PublicUnitPrice key={result.report.run_id} request={request} expectedSha={expected.html_sha256} /><RequirementPreviewView key={result.report.run_id} product={result} /></>}
   </section>;
 }

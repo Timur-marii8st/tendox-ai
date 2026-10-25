@@ -15,6 +15,30 @@ NOW = datetime(2026, 10, 3, 10, 15, tzinfo=UTC)
 SCOPE = EisFreshnessScope(("50",))
 
 
+@pytest.mark.parametrize("regional,new_wave", [(2, False), (0, True)])
+def test_joint_probe_blocks_history_for_223_demand(monkeypatch, regional, new_wave):
+    monkeypatch.setattr(dispatch, "resource_gate", lambda *a, **k: None)
+    monkeypatch.setattr(dispatch, "read_due_freshness", lambda *a, **k: ())
+    monkeypatch.setattr(dispatch, "pending_refresh_targets", lambda *a, **k: ())
+    monkeypatch.setattr(dispatch, "_regional_demand", lambda *a, **k: (regional, new_wave))
+    result = dispatch.probe_dispatch(None, "tenant", SCOPE, now=NOW, include_regional=True)
+    assert result.status == "READY" and result.regional_due == regional
+    assert result.regional_new_wave_due == new_wave and result.attempted == 0
+
+
+def test_joint_probe_unknown_regional_state_cannot_admit_history(monkeypatch):
+    monkeypatch.setattr(dispatch, "resource_gate", lambda *a, **k: None)
+    monkeypatch.setattr(dispatch, "read_due_freshness", lambda *a, **k: ())
+    monkeypatch.setattr(dispatch, "pending_refresh_targets", lambda *a, **k: ())
+
+    def unknown(*a, **k):
+        raise ValueError("OFFICIAL_REGION_CATALOG_MISSING")
+
+    monkeypatch.setattr(dispatch, "_regional_demand", unknown)
+    result = dispatch.probe_dispatch(None, "tenant", SCOPE, now=NOW, include_regional=True)
+    assert result.status == "BLOCKED" and result.reason == "REGIONAL_DEMAND_UNAVAILABLE"
+
+
 @pytest.mark.parametrize(
     "baseline,foreground,status",
     [(0, 0, "IDLE"), (1, 0, "READY"), (0, 1, "READY"), (1, 1, "READY")],
@@ -70,12 +94,13 @@ def test_cli_failure_reports_no_connection_secret(monkeypatch, capsys):
 @pytest.mark.skipif(os.name == "nt", reason="Operational script runs on Linux VPS")
 @pytest.mark.parametrize("status,expected", [("IDLE", 0), ("BLOCKED", 69), ("READY", 0)])
 def test_real_scheduler_script_only_hands_off_when_ready(tmp_path, status, expected):
-    script = Path("scripts/server-eis-priority.sh").read_text()
-    script = script.replace("/home/syurai/vibe-seller-state", str(tmp_path)).replace(
-        "/home/syurai/vibe-seller", str(tmp_path)
+    script = Path("scripts/server-eis-priority.sh").read_bytes()
+    script = script.replace(b"/home/syurai/vibe-seller-state", str(tmp_path).encode()).replace(
+        b"/home/syurai/vibe-seller", str(tmp_path).encode()
     )
     helper = tmp_path / "priority.sh"
-    helper.write_text(script)
+    helper.write_bytes(script)
+    helper.chmod(0o700)
     binary = tmp_path / "bin"
     binary.mkdir()
     log = tmp_path / "calls"
@@ -102,7 +127,7 @@ if '.unlink(' in a: Path(os.environ['MARKER']).unlink(missing_ok=True)
     flock.write_text('#!/bin/sh\necho "flock $*" >> "$LOG"\n')
     flock.chmod(0o700)
     result = subprocess.run(
-        ["bash", str(helper)],
+        [str(helper)],
         env={
             **os.environ,
             "PATH": f"{binary}:{os.environ['PATH']}",

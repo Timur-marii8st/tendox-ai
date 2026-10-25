@@ -6,6 +6,9 @@ import { compareMixed } from "./actions";
 import { Comparison223Card } from "./comparison-223";
 import { PositionEvidenceView } from "./position-evidence";
 import { SourceEstimateForm } from "./source-estimate";
+import type { NoticeProfileContext, NoticeProfileReport } from "@/lib/notice-profile-comparison";
+import { compareNoticeProfile } from "./profile-comparison-actions";
+import { NoticeProfileReportView } from "./profile-comparison-report";
 
 type Chosen = MixedNoticeRef & { title: string };
 type Basket = {
@@ -21,31 +24,48 @@ export function AddToMixedComparison({ notice, disabled = false }: { notice: Cho
   if (!basket) return null;
   const chosen = basket.selected.some(n => identity(n) === identity(notice));
   return <button type="button" aria-label={`${chosen ? "Убрать" : "Добавить"} ${notice.law}-ФЗ ${notice.purchase_number} в общее сравнение`}
-    disabled={disabled || basket.pending || (!chosen && basket.selected.length >= 3)}
+    disabled={disabled || basket.pending || (!chosen && basket.selected.length >= 5)}
     className="mb-2 rounded border border-blue-700 px-3 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50"
     onClick={() => basket.toggle(notice)}>{chosen ? "Убрать из общего сравнения" : "В общее сравнение 44/223"}</button>;
 }
 
-export function MixedComparisonProvider({ children }: { children: ReactNode }) {
+export function MixedComparisonProvider({ children, profileContext, profileError }: { children: ReactNode; profileContext?: NoticeProfileContext; profileError?: string }) {
   const [selected, setSelected] = useState<Chosen[]>([]);
   const [state, setState] = useState<{ result?: MixedComparisonResult; error?: string }>({});
+  const [profileState, setProfileState] = useState<{ report?: NoticeProfileReport; error?: string }>({});
   const [pending, start] = useTransition();
   const generation = useRef(0);
   function toggle(notice: Chosen) {
-    generation.current++; setState({});
+    generation.current++; setState({}); setProfileState({});
     setSelected(current => current.some(n => identity(n) === identity(notice))
       ? current.filter(n => identity(n) !== identity(notice))
-      : current.length < 3 ? [...current, notice] : current);
+      : current.length < 5 ? [...current, notice] : current);
   }
   function clearLaw(law: "44" | "223") {
-    generation.current++; setState({});
+    generation.current++; setState({}); setProfileState({});
     setSelected(current => current.filter(n => n.law !== law));
   }
   return <Context.Provider value={{ selected, pending, toggle, clearLaw }}>
     <details open={selected.length > 0} aria-label="Общее сравнение 44-ФЗ и 223-ФЗ" className="mt-6 rounded-xl border border-blue-300 bg-blue-50 p-4">
-      <summary className="cursor-pointer text-lg font-bold">Сравнение 44-ФЗ и 223-ФЗ · выбрано {selected.length} из 3</summary>
-      <p className="mt-1 text-sm">Добавьте 2–3 карточки кнопкой «В общее сравнение» в результатах поиска ниже.
-        Выбрано: {selected.length} из 3. Новый поиск убирает выбор только своего закона.</p>
+      <summary className="cursor-pointer text-lg font-bold">Сравнение 44-ФЗ и 223-ФЗ · выбрано {selected.length} из 5</summary>
+      <p className="mt-1 text-sm">Добавьте 2–5 карточек кнопкой «В общее сравнение» в результатах поиска.
+        Новый поиск сохраняет выбор — можно добавлять закупки из разных запросов.</p>
+      <div className="mt-3 rounded-lg border bg-white p-3 text-sm">
+        {profileContext ? <p>Ваша компания: {profileContext.profile_name} · версия профиля {profileContext.profile_ref.version} · доступ {profileContext.actor_id}.</p> : <p>{profileError ?? "Для сравнения с компанией подключите персональный доступ."}</p>}
+        <a href="/company-profile" className="text-blue-800 underline">Открыть и заполнить профиль компании</a>
+        <button type="button" disabled={pending || selected.length < 2 || !profileContext} className="mt-3 block rounded bg-blue-700 px-4 py-2 font-bold text-white disabled:opacity-50"
+          onClick={() => {
+            if (!profileContext) return;
+            const epoch = generation.current;
+            const refs = selected.map(({law, purchase_number, version_number, notice_xml_sha256}) => ({law, purchase_number, version_number, notice_xml_sha256}));
+            start(async () => {
+              const next = await compareNoticeProfile(profileContext, refs);
+              if (generation.current === epoch) setProfileState(next);
+            });
+          }}>{pending ? "Сравнение…" : "Сравнить с профилем моей компании"}</button>
+        {profileState.error && <p role="alert" className="mt-2 text-red-800">{profileState.error}</p>}
+      </div>
+      {profileState.report && <NoticeProfileReportView report={profileState.report} />}
       <ul className="mt-2 text-sm">{selected.map(n => <li key={identity(n)} className="mt-1">
         {n.law}-ФЗ · № {n.purchase_number} · версия {n.version_number} · {n.title}
         <button type="button" disabled={pending} className="ml-2 underline disabled:opacity-50"

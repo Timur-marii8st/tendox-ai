@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import and_, func, insert, or_, select, union_all
+from sqlalchemy import Date, DateTime, and_, cast, func, insert, or_, select, union_all
 from sqlalchemy.engine import Connection, RowMapping
-from sqlalchemy.sql.selectable import Subquery
+from sqlalchemy.sql.selectable import CTE, Subquery
 
+from procurement.eis_joint_budget import NATIONAL_RECOVERY_START
 from procurement.sources.eis_223_archive import SUPPORTED_DOCUMENT_TYPES
 from procurement.sources.eis_223_regions import (
     REGION_SELECTOR_URL,
@@ -90,7 +91,7 @@ class Eis223RegionalCoverage(BaseModel):
     reason: str = "OFFICIAL_REGION_CATALOG_MISSING"
 
 
-def _latest(company: str) -> Subquery:
+def _latest(company: str) -> CTE:
     combined = union_all(
         *(
             select(
@@ -112,7 +113,10 @@ def _latest(company: str) -> Subquery:
             combined.c.status.not_in(TERMINAL).desc(),
             combined.c.attempt_id.desc(),
         )
-        .subquery()
+        # Dispatch joins this history to many planned windows. Computing it once
+        # avoids rescanning DISTINCT ON for each row of a nested-loop join.
+        .cte()
+        .prefix_with("MATERIALIZED")
     )
 
 
@@ -121,7 +125,7 @@ def _current(conn: Connection, company: str) -> RowMapping | None:
         conn.execute(
             select(waves)
             .where(waves.c.company_id == company)
-            .order_by(waves.c.created_at.desc(), waves.c.wave_id.desc())
+            .order_by(waves.c.end_day.desc(), waves.c.created_at.desc(), waves.c.wave_id.desc())
             .limit(1)
         )
         .mappings()
@@ -234,7 +238,12 @@ def _accepted_catalog(conn: Connection, company: str) -> RowMapping | None:
 
 
 def ensure_region_wave(
-    storage: PostgresStorage, company: str, now: datetime, *, actor_id: str
+    storage: PostgresStorage,
+    company: str,
+    now: datetime,
+    *,
+    actor_id: str,
+    fresh_first: bool = False,
 ) -> str | None:
     """Advance after a complete first sweep; retain failed gaps and frozen old dates.
 
@@ -252,7 +261,21 @@ def ensure_region_wave(
             return None
         current = _current(conn, company)
         end_day = today
-        if current:
+        if current and fresh_first:
+            if current["end_day"] >= today:
+                intervals = conn.execute(
+                    select(waves.c.start_day, waves.c.end_day).where(waves.c.company_id == company)
+                ).all()
+                covered = {day for start, end in intervals for day in (start, end)}
+                cursor = min(covered)
+                while cursor <= today and cursor in covered:
+                    cursor += timedelta(days=1)
+                if cursor > today:
+                    return str(current["wave_id"])
+                # Materialize one retained catch-up pair per call. The latest
+                # calendar wave stays current by end_day, not creation time.
+                end_day = min(today, cursor + timedelta(days=1))
+        elif current:
             latest = _latest(company)
             unattempted = conn.scalar(
                 select(func.count())
@@ -367,7 +390,15 @@ def _scope(company: str) -> Subquery:
 
 
 def regional_due_windows(
-    storage: PostgresStorage, company: str, now: datetime, *, limit: int = 32
+    storage: PostgresStorage,
+    company: str,
+    now: datetime,
+    *,
+    limit: int = 32,
+    fresh_first: bool = False,
+    fresh_only: bool = False,
+    recovery_only: bool = False,
+    reconciliation_only: bool = False,
 ) -> tuple[RefreshTarget, ...]:
     _aware(now)
     if not 2 <= limit <= 32:
@@ -377,23 +408,151 @@ def regional_due_windows(
         if current is None:
             return ()
         latest, scope = _latest(company), _scope(company)
-        joined = scope.outerjoin(latest, scope.c.window_key == latest.c.window_key)
+        # Materialize the complete join before applying date/family filters. Those
+        # expressions otherwise underestimate the queue and cause repeated scans
+        # of the materialized history in a nested-loop left join.
+        dispatch = (
+            select(
+                scope.c.window_key,
+                scope.c.planned_at,
+                scope.c.ordinal,
+                latest.c.checked_at,
+                latest.c.status,
+            )
+            .select_from(scope.outerjoin(latest, scope.c.window_key == latest.c.window_key))
+            .cte()
+            .prefix_with("MATERIALIZED")
+        )
         active_keys = select(targets.c.window_key).where(
             targets.c.company_id == company, targets.c.wave_id == current["wave_id"]
         )
         failed_due = and_(
-            latest.c.status.not_in(TERMINAL), latest.c.checked_at <= now - timedelta(hours=1)
+            dispatch.c.status.not_in(TERMINAL), dispatch.c.checked_at <= now - timedelta(hours=1)
         )
         fresh_due = and_(
-            scope.c.window_key.in_(active_keys),
-            latest.c.status.in_(TERMINAL),
-            latest.c.checked_at <= now - timedelta(hours=6),
+            dispatch.c.window_key.in_(active_keys),
+            dispatch.c.status.in_(TERMINAL),
+            dispatch.c.checked_at <= now - timedelta(hours=6),
         )
-        statement = select(scope.c.window_key).select_from(joined)
+        if fresh_first:
+            source_day = cast(func.left(func.split_part(dispatch.c.window_key, "/", 4), 10), Date)
+            final_cutoff = (
+                func.timezone("UTC", cast(source_day, DateTime(timezone=False)))
+                + timedelta(days=1, hours=2, minutes=5)
+                - timedelta(hours=3)
+            )
+            fresh_due = and_(
+                dispatch.c.status.in_(TERMINAL),
+                or_(
+                    and_(
+                        source_day == now.astimezone(MSK).date(),
+                        dispatch.c.checked_at <= now - timedelta(hours=6),
+                    ),
+                    and_(
+                        source_day == now.astimezone(MSK).date() - timedelta(days=1),
+                        dispatch.c.checked_at <= now - timedelta(hours=24),
+                    ),
+                    and_(dispatch.c.checked_at < final_cutoff, final_cutoff <= now),
+                ),
+            )
+        statement = select(dispatch.c.window_key)
+        if reconciliation_only:
+            if not fresh_first or fresh_only or recovery_only:
+                raise ValueError("RECONCILIATION_REQUIRES_FRESH_FIRST")
+            catalog = _accepted_catalog(conn, company)
+            if catalog is None:
+                raise ValueError("OFFICIAL_REGION_CATALOG_MISSING")
+            statement = statement.where(
+                source_day >= now.astimezone(MSK).date() - timedelta(days=3),
+                source_day < now.astimezone(MSK).date(),
+                func.split_part(dispatch.c.window_key, "/", 3).in_(catalog["regions"]),
+                func.split_part(dispatch.c.window_key, "/", 5).in_(FAMILIES),
+            )
+        if recovery_only:
+            if not fresh_first or fresh_only:
+                raise ValueError("RECOVERY_REQUIRES_FRESH_FIRST")
+            catalog = _accepted_catalog(conn, company)
+            if catalog is None:
+                raise ValueError("OFFICIAL_REGION_CATALOG_MISSING")
+            statement = statement.where(
+                source_day < now.astimezone(MSK).date() - timedelta(days=1),
+                source_day >= NATIONAL_RECOVERY_START,
+                func.split_part(dispatch.c.window_key, "/", 3).in_(catalog["regions"]),
+                func.split_part(dispatch.c.window_key, "/", 5).in_(FAMILIES),
+            )
+        if fresh_only:
+            if not fresh_first:
+                raise ValueError("FRESH_ONLY_REQUIRES_FRESH_FIRST")
+            statement = statement.where(
+                source_day >= now.astimezone(MSK).date() - timedelta(days=1)
+            )
+        if fresh_first:
+            # Newest unobserved dates before historical gaps or terminal rechecks.
+            new = list(
+                conn.scalars(
+                    statement.where(
+                        dispatch.c.checked_at.is_(None), dispatch.c.window_key.in_(active_keys)
+                    )
+                    .order_by(
+                        func.split_part(dispatch.c.window_key, "/", 4).desc(), dispatch.c.ordinal
+                    )
+                    .limit(limit)
+                )
+            )
+            # Keep a failed current coordinate progressing even while rechecks are due.
+            retry = (
+                list(
+                    conn.scalars(
+                        statement.where(failed_due)
+                        .order_by(dispatch.c.checked_at, dispatch.c.ordinal)
+                        .limit(1)
+                    )
+                )
+                if fresh_only or recovery_only or reconciliation_only
+                else []
+            )
+            if retry:
+                new = new[: limit - 1]
+            remaining = limit - len(new) - len(retry)
+            # A bounded six-hour recheck covers late publication/amendments.
+            repeated = (
+                list(
+                    conn.scalars(
+                        statement.where(fresh_due)
+                        .order_by(dispatch.c.checked_at, dispatch.c.ordinal)
+                        .limit(
+                            remaining
+                            if fresh_only or recovery_only or reconciliation_only
+                            else min(remaining, max(1, limit // 8))
+                        )
+                    )
+                )
+                if remaining
+                else []
+            )
+            remaining -= len(repeated)
+            recovery = (
+                list(
+                    conn.scalars(
+                        statement.where(
+                            or_(dispatch.c.checked_at.is_(None), failed_due),
+                            dispatch.c.window_key.not_in(new + retry + repeated),
+                        )
+                        .order_by(
+                            func.split_part(dispatch.c.window_key, "/", 4).desc(),
+                            dispatch.c.ordinal,
+                        )
+                        .limit(remaining)
+                    )
+                )
+                if remaining
+                else []
+            )
+            return tuple(target_from_key(k) for k in retry + new + repeated + recovery)
         unseen = list(
             conn.scalars(
-                statement.where(latest.c.checked_at.is_(None))
-                .order_by(scope.c.planned_at, scope.c.ordinal, scope.c.window_key)
+                statement.where(dispatch.c.checked_at.is_(None))
+                .order_by(dispatch.c.planned_at, dispatch.c.ordinal, dispatch.c.window_key)
                 .limit(limit)
             )
         )
@@ -401,14 +560,14 @@ def regional_due_windows(
         retries = list(
             conn.scalars(
                 statement.where(failed_due)
-                .order_by(latest.c.checked_at, scope.c.planned_at, scope.c.ordinal)
+                .order_by(dispatch.c.checked_at, dispatch.c.planned_at, dispatch.c.ordinal)
                 .limit(limit)
             )
         )
         fresh = list(
             conn.scalars(
                 statement.where(fresh_due)
-                .order_by(latest.c.checked_at, scope.c.ordinal)
+                .order_by(dispatch.c.checked_at, dispatch.c.ordinal)
                 .limit(limit)
             )
         )

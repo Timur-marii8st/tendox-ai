@@ -36,6 +36,131 @@ from procurement.storage.models import (
 from procurement.storage.repository import PostgresStorage
 
 
+def test_mandatory_turn_keeps_recent_debt_ahead_of_history(storage):
+    from procurement.sources.eis_feed_sync import EisHourSelection
+    from procurement.sources.eis_freshness import EisFreshnessScope, eligible_freshness
+
+    company = "mandatory-" + uuid.uuid4().hex
+    journal = EisSyncJournal(storage, company, "worker")
+    now = datetime.now(UTC)
+    local = now + timedelta(hours=3)
+    old = EisHourSelection("50", local.date() - timedelta(days=10), 0, 3)
+    journal.plan((old,))
+    scope = EisFreshnessScope(("50",), checkpointed=True, mandatory_only=True)
+    due = eligible_freshness(journal, scope, now=now, limit=60)
+    assert old.window_key not in {t.selection.window_key for t in due}
+    assert all(t.selection.day >= local.date() - timedelta(days=3) for t in due)
+    with storage.transaction(company) as conn:
+        assert (
+            conn.scalar(
+                select(func.count())
+                .select_from(eis_sync_targets)
+                .where(
+                    eis_sync_targets.c.company_id == company,
+                    eis_sync_targets.c.window_key == old.window_key,
+                )
+            )
+            == 1
+        )  # Excluding history from a turn must never delete its checkpoint.
+
+
+def test_checkpoint_hours_survive_restart_midnight_and_reconstruct_holes(storage):
+    from procurement.sources.eis_feed_sync import EisHourSelection
+    from procurement.sources.eis_freshness import (
+        EisFreshnessScope,
+        eligible_freshness,
+        read_due_freshness,
+    )
+
+    company = "checkpoint-" + uuid.uuid4().hex
+    journal = EisSyncJournal(storage, company, "worker")
+    now = datetime.now(UTC)
+    scope = EisFreshnessScope(("50",), ("epNotificationEF2020",), checkpointed=True)
+    first = eligible_freshness(journal, scope, now=now, limit=60)
+    hour = first[0].selection
+    assert isinstance(hour, EisHourSelection)
+    old = EisHourSelection("50", hour.day - timedelta(days=1), hour.hour, 3)
+    journal.plan((old,))
+    journal.record(hour.window_key, "NO_DATA", source_response_sha256="a" * 64)
+    assert hour.window_key not in {
+        t.selection.window_key for t in read_due_freshness(journal, scope, now=now, limit=60)
+    }
+    # A process restart has no in-memory cursor. New hours outrank old retained
+    # gaps, and a week of missed planning is reconstructed, never marked covered.
+    restarted = EisSyncJournal(storage, company, "restart-worker")
+    due = eligible_freshness(restarted, scope, now=now + timedelta(days=8), limit=60)
+    assert due[0].selection.day == hour.day + timedelta(days=8)
+    assert old.window_key in {t.selection.window_key for t in due}
+    assert hour.window_key not in {t.selection.window_key for t in due}
+    assert len(due) <= 60
+    with storage.transaction(company) as conn:
+        count = conn.scalar(
+            select(func.count())
+            .select_from(eis_sync_targets)
+            .where(eis_sync_targets.c.company_id == company)
+        )
+    # The read probe cannot write checkpoints or audits.
+    assert read_due_freshness(restarted, scope, now=now + timedelta(days=8), limit=60)
+    with storage.transaction(company) as conn:
+        assert count == conn.scalar(
+            select(func.count())
+            .select_from(eis_sync_targets)
+            .where(eis_sync_targets.c.company_id == company)
+        )
+    foreign = read_due_freshness(
+        EisSyncJournal(storage, "foreign-" + uuid.uuid4().hex, "test"),
+        scope,
+        now=now + timedelta(days=8),
+        limit=60,
+    )
+    assert old.window_key not in {t.selection.window_key for t in foreign}
+
+
+def test_checkpoint_final_day_debt_survives_eight_day_outage(storage):
+    from procurement.sources.eis_freshness import EisFreshnessScope, eligible_freshness
+
+    company = "checkpoint-debt-" + uuid.uuid4().hex
+    journal = EisSyncJournal(storage, company, "worker")
+    now = datetime.now(UTC)
+    scope = EisFreshnessScope(
+        ("50",), ("epNotificationEF2020",), checkpointed=True, mandatory_only=True
+    )
+    source_day = (now + timedelta(hours=3)).date()
+    day = EisDateSelection("50", source_day, 3)
+    journal.plan((day,))
+    journal.record(day.window_key, "NO_DATA", source_response_sha256="a" * 64)
+    restarted = eligible_freshness(journal, scope, now=now + timedelta(days=8), limit=60)
+    assert day.window_key in {t.selection.window_key for t in restarted}
+    journal.record(day.window_key, "FAILED", reason_code="SOURCE_TRANSPORT_FAILED")
+    retried = eligible_freshness(journal, scope, now=now + timedelta(days=8), limit=60)
+    assert day.window_key in {t.selection.window_key for t in retried}
+    # A thousand newer historical rows must not hide mandatory debt behind SQL LIMIT.
+    historical = tuple(
+        EisDateSelection("50", source_day + timedelta(days=n), 3) for n in range(1, 1002)
+    )
+    for offset in range(0, len(historical), 31):
+        journal.plan(historical[offset : offset + 31])
+    distant = eligible_freshness(journal, scope, now=now + timedelta(days=1008), limit=60)
+    assert day.window_key in {t.selection.window_key for t in distant}
+
+
+def test_checkpoint_new_hours_precede_bounded_daily_rechecks(storage):
+    from procurement.sources.eis_freshness import EisFreshnessScope, eligible_freshness
+
+    company = "checkpoint-fair-" + uuid.uuid4().hex
+    journal = EisSyncJournal(storage, company, "worker")
+    scope = EisFreshnessScope(("50", "77", "78"), checkpointed=True)
+    now = datetime.now(UTC)
+    first = eligible_freshness(journal, scope, now=now, limit=60)
+    for t in first:
+        if t.lane == "RECENT_HOUR":
+            journal.record(t.selection.window_key, "NO_DATA", source_response_sha256="a" * 64)
+    next_hour = eligible_freshness(journal, scope, now=now + timedelta(hours=1), limit=60)
+    assert all(t.lane == "RECENT_HOUR" for t in next_hour[:15])
+    assert sum(t.lane == "RECONCILE_DAY" for t in next_hour) <= 7
+    assert len({t.selection.window_key for t in next_hour}) == len(next_hour)
+
+
 def test_freshness_dispatch_is_read_only_missing_targets_and_foreground(storage, monkeypatch):
     from procurement import eis_freshness_dispatch_cli as dispatch
     from procurement.sources.eis_freshness import (
@@ -324,6 +449,37 @@ def _window(hour: str, *archives: bytes) -> EisReadyWindow:
         expected_archive_count=len(archives),
         archives=tuple(archives),
     )
+
+
+def test_paper_sense_uses_existing_keys_without_hiding_explicit_securities(storage):
+    company = f"paper-sense-{uuid.uuid4()}"
+    financial, paper, price = ("9000000000000000001", "9000000000000000002", "9000000000000000003")
+    ingest_ready_window(
+        storage,
+        company,
+        _window(
+            "17",
+            _archive(financial, title="Оценка ценных бумаг"),
+            _archive(paper, title="Поставка бумаги офисной"),
+            _archive(price, title="Мониторинг цен бумаги офисной"),
+        ),
+        actor_id="test",
+    )
+    with storage.transaction(company) as connection:
+        before = connection.scalar(select(func.count()).select_from(audit_events))
+    now = datetime.now(UTC)  # Continuation cannot include imports after its snapshot clock.
+    result = search_eis_index(storage, company, "бумага", now=now, paginate=True)
+    assert result.evaluated_candidate_notices == 3  # Coarse keys still enter SQL.
+    assert [lead.purchase_number for lead in result.matched] == [paper, price]
+    assert result.matched[0].match_quality == "STRONG"
+    explicit = search_eis_index(storage, company, "ценные бумаги", now=now)
+    assert (
+        next(lead for lead in explicit.matched if lead.purchase_number == financial).match_quality
+        == "STRONG"
+    )
+    assert search_eis_index(storage, company + "-other", "бумага", now=now).matched_count == 0
+    with storage.transaction(company) as connection:
+        assert connection.scalar(select(func.count()).select_from(audit_events)) == before
 
 
 def event_zip(
@@ -1051,3 +1207,237 @@ def test_search_keys_preserve_individual_lot_matches_and_deadlines(
     )
     assert after.matched[0].application_status == "FAIL"
     assert after.matched[0].economic_status == "UNKNOWN"
+
+
+@pytest.mark.parametrize(
+    "case,covered",
+    [
+        ("final_no_data", True),
+        ("final_synced", True),
+        ("later_failure", True),
+        ("pre_cutoff", False),
+        ("failed", False),
+        ("missing_hash", False),
+        ("foreign_tenant", False),
+        ("other_region", False),
+        ("other_type", False),
+        ("other_offset", False),
+        ("other_day", False),
+    ],
+)
+def test_checkpoint_final_daily_observation_covers_only_exact_missed_hours(
+    storage, monkeypatch, case, covered
+):
+    from procurement.sources.eis_feed_sync import EisHourSelection
+    from procurement.sources.eis_freshness import EisFreshnessScope, read_due_freshness
+
+    company = "daily-credit-" + uuid.uuid4().hex
+    now = datetime(2026, 6, 10, 12, tzinfo=UTC)
+    day = date(2026, 6, 9)
+    hour = EisHourSelection("50", day, 22, 3)
+    journal = EisSyncJournal(storage, company, "test")
+    journal.plan((hour,))
+    daily = EisDateSelection(
+        "77" if case == "other_region" else "50",
+        day - timedelta(days=1) if case == "other_day" else day,
+        4 if case == "other_offset" else 3,
+        "epNotificationEZK2020" if case == "other_type" else "epNotificationEF2020",
+    )
+    daily_journal = (
+        EisSyncJournal(storage, company + "-foreign", "test")
+        if case == "foreign_tenant"
+        else journal
+    )
+    daily_journal.plan((daily,))
+    at = datetime(2026, 6, 9, 23, 5, tzinfo=UTC)
+    if case == "pre_cutoff":
+        at -= timedelta(microseconds=1)
+    outcome = (
+        "FAILED"
+        if case == "failed"
+        else "SYNCED"
+        if case in {"missing_hash", "final_synced"}
+        else "NO_DATA"
+    )
+
+    class AttemptClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return at.astimezone(tz or UTC)
+
+    # Production permissions intentionally forbid UPDATE of this append-only
+    # ledger. Set the fixture clock at insertion, never weaken database grants.
+    monkeypatch.setattr("procurement.storage.eis_sync_journal.datetime", AttemptClock)
+    daily_journal.record(
+        daily.window_key,
+        outcome,
+        reason_code="SOURCE_TRANSPORT_FAILED" if outcome == "FAILED" else None,
+        source_response_sha256=None if case == "missing_hash" else "a" * 64,
+    )
+    if case == "later_failure":
+        at = now - timedelta(minutes=16)
+        journal.record(daily.window_key, "FAILED", reason_code="SOURCE_TRANSPORT_FAILED")
+
+    def retained():
+        with storage.transaction(company) as conn:
+            return tuple(
+                conn.scalar(select(func.count()).select_from(t))
+                for t in (
+                    eis_sync_targets,
+                    eis_sync_attempts,
+                    audit_events,
+                    eis_feed_windows,
+                )
+            )
+
+    before = retained()
+    scope = EisFreshnessScope(
+        ("50",), ("epNotificationEF2020",), checkpointed=True, mandatory_only=True
+    )
+    # Restart has no in-memory coverage. The selector derives it from evidence;
+    # it never fabricates an hourly attempt/checkpoint or drops the durable gap.
+    restarted = EisSyncJournal(storage, company, "restarted")
+    due = read_due_freshness(restarted, scope, now=now, limit=60)
+    assert restarted.freshness_recovery_reason is None
+    assert (hour.window_key not in {t.selection.window_key for t in due}) is covered
+    assert retained() == before
+    assert due[0].lane == "RECENT_HOUR"
+    assert len({t.selection.window_key for t in due}) == len(due) <= 60
+    assert read_due_freshness(restarted, scope, now=now, limit=1) == due[:1]
+    if case == "later_failure":
+        assert daily.window_key in {t.selection.window_key for t in due}
+    with storage.transaction(company) as conn:
+        assert (
+            conn.scalar(
+                select(func.count())
+                .select_from(eis_sync_targets)
+                .where(
+                    eis_sync_targets.c.window_key == hour.window_key,
+                )
+            )
+            == 1
+        )
+        assert (
+            conn.scalar(
+                select(func.count())
+                .select_from(eis_sync_attempts)
+                .where(
+                    eis_sync_attempts.c.window_key == hour.window_key,
+                )
+            )
+            == 0
+        )
+
+
+@pytest.mark.parametrize("kind", ["unattempted", "pre_cutoff", "failed"])
+def test_mandatory_daily_recovery_precedes_hours_outside_rolling_scope(storage, monkeypatch, kind):
+    from procurement.sources.eis_feed_sync import EisHourSelection
+    from procurement.sources.eis_freshness import EisFreshnessScope, read_due_freshness
+
+    company = "mandatory-day-" + uuid.uuid4().hex
+    now = datetime(2026, 10, 15, 12, tzinfo=UTC)
+    old_day = date(2026, 10, 9)
+    daily = EisDateSelection("50", old_day, 3)
+    hour = EisHourSelection("50", old_day, 20, 3)
+    journal = EisSyncJournal(storage, company, "worker")
+    journal.plan((daily, hour))
+    if kind != "unattempted":
+        at = datetime(2026, 10, 9, 14, tzinfo=UTC)
+
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return at.astimezone(tz or UTC)
+
+        monkeypatch.setattr("procurement.storage.eis_sync_journal.datetime", Clock)
+        journal.record(
+            daily.window_key,
+            "FAILED" if kind == "failed" else "NO_DATA",
+            reason_code="SOURCE_TRANSPORT_FAILED" if kind == "failed" else None,
+            source_response_sha256="a" * 64 if kind != "failed" else None,
+        )
+    scope = EisFreshnessScope(
+        ("50",), ("epNotificationEF2020",), checkpointed=True, mandatory_only=True
+    )
+    restarted = EisSyncJournal(storage, company, "restart")
+    due = read_due_freshness(restarted, scope, now=now, limit=2)
+    assert due[0].lane == "RECENT_HOUR"
+    assert due[1].selection.window_key == daily.window_key
+    with storage.transaction(company) as conn:
+        assert (
+            conn.scalar(
+                select(func.count())
+                .select_from(eis_sync_targets)
+                .where(
+                    eis_sync_targets.c.company_id == company,
+                    eis_sync_targets.c.window_key == hour.window_key,
+                )
+            )
+            == 1
+        )
+        assert (
+            conn.scalar(
+                select(func.count())
+                .select_from(eis_sync_attempts)
+                .where(
+                    eis_sync_attempts.c.company_id == company,
+                    eis_sync_attempts.c.window_key == hour.window_key,
+                )
+            )
+            == 0
+        )
+
+
+def test_mandatory_recovery_does_not_promote_unobserved_old_history(storage):
+    from procurement.sources.eis_freshness import EisFreshnessScope, read_due_freshness
+
+    company = "old-history-" + uuid.uuid4().hex
+    now = datetime(2026, 10, 15, 12, tzinfo=UTC)
+    historical = EisDateSelection("50", date(2026, 9, 1), 3)
+    journal = EisSyncJournal(storage, company, "test")
+    journal.plan((historical,))
+    due = read_due_freshness(
+        journal,
+        EisFreshnessScope(
+            ("50",), ("epNotificationEF2020",), checkpointed=True, mandatory_only=True
+        ),
+        now=now,
+        limit=60,
+    )
+    assert historical.window_key not in {x.selection.window_key for x in due}
+
+
+def test_protected_reconciliation_reads_daily_debt_under_full_hourly_pressure(storage, monkeypatch):
+    from procurement.sources.eis_freshness import EisFreshnessScope, read_due_reconciliation
+
+    company = "daily-reserve-" + uuid.uuid4().hex
+    now = datetime(2026, 10, 22, 12, tzinfo=UTC)
+    journal = EisSyncJournal(storage, company, "test")
+    yesterday = EisDateSelection("50", now.date() - timedelta(days=1), 3)
+    recent = EisDateSelection("50", now.date() - timedelta(days=2), 3)
+    old = EisDateSelection("50", now.date() - timedelta(days=10), 3)
+    journal.plan((yesterday, recent, old))
+    from procurement.storage import eis_sync_journal
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz or UTC)
+
+    monkeypatch.setattr(eis_sync_journal, "datetime", Clock)
+    journal.record(recent.window_key, "NO_DATA", source_response_sha256="a" * 64)
+    with storage.transaction(company, consistent_read=True) as conn:
+        before = conn.scalar(select(func.count()).select_from(eis_sync_attempts))
+    scope = EisFreshnessScope(
+        ("50",), ("epNotificationEF2020",), checkpointed=True, mandatory_only=True
+    )
+    daily = read_due_reconciliation(journal, scope, now=now, limit=1)
+    assert tuple(t.selection.window_key for t in daily) == (yesterday.window_key,)
+    assert daily[0].lane == "RECONCILE_DAY"
+    foreign = EisSyncJournal(storage, company + "-other", "test")
+    assert all(
+        t.selection.day == yesterday.day
+        for t in read_due_reconciliation(foreign, scope, now=now, limit=1)
+    )
+    with storage.transaction(company, consistent_read=True) as conn:
+        assert conn.scalar(select(func.count()).select_from(eis_sync_attempts)) == before

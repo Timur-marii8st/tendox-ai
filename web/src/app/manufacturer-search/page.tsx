@@ -12,7 +12,7 @@ import type { ManufacturerCandidate, ManufacturerDossier, ManufacturerSearchRepo
 import { ManufacturerSearchForm } from "./form";
 import { ReviewedManufacturers } from "./directory";
 
-export const metadata: Metadata = { title: "Поиск производителей ЕАЭС — Syurai Procurement" };
+export const metadata: Metadata = { title: "Поиск производителей ЕАЭС — Tendox" };
 
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 

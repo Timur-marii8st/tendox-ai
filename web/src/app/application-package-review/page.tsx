@@ -14,7 +14,7 @@ import {
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Проверка заявки — Syurai Procurement",
+  title: "Проверка заявки — Tendox",
   description: "Независимый review exact состава, файлов и цены заявки",
 };
 

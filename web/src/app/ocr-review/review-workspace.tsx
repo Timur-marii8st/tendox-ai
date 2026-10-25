@@ -195,7 +195,7 @@ export function OcrReviewWorkspace() {
       reviewed_at: new Date().toISOString(),
       method: [
         review.method.trim(),
-        `Human confirmation in the local Syurai review workspace. Parent AI review SHA-256: ${reviewSha256}.`,
+        `Human confirmation in the local Tendox review workspace. Parent AI review SHA-256: ${reviewSha256}.`,
         `Resolved uncertainties: ${resolutionEvidence || "none"}.`,
         "The complete expected-line list was visually checked against the immutable DOCX media.",
       ].join(" "),

@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 from io import BytesIO
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import pytest
 from lxml import etree as E  # type: ignore[import-untyped]
@@ -56,7 +56,10 @@ def zip_bytes(items: list[tuple[str, bytes]]) -> bytes:
     output = BytesIO()
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:
         for name, raw in items:
-            archive.writestr(name, raw)
+            # Replay fixtures must retain exact bytes across ZIP's two-second clock boundary.
+            info = ZipInfo(name, date_time=(2026, 10, 1, 0, 0, 0))
+            info.compress_type = ZIP_DEFLATED
+            archive.writestr(info, raw)
     return output.getvalue()
 
 
@@ -118,9 +121,18 @@ def test_duplicate_lot_guid_is_rejected_even_with_different_positive_ordinal():
         parse_purchase_lot_cancellation_xml(raw, source_member="event.xml")
 
 
-def test_archive_variants_retained_exact_duplicate_and_unsafe_member_rejected():
+def test_archive_variants_retained_exact_duplicate_and_unsafe_member_rejected(monkeypatch):
     first = lot_event_xml()
     second = first.replace(b"common cause", b"changed cause")
+    archives = []
+    for tick in (0, 2):
+        with monkeypatch.context() as clock:
+            clock.setattr("zipfile.time.localtime", lambda _, tick=tick: (2026, 10, 1, 0, 0, tick))
+            archives.append(zip_bytes([("one.xml", first)]))
+    assert archives[0] == archives[1]
+    with ZipFile(BytesIO(archives[0])) as zipped:
+        assert zipped.read("one.xml") == first
+        assert zipped.getinfo("one.xml").compress_type == ZIP_DEFLATED
     report = inspect_purchase_lot_cancellation_archive(
         zip_bytes([("one.xml", first), ("two.xml", second)]),
         company_id="tenant-a",

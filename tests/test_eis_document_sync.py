@@ -68,3 +68,23 @@ def test_empty_manifest_does_not_prove_absence_of_documents() -> None:
 def test_unlisted_uid_is_rejected() -> None:
     with pytest.raises(EisDocumentSetError, match="UNLISTED_DOCUMENT_UID"):
         assess_notice_document_set(_notice(), {"B" * 32: b"abc"})
+
+
+def test_ambiguous_reference_never_runs_native_analysis(monkeypatch):
+    from procurement.sources import eis_document_sync
+    from procurement.sources.eis_feed_archive import EisAttachmentAlias
+
+    notice = _notice()
+    attachment = replace(
+        notice.attachments[0], aliases=(EisAttachmentAlias("other.pdf", None, "xml/attachment[2]"),)
+    )
+    notice = replace(notice, attachments=(attachment,))
+    monkeypatch.setattr(
+        eis_document_sync,
+        "analyze_document",
+        lambda *args: pytest.fail("ambiguous reference must not be analyzed"),
+    )
+    report = assess_notice_document_set(notice, {UID: b"abc"})
+    assert report.extraction_status == "UNKNOWN"
+    assert report.documents[0].analysis is None
+    assert report.documents[0].extraction_reasons == ("ATTACHMENT_REFERENCE_REQUIRES_REVIEW",)

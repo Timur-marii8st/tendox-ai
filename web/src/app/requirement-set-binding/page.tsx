@@ -12,7 +12,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Привязка требований к кейсу — Syurai Procurement",
+  title: "Привязка требований к кейсу — Tendox",
   description: "Operator binding exact reviewed requirement set к immutable версии кейса",
 };
 

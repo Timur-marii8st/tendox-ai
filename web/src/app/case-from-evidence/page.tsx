@@ -4,7 +4,7 @@ import Link from "next/link";
 import { CaseFromEvidenceForm } from "./form";
 
 export const metadata: Metadata = {
-  title: "Кейс из привязки — Syurai Procurement",
+  title: "Кейс из привязки — Tendox",
   description: "Создание версии кейса с server-derived DOCUMENT-проверкой из exact привязки",
 };
 

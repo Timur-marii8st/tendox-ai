@@ -113,6 +113,18 @@ class Policy:
         if raw.get("schema_version") != POLICY_SCHEMA:
             raise ReceiptError("unsupported release-gate policy schema")
         version = _string(raw.get("policy_version"), "policy_version")
+        bound_source = raw.get("candidate_identity")
+        if bound_source is not None:
+            bound_source = _mapping(bound_source, "candidate_identity")
+            if set(bound_source) != {"archive_sha256", "tree_sha256", "manifest_sha256"} or any(
+                not isinstance(value, str) or not SHA256_RE.fullmatch(value)
+                for value in bound_source.values()
+            ):
+                raise ReceiptError("branch policy requires exact three source identities")
+        if raw.get("documentation_layout", "modern") not in {"modern", "legacy-flat"}:
+            raise ReceiptError("unsupported documentation layout")
+        if not isinstance(raw.get("postgres_before_web", False), bool):
+            raise ReceiptError("postgres_before_web must be boolean")
         kinds_value = raw.get("supported_candidate_kinds")
         if not isinstance(kinds_value, list) or not kinds_value:
             raise ReceiptError("supported_candidate_kinds must be a non-empty list")
@@ -376,6 +388,11 @@ def verify_release_receipt(
     for key, value in expected_source.items():
         if source.get(key) != value:
             raise ReceiptError(f"receipt source identity mismatch: {key}")
+    bound_source = policy.raw.get("candidate_identity")
+    if bound_source is not None and any(
+        source.get(key) != value for key, value in bound_source.items()
+    ):
+        raise ReceiptError("receipt differs from exact branch policy binding")
     _verify_sealed_source(run_dir, source, state_root)
 
     stages_raw = raw.get("stages")

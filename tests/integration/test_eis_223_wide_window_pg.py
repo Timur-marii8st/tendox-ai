@@ -26,10 +26,10 @@ def storage():
     yield from storage_fixture.__wrapped__()
 
 
-def wide_window(*, response="a" * 64, conflict=False):
+def wide_window(*, response="a" * 64, conflict=False, count=4):
     archives = tuple(
         zip_bytes([(f"notice-{i}.xml", xml().replace(b"32600000001", f"3260000000{i}".encode()))])
-        for i in range(1, 5)
+        for i in range(1, count + 1)
     )
     if conflict:
         archives = (
@@ -53,7 +53,7 @@ def wide_window(*, response="a" * 64, conflict=False):
         archive_urls=tuple(
             "https://int44.zakupki.gov.ru/dstore/common/download/compound"
             "?docRequestUid=11111111-1111-4111-8111-111111111111&compoundUid=" + f"{i:032X}"
-            for i in range(1, 5)
+            for i in range(1, count + 1)
         ),
     )
 
@@ -113,8 +113,8 @@ def test_four_archives_atomic_replay_rls_and_database_cap(storage):
                 response_sha256="e" * 64,
                 prepared_sha256="f" * 64,
                 manifest_sha256="d" * 64,
-                archive_count=5,
-                record_count=5,
+                archive_count=9,
+                record_count=9,
                 ingested_at=datetime.now(UTC),
             )
         )
@@ -145,7 +145,7 @@ def test_downgrade_does_not_hide_wide_history_of_another_tenant(storage):
     engine = create_engine(os.environ["DATABASE_ADMIN_URL"])
     try:
         with engine.connect() as conn:
-            assert "<= 4" in conn.scalar(
+            assert "<= 8" in conn.scalar(
                 text(
                     "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
                     "WHERE conname='ck_eis_223_counts'"
@@ -154,3 +154,47 @@ def test_downgrade_does_not_hide_wide_history_of_another_tenant(storage):
     finally:
         engine.dispose()
     assert counts(storage, company) == before
+
+
+def test_eight_archives_replay_tenant_and_new_migration_guard(storage):
+    company = "eight-" + uuid4().hex
+    ready = wide_window(count=8)
+    result = ingest_notice223_window(storage, company, ready, actor_id="test")
+    assert result.archive_count == result.record_count == result.new_versions == 8
+    before = counts(storage, company)
+    assert ingest_notice223_window(storage, company, ready, actor_id="retry").replayed
+    assert counts(storage, company) == before
+    with storage.transaction("other-" + company, consistent_read=True) as conn:
+        assert conn.scalar(select(func.count()).select_from(eis_223_windows)) == 0
+    assert_direct_downgrade_guard(
+        "20261008_01_eis_223_eight_archive_window",
+        expected_database="procurement_eis_test_20261004_s176",
+        match="223 wide archive history must be preserved",
+        tenant_context="other-" + company,
+    )
+    assert counts(storage, company) == before
+
+
+def test_large_notice_xml_checkpoint_replay_and_tenant_isolation(storage):
+    from io import BytesIO
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    from procurement.storage.models import eis_223_notice_versions
+
+    company = "notice-large-" + uuid4().hex
+    raw = xml() + b"<!--" + b"x" * 9_471_478 + b"-->"
+    stream = BytesIO()
+    with ZipFile(stream, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("large.xml", raw)
+    ready = wide_window().model_copy(
+        update={"archives": (stream.getvalue(),), "archive_urls": wide_window().archive_urls[:1]}
+    )
+    result = ingest_notice223_window(storage, company, ready, actor_id="test")
+    assert result.new_versions == 1
+    before = counts(storage, company)
+    assert ingest_notice223_window(storage, company, ready, actor_id="test").new_versions == 0
+    assert counts(storage, company) == before
+    with storage.transaction(company) as conn:
+        assert conn.scalar(select(func.count()).select_from(eis_223_notice_versions)) == 1
+    with storage.transaction(company + "-foreign") as conn:
+        assert conn.scalar(select(func.count()).select_from(eis_223_notice_versions)) == 0

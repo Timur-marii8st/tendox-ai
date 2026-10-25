@@ -10,12 +10,44 @@ import subprocess
 import sys
 import tarfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "scripts" / "release_gate_policy.json"
+
+
+def test_branch_policy_refuses_other_source_before_executor(tmp_path: Path) -> None:
+    bundle, digest = _archive(tmp_path)
+    raw = json.loads(POLICY.read_text(encoding="utf-8"))
+    raw["candidate_identity"] = {
+        "archive_sha256": "0" * 64,
+        "tree_sha256": "1" * 64,
+        "manifest_sha256": "2" * 64,
+    }
+    policy = tmp_path / "branch-policy.json"
+    policy.write_text(json.dumps(raw), encoding="utf-8")
+
+    def forbidden_executor():
+        pytest.fail("wrong branch source must be refused before any worker starts")
+
+    with pytest.raises(GateError, match="exact branch policy binding"):
+        ReleaseGateController(
+            bundle=bundle, expected_sha256=digest, state_root=tmp_path / "state",
+            policy_path=policy, executor_factory=forbidden_executor,
+        ).run()
+    assert not list((tmp_path / "state").rglob("release-receipt.json"))
+
+
+def test_branch_policy_requires_all_three_source_identities(tmp_path: Path) -> None:
+    raw = json.loads(POLICY.read_text(encoding="utf-8"))
+    raw["candidate_identity"] = {"archive_sha256": "0" * 64}
+    path = tmp_path / "bad-policy.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ReceiptError, match="exact three"):
+        Policy.load(path)
 
 
 def _load(name: str, path: Path) -> Any:
@@ -653,3 +685,91 @@ def test_cli_has_no_scope_weakening_or_external_database_option(forbidden: str) 
                 "value",
             ]
         )
+
+
+def test_verifier_refuses_other_exact_branch_even_with_updated_policy_reference(
+    tmp_path: Path,
+) -> None:
+    receipt, state = _run(tmp_path)
+    raw = json.loads(POLICY.read_text(encoding="utf-8"))
+    raw["candidate_identity"] = {**_source_identity(receipt), "archive_sha256": "0" * 64}
+    policy_path = tmp_path / "other-branch.json"
+    policy_path.write_text(json.dumps(raw), encoding="utf-8")
+    policy = Policy.load(policy_path)
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload["policy"] = {"version": policy.version, "sha256": policy.sha256}
+    receipt.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ReceiptError, match="exact branch policy binding"):
+        verify_release_receipt(
+            receipt, state_root=state, policy_path=policy_path,
+            expected_source=_source_identity(receipt),
+        )
+
+
+@pytest.mark.parametrize("stop_fails", [False, True])
+def test_sequential_workers_release_ram_before_node_or_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop_fails: bool,
+) -> None:
+    executor = _RUNNER.DockerGateExecutor()
+    events: list[str] = []
+    monkeypatch.setattr(_RUNNER.os, "getuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(_RUNNER.os, "getgid", lambda: 1000, raising=False)
+    for method in (
+        "_assert_worker_path_ownership", "_configure_docker_client", "_prepare_runtime",
+        "_build_python_runtime", "_start_postgres", "_start_python_runner",
+        "_python_quality",
+    ):
+        monkeypatch.setattr(executor, method, lambda: None)
+    monkeypatch.setattr(executor, "_postgres_quality", lambda: events.append("postgres"))
+    executor.python_runner_id = "python-id"
+    executor.pg_id = "pg-id"
+
+    def stop(*args: str, **kwargs: Any) -> str:
+        assert args[:3] == ("stop", "--time", "10")
+        events.append(args[3])
+        if stop_fails:
+            raise GateError("stop refused")
+        return ""
+
+    def start_node() -> None:
+        events.append("node")
+        raise GateError("test boundary reached")
+
+    monkeypatch.setattr(executor, "_docker_capture", stop)
+    monkeypatch.setattr(executor, "_start_node_runner", start_node)
+    context = SimpleNamespace(policy=SimpleNamespace(raw={"postgres_before_web": True}))
+    with pytest.raises(GateError, match="stop refused" if stop_fails else "test boundary"):
+        executor.execute(context)
+    assert events == (
+        ["postgres", "python-id"] if stop_fails
+        else ["postgres", "python-id", "pg-id", "node"]
+    )
+
+
+def test_dependency_transport_timeout_preserves_lock_and_overall_build_cap(tmp_path, monkeypatch):
+    executor = _RUNNER.DockerGateExecutor()
+    executor.context = SimpleNamespace(
+        run_id="release-test",
+        control_dir=tmp_path,
+        source_dir=tmp_path,
+        policy=SimpleNamespace(
+            raw={"tool_versions": {"uv": "0.9.12"}, "limits": {"build_timeout_seconds": 1800}}
+        ),
+    )
+    monkeypatch.setattr(executor, "_image_policy", lambda kind: {"reference": "python:pinned"})
+    monkeypatch.setattr(executor, "_resource_name", lambda role: "test-python-runtime")
+    monkeypatch.setattr(executor, "_discover_resource", lambda *args: None)
+
+    def boundary(stage, command, *, timeout):
+        assert stage == "python-runtime-build" and timeout == 1800
+        raise GateError("test boundary: no Docker invoked")
+
+    monkeypatch.setattr(executor, "_stage", boundary)
+    with pytest.raises(GateError, match="test boundary"):
+        executor._build_python_runtime()
+    recipe = (tmp_path / "Dockerfile.python-runtime").read_text()
+    assert "pip install --timeout 300 --no-cache-dir uv==0.9.12" in recipe
+    assert "UV_HTTP_TIMEOUT=300" in recipe
+    assert "COPY pyproject.toml uv.lock" in recipe
+    assert "uv sync --frozen --extra dev --no-install-project" in recipe
+    assert "UV_NO_SYNC=1" in recipe

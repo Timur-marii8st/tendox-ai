@@ -359,8 +359,8 @@ def positions223(
 
 
 class PositionLinkLead(EvidenceModel):
-    left_row: int = Field(ge=0, le=2)
-    right_row: int = Field(ge=0, le=2)
+    left_row: int = Field(ge=0, le=4)
+    right_row: int = Field(ge=0, le=4)
     left_position: int = Field(ge=1)
     right_position: int = Field(ge=1)
     basis: Literal["NAME", "KTRU", "CLASSIFICATION"]

@@ -1,0 +1,577 @@
+{
+  "schema_version": "company-profile-snapshot-v1",
+  "company_id": "demo-company",
+  "version": 2,
+  "parent_version": 1,
+  "created_at": "2026-10-13T06:00:00+00:00",
+  "created_by": "synthetic-owner",
+  "effective_at": "2026-10-13T06:00:00+00:00",
+  "currency": "RUB",
+  "amount_basis": "EX_VAT",
+  "facts": {
+    "identity": {
+      "name": {
+        "knowledge": "KNOWN",
+        "value": "Синтетическая демо-компания — не реальный участник",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "identity.name",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "inn": {
+        "knowledge": "KNOWN",
+        "value": "0000000000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "identity.inn",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "kpp": {
+        "knowledge": "KNOWN",
+        "value": "000000000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "identity.kpp",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "ogrn": {
+        "knowledge": "KNOWN",
+        "value": "0000000000000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "identity.ogrn",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "legal_form": {
+        "knowledge": "KNOWN",
+        "value": "Синтетическое ООО",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "identity.legal_form",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      }
+    },
+    "okved": {
+      "knowledge": "KNOWN",
+      "value": [],
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "okved",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    },
+    "business_description": {
+      "knowledge": "KNOWN",
+      "value": "Синтетическая поставка офисной бумаги",
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "business_description",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    },
+    "supplied_goods": {
+      "knowledge": "KNOWN",
+      "value": [
+        "Офисная бумага А4, 500 листов"
+      ],
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "supplied_goods",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    },
+    "performed_works": {
+      "knowledge": "KNOWN",
+      "value": [],
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "performed_works",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    },
+    "provided_services": {
+      "knowledge": "KNOWN",
+      "value": [],
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "provided_services",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    },
+    "geography": {
+      "all_russia": {
+        "knowledge": "KNOWN",
+        "value": false,
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "geography.all_russia",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "federal_districts": {
+        "knowledge": "KNOWN",
+        "value": [],
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "geography.federal_districts",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "regions": {
+        "knowledge": "KNOWN",
+        "value": [
+          "Татарстан"
+        ],
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "geography.regions",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "cities": {
+        "knowledge": "KNOWN",
+        "value": [],
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "geography.cities",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "max_distance_km": {
+        "knowledge": "NOT_APPLICABLE",
+        "value": null,
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "geography.max_distance_km",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": "NO_DISTANCE_LIMIT"
+      }
+    },
+    "finance": {
+      "min_contract_amount": {
+        "knowledge": "KNOWN",
+        "value": "500000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "finance.min_contract_amount",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "max_contract_amount": {
+        "knowledge": "KNOWN",
+        "value": "1000000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "finance.max_contract_amount",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "min_margin": {
+        "knowledge": "KNOWN",
+        "value": "0.15",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "finance.min_margin",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "min_expected_profit": {
+        "knowledge": "KNOWN",
+        "value": "150000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "finance.min_expected_profit",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "max_contract_without_extra_approval": {
+        "knowledge": "KNOWN",
+        "value": "1000000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "finance.max_contract_without_extra_approval",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "max_application_security": {
+        "knowledge": "KNOWN",
+        "value": "300000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "finance.max_application_security",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "max_performance_security": {
+        "knowledge": "KNOWN",
+        "value": "1000000",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "finance.max_performance_security",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      },
+      "price_floor_margin": {
+        "knowledge": "KNOWN",
+        "value": "0.10",
+        "sources": [
+          {
+            "provenance": {
+              "document_id": "SYNTHETIC-profile-command-v2",
+              "locator": "finance.price_floor_margin",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            "kind": "manual_declaration",
+            "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+            "recorded_at": "2026-10-13T06:00:00+00:00",
+            "recorded_by": "synthetic-owner",
+            "source_url": null
+          }
+        ],
+        "reason": null
+      }
+    },
+    "enabled_platforms": {
+      "knowledge": "KNOWN",
+      "value": [
+        "synthetic-platform"
+      ],
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "enabled_platforms",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    },
+    "subcontracting_allowed": {
+      "knowledge": "KNOWN",
+      "value": false,
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "subcontracting_allowed",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    },
+    "allowed_procedure_methods": {
+      "knowledge": "KNOWN",
+      "value": [
+        "electronic_auction"
+      ],
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "allowed_procedure_methods",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    },
+    "prohibitions": {
+      "knowledge": "KNOWN",
+      "value": [],
+      "sources": [
+        {
+          "provenance": {
+            "document_id": "SYNTHETIC-profile-command-v2",
+            "locator": "prohibitions",
+            "extractor": "manual",
+            "confidence": 1.0
+          },
+          "kind": "manual_declaration",
+          "source_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+          "recorded_at": "2026-10-13T06:00:00+00:00",
+          "recorded_by": "synthetic-owner",
+          "source_url": null
+        }
+      ],
+      "reason": null
+    }
+  },
+  "policy_confirmation": {
+    "actor_id": "synthetic-owner",
+    "confirmed_at": "2026-10-13T06:00:00+00:00",
+    "command_sha256": "18b3fa26a1cf66cc6c5e2f9c659e75aa171e61d2d15238e12be2fecc48bb6c06",
+    "changed_paths": [
+      "finance.max_contract_amount"
+    ]
+  },
+  "audit_event_id": "SYNTHETIC-profile-audit-v2",
+  "snapshot_sha256": "830463001b18eea015c9d7ed0f32cb182842dc7ca704900a3ba6bd75e9d4392d"
+}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { RequirementSetMaterializationForm } from "./form";
 
 export const metadata: Metadata = {
-  title: "Материализация требований — Syurai Procurement",
+  title: "Материализация требований — Tendox",
   description: "Server-derived proposal из exact таблицы технических характеристик",
 };
 

@@ -69,6 +69,54 @@ def counts(storage, company):
         return {t.name: conn.scalar(select(func.count()).select_from(t)) for t in TABLES}
 
 
+def _assert_search_matches_installed_baseline(storage, company, *, now=None):
+    # Freeze the complete installed query, not just the optimized hold helper.
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    from procurement.storage.eis_search_pagination import PAGE_COMPARISONS
+
+    name = "_history_admission_eis_index_query"
+    module = sys.modules.get(name)
+    if module is None:
+        path = (
+            Path(__file__).parents[1]
+            / "fixtures/eis_release_baselines/history_admission_eis_index_query.py"
+        )
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == (
+            "a9c4705b4cc7c11d8338a297908c46c63c458fd967ed25b373b77a419ab94426"
+        )
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    clock = now or datetime.now(UTC)
+    before = counts(storage, company)
+    for scope in ("ALL_CACHED", "NOT_EXPIRED_OR_UNKNOWN"):
+        for paginate in (False, True):
+            for tenant in (company, "other-" + company):
+                kwargs = dict(now=clock, search_scope=scope, paginate=paginate, batch_size=1)
+                # Cold-cache parity here; warm reuse is covered by pagination PG tests.
+                PAGE_COMPARISONS.clear()
+                try:
+                    actual = search_eis_index(storage, tenant, "бумага", **kwargs)
+                    expected = module.search_eis_index(storage, tenant, "бумага", **kwargs)
+                    assert actual.reused_candidate_notices == 0  # Every call starts a fresh page.
+                    assert actual.compared_candidate_notices == expected.evaluated_candidate_notices
+                    assert actual.model_dump(
+                        exclude={
+                            "search_elapsed_ms",
+                            "compared_candidate_notices",
+                            "reused_candidate_notices",
+                        }
+                    ) == expected.model_dump(exclude={"search_elapsed_ms"})
+                finally:
+                    PAGE_COMPARISONS.clear()
+    assert counts(storage, company) == before
+
+
 def prepare(storage, company, tmp_path, *, members=None, day="29", response="a"):
     members = members or (("a.xml", notice(title="Бумага")),)
     evidence, diagnosis = batch(
@@ -164,7 +212,12 @@ def test_all_members_decided_singleton_discharged_conflict_held_and_no_checkpoin
     members = (
         ("a.xml", notice()),
         ("b.xml", notice(title="Different")),
-        ("c.xml", notice(title="Бумага").replace(NUMBER.encode(), OTHER.encode())),
+        (
+            "c.xml",
+            notice(title="Бумага", extra="<ep:endDT>2099-01-01T00:00:00+03:00</ep:endDT>").replace(
+                NUMBER.encode(), OTHER.encode()
+            ),
+        ),
     )
     receipt, archives, evidence = prepare(storage, company, tmp_path, members=members)
     journal = EisSyncJournal(storage, company, "test")
@@ -184,6 +237,14 @@ def test_all_members_decided_singleton_discharged_conflict_held_and_no_checkpoin
     search = search_eis_index(storage, company, "бумага", now=NOW)
     assert search.matched_count == 1 and search.held_current_notices == 0
     assert search.indexed_windows == 0 and search.pending_windows == 1
+    _assert_search_matches_installed_baseline(storage, company)
+    # Deadline equality is expired; the same installed and optimized scopes agree.
+    boundary = datetime(2098, 12, 31, 21, tzinfo=UTC)
+    _assert_search_matches_installed_baseline(storage, company, now=boundary)
+    active = search_eis_index(
+        storage, company, "бумага", now=boundary, search_scope="NOT_EXPIRED_OR_UNKNOWN"
+    )
+    assert OTHER not in {row.purchase_number for row in active.matched}
     with storage.transaction(company, consistent_read=True) as conn:
         assert conn.scalar(select(eis_feed_archives.c.record_count)) == 3
         assert conn.scalar(select(eis_feed_archives.c.content)) == archives[0]
@@ -247,6 +308,7 @@ def test_new_evidence_reholds_projected_search_and_cached_consumers(storage, tmp
     report = project_retained_notice_variants(
         storage, company, receipt.receipt_id, archives, actor_id="test"
     )
+    _assert_search_matches_installed_baseline(storage, company)
     sha = hashlib.sha256(notice(title="Бумага")).hexdigest()
     ref = NoticeDocumentRef(purchase_number=NUMBER, version_number=1, notice_xml_sha256=sha)
     other = admit(storage, company, 0, number=OTHER, listed=False)
@@ -266,6 +328,7 @@ def test_new_evidence_reholds_projected_search_and_cached_consumers(storage, tmp
     )
     assert read_notice_source_hold(storage, company, NUMBER, 1).status == "HOLD"
     assert search_eis_index(storage, company, "бумага", now=NOW).held_current_notices == 1
+    _assert_search_matches_installed_baseline(storage, company)
     for operation in (
         lambda: get_document_status(storage, company, ref),
         lambda: project_notice_positions(storage, company, ref, actor_id="test"),

@@ -264,6 +264,33 @@ def build_eis_evidence_bridge(
         or set(analyses) - {item.content_uid for item in collection.documents}
     ):
         raise ValueError("EIS_EVIDENCE_VERSION_MISMATCH")
+    blocked = {a.content_uid: a for a in notice.attachments if a.reference_status == "UNKNOWN"}
+    if blocked:
+        analyses = {uid: analysis for uid, analysis in analyses.items() if uid not in blocked}
+        documents = tuple(
+            item.model_copy(
+                update={
+                    "reference_status": "UNKNOWN",
+                    "aliases": blocked[item.content_uid].aliases,
+                    "extraction_status": "UNKNOWN",
+                    "reasons": ("ATTACHMENT_REFERENCE_REQUIRES_REVIEW",),
+                    "requirement_candidate_count": 0,
+                    "condition_snippet_count": 0,
+                }
+            )
+            if item.content_uid in blocked
+            else item
+            for item in collection.documents
+        )
+        collection = collection.model_copy(
+            update={
+                "documents": documents,
+                "extraction_status": "UNKNOWN",
+                "analysis_pending_count": sum(
+                    d.reasons == ("ANALYSIS_NOT_AVAILABLE",) for d in documents
+                ),
+            }
+        )
     documents = []
     for item in collection.documents:
         analysis = analyses.get(item.content_uid)
@@ -297,6 +324,8 @@ def build_eis_evidence_bridge(
     else:
         reasons.append("CURRENT_SUBMISSION_STAGE_UNVERIFIED")
     gaps = ["SOURCE_MANIFEST_COVERAGE_UNVERIFIED", "DOCUMENT_ROLES_NOT_REVIEWED"]
+    if blocked:
+        gaps.append("ATTACHMENT_REFERENCE_REQUIRES_REVIEW")
     if not collection.requested:
         gaps.append("DOCUMENT_JOB_NOT_REQUESTED")
     if not collection.listed_count:
@@ -441,7 +470,9 @@ def read_eis_evidence_bridge(
     analyses = {
         item.content_uid: analysis
         for item in collection.documents
-        if item.fetch_status == "RECEIVED" and item.sha256 is not None
+        if item.reference_status == "PASS"
+        and item.fetch_status == "RECEIVED"
+        and item.sha256 is not None
         if (
             analysis := _cached_analysis(
                 connection, company_id, item.sha256, item.filename, item.source_url

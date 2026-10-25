@@ -117,3 +117,16 @@
 - [0108-bounded-eis-audit-row-fragments.md](0108-bounded-eis-audit-row-fragments.md) — ADR0108: явный audit-only format v2 с ограниченными фрагментами; actual corpus и метрики ещё не подтверждены.
 - [0109-bounded-eis-capture-v3-state.md](0109-bounded-eis-capture-v3-state.md) — ADR0109: обычные большие строки V3 и отдельные бюджеты временного состояния; actual fit не подтверждён.
 - [0110-bounded-no-data-overflow.md](0110-bounded-no-data-overflow.md) — ADR0110: второй ограниченный сегмент NO_DATA с сохранением старых audit references.
+
+- [0111-protected-eis-day-reconciliation.md](0111-protected-eis-day-reconciliation.md) — Защищённая обработка недавних суточных пропусков ЕИС.
+
+- [0112-bounded-large-223-notices.md](0112-bounded-large-223-notices.md) — ADR0112 — ограниченные большие извещения223-ФЗ.
+
+- [0113](0113-bounded-44-source-references.md) — большие окна44 и typed aliases вложений; R4 установлен.
+
+- [0114-beta-company-invitations.md](0114-beta-company-invitations.md) — ADR0114 — одноразовые приглашения и отдельные компании бета-тестеров.
+- [0115-company-profile-owner-confirmation.md](0115-company-profile-owner-confirmation.md) — ADR0115 — подтверждение владельцем критичных настроек профиля; проверено локально, NOT_INSTALLED.
+
+- [0116-eis-hybrid-discovery-recovery.md](0116-eis-hybrid-discovery-recovery.md) — Ограниченная очередь пропусков из публичной выдачи и штатный адресный intake.
+
+- [0117-eis-active-sweep.md](0117-eis-active-sweep.md) — Обход активных44 без query, атомарные диапазоны и очередь.

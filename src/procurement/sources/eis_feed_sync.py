@@ -9,9 +9,10 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol, cast
@@ -77,8 +78,93 @@ MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _TOKEN = re.compile(r"^[A-Za-z0-9-]{16,128}$")
 
 
+@dataclass(frozen=True)
+class EisSourceError:
+    """Только ограниченные коды; ни текст ответа, ни URL, ни сообщение исключения."""
+
+    phase: Literal["INITIAL", "PREPARED", "BROWSER_START", "WSDL", "SOAP", "ARCHIVE"]
+    service_code: int | None = None
+    http_status: int | None = None
+    category: (
+        Literal["HTTP_STATUS", "RESPONSE_SIZE", "TOKEN_REFLECTION", "RESPONSE_EMPTY", "NETWORK"]
+        | None
+    ) = None
+    network_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.phase not in {"INITIAL", "PREPARED", "BROWSER_START", "WSDL", "SOAP", "ARCHIVE"}:
+            raise ValueError("SOURCE_ERROR_PHASE_INVALID")
+        if self.service_code is not None and (
+            type(self.service_code) is not int or not -(2**31) <= self.service_code < 2**31
+        ):
+            raise ValueError("SOURCE_ERROR_CODE_INVALID")
+        if self.http_status is not None and (
+            type(self.http_status) is not int or not 100 <= self.http_status <= 599
+        ):
+            raise ValueError("SOURCE_ERROR_HTTP_INVALID")
+        if self.category not in {
+            None,
+            "HTTP_STATUS",
+            "RESPONSE_SIZE",
+            "TOKEN_REFLECTION",
+            "RESPONSE_EMPTY",
+            "NETWORK",
+        }:
+            raise ValueError("SOURCE_ERROR_CATEGORY_INVALID")
+        if self.network_code is not None and self.network_code not in _NETWORK_CODES:
+            raise ValueError("SOURCE_ERROR_NETWORK_INVALID")
+
+    def safe_metadata(self) -> dict[str, str | int]:
+        return {key: value for key, value in asdict(self).items() if value is not None}
+
+    def persisted_reason(self, reason: str) -> str:
+        parts = [reason, self.phase]
+        if self.service_code is not None:
+            code = (
+                str(self.service_code)
+                if self.service_code >= 0
+                else f"NEG_{abs(self.service_code)}"
+            )
+            parts.extend(("CODE", code))
+        if self.http_status is not None:
+            parts.extend(("HTTP", str(self.http_status)))
+        if self.category is not None and self.category not in {"HTTP_STATUS", "NETWORK"}:
+            parts.append(self.category)
+        if self.network_code is not None:
+            parts.append(self.network_code)
+        value = "_".join(parts)
+        if not re.fullmatch(r"[A-Z0-9_]{1,80}", value):
+            raise ValueError("SOURCE_REASON_INVALID")
+        return value
+
+
+_NETWORK_CODES = frozenset(
+    {
+        "ERR_CONNECTION_CLOSED",
+        "ERR_CONNECTION_RESET",
+        "ERR_CONNECTION_REFUSED",
+        "ERR_CONNECTION_TIMED_OUT",
+        "ERR_TIMED_OUT",
+        "ERR_NAME_NOT_RESOLVED",
+        "ERR_PROXY_CONNECTION_FAILED",
+        "ERR_SOCKS_CONNECTION_FAILED",
+        "ERR_TUNNEL_CONNECTION_FAILED",
+        "ERR_CERT_AUTHORITY_INVALID",
+        "ERR_CERT_DATE_INVALID",
+        "ERR_CERT_COMMON_NAME_INVALID",
+        "ERR_SSL_PROTOCOL_ERROR",
+        "TIMEOUT",
+        "UNKNOWN",
+    }
+)
+
+
 class EisSyncError(ValueError):
     """A non-sensitive source or configuration failure code."""
+
+    def __init__(self, reason: str, *, source_error: EisSourceError | None = None) -> None:
+        super().__init__(reason)
+        self.source_error = source_error
 
 
 class EisRejectedWindowError(EisSyncError):
@@ -301,6 +387,147 @@ class EisFeedTransport(Protocol):
     async def download(self, url: str, token: str) -> tuple[int, bytes]: ...
 
 
+PreparedWait = Callable[[float], Awaitable[None]]
+
+
+class EisPreparationOverlap:
+    """Local opt-in experiment; the production scheduler does not enable it.
+
+    One owner, one already paced browser transport, and at most one borrowed
+    44 window. Borrowing is allowed only during the existing 223 preparation
+    sleep. A started HTTP request is atomic; it can delay the next poll, but
+    another 44 request cannot start once that poll is due. No additional pacing
+    sleep is added: the underlying browser transport already sleeps 2s before
+    *every* POST/GET. All calls, including those sleeps, share this lock.
+
+    The caller must finish the borrowed window before releasing its lease and
+    must close the browser session after cancellation/transport uncertainty.
+    There is deliberately no checkpoint, retry queue, or budget override here.
+    """
+
+    def __init__(
+        self,
+        transport: EisFeedTransport,
+        borrow_one: Callable[[EisFeedTransport], Awaitable[bool]],
+        *,
+        sleep: PreparedWait = asyncio.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._transport = transport
+        self._borrow_one = borrow_one
+        self._sleep = sleep
+        self._monotonic = monotonic
+        self._lock = asyncio.Lock()
+        self._allowed = asyncio.Event()
+        self._deadline = 0.0
+        self._poll_pending = False
+        self._draining = False
+        self._closed = False
+        self._poisoned = False
+        self._borrowed: asyncio.Task[None] | None = None
+        self.poll_lateness_seconds = 0.0
+        self.borrowed_completed = 0
+        self.primary = _PreparationTransport(self, borrowed=False)
+        self.borrowed = _PreparationTransport(self, borrowed=True)
+
+    async def wait(self, seconds: float) -> None:
+        if self._closed or self._poisoned or not 0 <= seconds <= 10:
+            raise EisSyncError("OVERLAP_WAIT_INVALID")
+        if seconds == 0:
+            return
+        if self._borrowed is not None and self._borrowed.done():
+            # Failures must be observed, never silently replaced by another job.
+            await self._borrowed
+            self._borrowed = None
+        self._deadline = self._monotonic() + seconds
+        self._poll_pending = True
+        self._allowed.set()
+        if self._borrowed is None:
+            self._borrowed = asyncio.create_task(self._run())
+        try:
+            await self._sleep(seconds)
+        except BaseException:
+            await self.abort()
+            raise
+        finally:
+            self._allowed.clear()
+
+    async def _run(self) -> None:
+        while self._allowed.is_set() and self._monotonic() < self._deadline:
+            if not await self._borrow_one(self.borrowed):
+                return
+            self.borrowed_completed += 1
+            if self._draining:
+                return
+
+    async def finish(self) -> None:
+        """Drain only the already borrowed job, after 223 fetch AND intake finish."""
+        self._draining = True
+        self._allowed.set()
+        try:
+            if self._borrowed is not None:
+                await self._borrowed
+        except BaseException:
+            await self.abort()
+            raise
+        finally:
+            self._allowed.clear()
+            self._draining = False
+            self._closed = True
+
+    async def abort(self) -> None:
+        """Fail closed: a cancelled browser fetch may still be in flight."""
+        self._closed = self._poisoned = True
+        self._allowed.set()
+        if self._borrowed is not None:
+            self._borrowed.cancel()
+            await asyncio.gather(self._borrowed, return_exceptions=True)
+
+    async def _call(
+        self, borrowed: bool, method: Literal["post", "download"], *args: str | bytes
+    ) -> tuple[int, bytes]:
+        while True:
+            if self._closed or self._poisoned:
+                raise EisSyncError("OVERLAP_TRANSPORT_CLOSED")
+            if borrowed:
+                await self._allowed.wait()
+            async with self._lock:
+                if self._closed or self._poisoned:
+                    raise EisSyncError("OVERLAP_TRANSPORT_CLOSED")
+                if (
+                    borrowed
+                    and not self._draining
+                    and (not self._allowed.is_set() or self._monotonic() >= self._deadline)
+                ):
+                    self._allowed.clear()
+                    continue
+                if not borrowed and self._poll_pending:
+                    self.poll_lateness_seconds = max(
+                        self.poll_lateness_seconds, self._monotonic() - self._deadline
+                    )
+                    self._poll_pending = False
+                try:
+                    if method == "post":
+                        return await self._transport.post(cast(bytes, args[0]))
+                    return await self._transport.download(cast(str, args[0]), cast(str, args[1]))
+                except BaseException:
+                    # In particular, cancelling expect_response does not prove
+                    # that page.evaluate(fetch) stopped. Reuse is prohibited.
+                    self._poisoned = True
+                    raise
+
+
+class _PreparationTransport:
+    def __init__(self, owner: EisPreparationOverlap, *, borrowed: bool) -> None:
+        self._owner, self._borrowed = owner, borrowed
+
+    async def post(self, xml: bytes) -> tuple[int, bytes]:
+        return await self._owner._call(self._borrowed, "post", xml)
+
+    async def download(self, url: str, token: str) -> tuple[int, bytes]:
+        return await self._owner._call(self._borrowed, "download", url, token)
+
+
 def _request(
     token: str,
     request_id: str,
@@ -351,8 +578,20 @@ async def _parsed_post_raw(
     transport: EisFeedTransport, xml: bytes, token: str
 ) -> tuple[EisFeedResponse, bytes]:
     status, raw = await transport.post(xml)
-    if status != 200 or len(raw) > MAX_RESPONSE_BYTES or token.encode() in raw:
-        raise EisSyncError("SOURCE_RESPONSE_REJECTED")
+    category: Literal["HTTP_STATUS", "RESPONSE_SIZE", "TOKEN_REFLECTION"] | None = None
+    if status != 200:
+        category = "HTTP_STATUS"
+    elif len(raw) > MAX_RESPONSE_BYTES:
+        category = "RESPONSE_SIZE"
+    elif token.encode() in raw:
+        category = "TOKEN_REFLECTION"
+    if category is not None:
+        raise EisSyncError(
+            "SOURCE_RESPONSE_REJECTED",
+            source_error=EisSourceError(
+                "SOAP", http_status=status if 100 <= status <= 599 else None, category=category
+            ),
+        )
     try:
         return parse_get_docs_ip_response(raw), raw
     except EisFeedContractError as error:
@@ -524,11 +763,16 @@ async def sync_eis_window(
 
 class _BrowserTransport:
     def __init__(self, page: Page) -> None:
+        # Opt-in worker pacing; retain the accepted default for all other callers.
+        gap = os.environ.get("EIS_BROWSER_REQUEST_GAP_SECONDS", "2")
+        if gap not in {"2", "1.25"}:
+            raise EisSyncError("REQUEST_PACING_INVALID")
+        self.request_gap_seconds = float(gap)
         self.page = page
 
     async def post(self, xml: bytes) -> tuple[int, bytes]:
         # Sequential worker + spacing stays below the documented SOAP request quota.
-        await asyncio.sleep(2)
+        await asyncio.sleep(self.request_gap_seconds)
         argument = {"url": ENDPOINT, "xml": xml.decode("utf-8"), "action": SOAP_ACTION}
         async with self.page.expect_response(
             lambda response: response.url == ENDPOINT and response.request.method == "POST",
@@ -549,7 +793,7 @@ class _BrowserTransport:
         return response.status, await response.body()
 
     async def download(self, url: str, token: str) -> tuple[int, bytes]:
-        await asyncio.sleep(2)
+        await asyncio.sleep(self.request_gap_seconds)
         parts = urlsplit(url)
         if parts.scheme != "https" or parts.hostname not in {
             "int.zakupki.gov.ru",
@@ -572,7 +816,12 @@ class _BrowserTransport:
             )
         response = await pending.value
         if int(response.headers.get("content-length", "0") or "0") > MAX_ARCHIVE_BYTES:
-            raise EisSyncError("ARCHIVE_DOWNLOAD_REJECTED")
+            raise EisSyncError(
+                "ARCHIVE_DOWNLOAD_REJECTED",
+                source_error=EisSourceError(
+                    "ARCHIVE", http_status=response.status, category="RESPONSE_SIZE"
+                ),
+            )
         return response.status, await response.body()
 
 
@@ -582,11 +831,13 @@ class _BrowserSession:
     def __init__(self, stack: AsyncExitStack) -> None:
         self.stack = stack
         self.transport: _BrowserTransport | None = None
+        self.phase: Literal["BROWSER_START", "WSDL", "SOAP", "ARCHIVE"] = "BROWSER_START"
 
     async def _ready(self) -> _BrowserTransport:
         if self.transport is None:
             from playwright.async_api import async_playwright
 
+            self.phase = "BROWSER_START"
             proxy_server = _proxy_server()
             playwright = await self.stack.enter_async_context(async_playwright())
             browser = await playwright.chromium.launch(
@@ -596,9 +847,17 @@ class _BrowserSession:
             )
             self.stack.push_async_callback(browser.close)
             page = await browser.new_page(accept_downloads=False)
+            self.phase = "WSDL"
             response = await page.goto(WSDL, wait_until="domcontentloaded", timeout=25_000)
             if response is None or response.status != 200 or not page.url.startswith(f"{HOST}/"):
-                raise EisSyncError("SOURCE_WSDL_UNAVAILABLE")
+                raise EisSyncError(
+                    "SOURCE_WSDL_UNAVAILABLE",
+                    source_error=EisSourceError(
+                        "WSDL",
+                        http_status=response.status if response is not None else None,
+                        category="HTTP_STATUS",
+                    ),
+                )
             self.transport = _BrowserTransport(page)
         return self.transport
 
@@ -612,10 +871,18 @@ class _BrowserSession:
         try:
             transport = await self._ready()
             if xml is not None:
+                self.phase = "SOAP"
                 return await transport.post(xml)
+            self.phase = "ARCHIVE"
             return await transport.download(url, token)
         except (Error, TimeoutError) as error:
-            raise EisSyncError("SOURCE_TRANSPORT_FAILED") from error
+            codes = re.findall(r"net::(ERR_[A-Z_]+)\b", str(error))
+            code = next((value for value in codes if value in _NETWORK_CODES), None)
+            code = code or ("TIMEOUT" if isinstance(error, TimeoutError) else "UNKNOWN")
+            raise EisSyncError(
+                "SOURCE_TRANSPORT_FAILED",
+                source_error=EisSourceError(self.phase, category="NETWORK", network_code=code),
+            ) from error
 
     async def post(self, xml: bytes) -> tuple[int, bytes]:
         return await self._invoke(xml=xml)

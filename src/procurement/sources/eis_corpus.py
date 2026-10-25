@@ -724,6 +724,51 @@ def resource_gate(
     return "DISK_RESERVE_REACHED" if shutil.disk_usage("/").free < min_free_bytes else None
 
 
+def _history_priority_reason(
+    journal: EisSyncJournal,
+    *,
+    now: datetime,
+    priority_request: Path | None,
+    regional_request: Path | None,
+    mandatory_fresh_first: bool,
+) -> str | None:
+    """Проверить допуск под общим lease до подготовки и перед каждым окном."""
+    if priority_requested(priority_request, now=datetime.now(now.tzinfo)):
+        return "PRIORITY_REFRESH_REQUESTED"
+    if priority_requested(regional_request, now=datetime.now(now.tzinfo)):
+        return "REGIONAL_REFRESH_REQUESTED"
+    if mandatory_fresh_first:
+        # Marker lifetime is shorter than persisted demand. Check under the
+        # shared import lease before every historical atomic source window.
+        from procurement.eis_freshness_dispatch_cli import probe_dispatch
+        from procurement.sources.eis_freshness import EisFreshnessScope
+        from procurement.storage.eis_223_regions import _accepted_catalog
+
+        try:
+            with journal.storage.transaction(journal.company_id, consistent_read=True) as conn:
+                catalog = _accepted_catalog(conn, journal.company_id)
+            if catalog is None:
+                return "MANDATORY_DEMAND_UNAVAILABLE"
+            demand = probe_dispatch(
+                journal.storage,
+                journal.company_id,
+                EisFreshnessScope(
+                    tuple(sorted(catalog["regions"])), checkpointed=True, mandatory_only=True
+                ),
+                now=datetime.now(now.tzinfo),
+                include_regional=True,
+            )
+        except (ValueError, SQLAlchemyError):
+            return "MANDATORY_DEMAND_UNAVAILABLE"
+        if demand.status != "IDLE":
+            return (
+                "MANDATORY_FRESH_WORK_READY"
+                if demand.status == "READY"
+                else "MANDATORY_DEMAND_UNAVAILABLE"
+            )
+    return None
+
+
 async def run_corpus(
     journal: EisSyncJournal,
     token: str,
@@ -735,19 +780,33 @@ async def run_corpus(
     priority_request: Path | None = None,
     regional_request: Path | None = None,
     transport: EisFeedTransport | None = None,
+    mandatory_fresh_first: bool = False,
 ) -> dict[str, object]:
     """Bounded sequential worker; fail fast on egress/DB failure and retain all gaps."""
-    keys = eligible_windows(journal, now=now, limit=max_windows)
+    stopped = (
+        _history_priority_reason(
+            journal,
+            now=now,
+            priority_request=priority_request,
+            regional_request=regional_request,
+            mandatory_fresh_first=True,
+        )
+        if mandatory_fresh_first
+        else None
+    )
+    keys = () if stopped else eligible_windows(journal, now=now, limit=max_windows)
     synced = skipped = new_versions = new_events = attempted = 0
-    stopped = None
     rejected_windows: list[dict[str, object]] = []
     partial_windows = held_pairs = replayed_projection_batches = 0
     for key in keys:
-        if priority_requested(priority_request, now=datetime.now(now.tzinfo)):
-            stopped = "PRIORITY_REFRESH_REQUESTED"
-            break
-        if priority_requested(regional_request, now=datetime.now(now.tzinfo)):
-            stopped = "REGIONAL_REFRESH_REQUESTED"
+        stopped = _history_priority_reason(
+            journal,
+            now=now,
+            priority_request=priority_request,
+            regional_request=regional_request,
+            mandatory_fresh_first=mandatory_fresh_first,
+        )
+        if stopped:
             break
         stopped = resource_gate(
             journal.storage,

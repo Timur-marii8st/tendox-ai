@@ -4,7 +4,7 @@ import Link from "next/link";
 import { DocumentUploadForm } from "./form";
 
 export const metadata: Metadata = {
-  title: "Загрузка документов — Syurai Procurement",
+  title: "Загрузка документов — Tendox",
   description: "Отдельная загрузка документов заказчика и КП поставщика",
 };
 

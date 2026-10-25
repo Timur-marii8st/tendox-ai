@@ -107,6 +107,38 @@ def test_overflow_is_sticky_and_archive_is_only_read_after_switch(tmp_path, monk
     assert usage(root)[0] == 1
 
 
+def test_missing_archive_cannot_be_hidden_by_valid_overflow(tmp_path, monkeypatch):
+    root = tmp_path / "private"
+    retain(root)
+    monkeypatch.setattr(m, "MAX_RECORDS", 1)
+    second = retain(root, company_id="tenant-b")
+    assert second.status == "RETAINED" and second.relative_store_path == m.OVERFLOW_FILE
+    before = (root / m.OVERFLOW_FILE).read_bytes()
+    (root / m.FILE).unlink()
+
+    verified = m.verify_no_data_reply(root, "tenant-b", KEY, second.source_response_sha256)
+
+    assert (verified.status, verified.reason) == ("UNKNOWN", "STORE_UNAVAILABLE")
+    assert not (root / m.FILE).exists()
+    assert (root / m.OVERFLOW_FILE).read_bytes() == before
+
+
+def test_missing_archive_is_not_recreated_by_overflow_writer(tmp_path, monkeypatch):
+    root = tmp_path / "private"
+    retain(root)
+    monkeypatch.setattr(m, "MAX_RECORDS", 1)
+    second = retain(root, company_id="tenant-b")
+    assert second.status == "RETAINED" and second.relative_store_path == m.OVERFLOW_FILE
+    before = (root / m.OVERFLOW_FILE).read_bytes()
+    (root / m.FILE).unlink()
+
+    result = retain(root, company_id="tenant-b", observed_at=NOW + timedelta(seconds=1))
+
+    assert (result.status, result.reason) == ("FAILED", "STORE_UNSAFE")
+    assert not (root / m.FILE).exists()
+    assert (root / m.OVERFLOW_FILE).read_bytes() == before
+
+
 def test_concurrent_overflow_writers_preserve_single_receipt(tmp_path, monkeypatch):
     root = tmp_path / "private"
     retain(root)

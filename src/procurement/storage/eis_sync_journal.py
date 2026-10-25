@@ -81,6 +81,7 @@ class EisSyncJournal:
         self.storage = storage
         self.company_id = company_id
         self.actor_id = actor_id
+        self.freshness_recovery_reason: str | None = None
 
     def plan(self, selections: tuple[EisSelection, ...]) -> int:
         keys = tuple(selection.window_key for selection in selections)

@@ -463,8 +463,14 @@ def test_large_official_sized_xml_remains_bounded_and_readable() -> None:
 
 def test_xml_above_member_limit_rejects_the_whole_archive() -> None:
     source = _notice("0848300054826000154")
-    oversized = source.replace(b"</export>", b"<!--" + b"x" * (33 * 1024 * 1024) + b"--></export>")
-    content = _archive(("first.xml", source), ("oversized.xml", oversized))
+    oversized = source.replace(b"</export>", b"<!--" + b"x" * (65 * 1024 * 1024) + b"--></export>")
+    from zipfile import ZIP_DEFLATED
+
+    output = BytesIO()
+    with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("first.xml", source)
+        archive.writestr("oversized.xml", oversized)
+    content = output.getvalue()
     with pytest.raises(EisFeedArchiveError, match="MEMBER_UNSUPPORTED"):
         _inspect(content)
 
@@ -646,3 +652,28 @@ def test_backslash_in_source_label_still_rejects_whole_archive() -> None:
     )
     with pytest.raises(EisFeedArchiveError, match="ATTACHMENT_REFERENCE_INVALID"):
         _inspect(_archive(("notice.xml", raw)))
+
+
+@pytest.mark.parametrize("different_name", [False, True])
+def test_repeated_binary_reference_preserves_metadata_and_ambiguity(different_name):
+    from pydantic import TypeAdapter
+
+    from procurement.sources.eis_feed_archive import EisNoticeSnapshot
+
+    source = _notice_with_attachments("0848300054826000154", 1)
+    start = source.index(b"<attachmentInfo>")
+    end = source.index(b"</attachmentInfo>") + len(b"</attachmentInfo>")
+    duplicate = source[start:end]
+    if different_name:
+        duplicate = duplicate.replace(b"document-1.pdf", b"another.docx")
+    source = source[:end] + duplicate + source[end:]
+    notice = _inspect(_archive(("notice.xml", source))).records[0]
+    assert len(notice.attachments) == 1
+    attachment = notice.attachments[0]
+    assert len(attachment.aliases) == 1
+    assert attachment.aliases[0].locator.endswith("attachmentInfo[2]")
+    assert attachment.reference_status == ("UNKNOWN" if different_name else "PASS")
+    adapter = TypeAdapter(EisNoticeSnapshot)
+    restored = adapter.validate_json(adapter.dump_json(notice))
+    assert restored.attachments == notice.attachments
+    assert restored.attachments[0].reference_status == attachment.reference_status

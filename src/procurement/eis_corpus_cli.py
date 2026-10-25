@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import os
+from contextlib import nullcontext
 from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -43,19 +44,45 @@ async def _fresh_pass(
     max_database_bytes: int,
     min_free_bytes: int,
 ) -> EisFreshnessReport:
-    async with eis_browser_transport() as transport:
-        return await run_freshness(
-            journal,
-            token,
-            scope,
-            now=now,
-            max_windows=max_windows,
-            max_seconds=max_seconds,
-            max_database_bytes=max_database_bytes,
-            min_free_bytes=min_free_bytes,
-            transport=transport,
-            include_requests=True,
-        )
+    from procurement.eis_joint_budget import JointStartBudget
+
+    budget_context = (
+        JointStartBudget(Path("/var/lib/eis-browser"), journal.company_id)
+        if os.environ.get("EIS_JOINT_BUDGET_ENABLED") == "1"
+        else nullcontext(None)
+    )
+    with budget_context as budget:
+        if budget is not None and not budget.can_start():
+            return EisFreshnessReport(
+                status="BLOCKED",
+                company_id=journal.company_id,
+                checked_at=now,
+                regions=scope.regions,
+                document_types=scope.document_types,
+                selected=0,
+                attempted=0,
+                synced=0,
+                no_data=0,
+                new_versions=0,
+                new_events=0,
+                reason="JOINT_START_BUDGET_REACHED",
+                window_keys=(),
+            )
+        async with eis_browser_transport() as transport:
+            return await run_freshness(
+                journal,
+                token,
+                scope,
+                now=now,
+                max_windows=max_windows,
+                max_seconds=max_seconds,
+                max_database_bytes=max_database_bytes,
+                min_free_bytes=min_free_bytes,
+                transport=transport,
+                include_requests=True,
+                paced_transport=True,
+                joint_budget=budget,
+            )
 
 
 async def _corpus_pass(
@@ -68,6 +95,7 @@ async def _corpus_pass(
     min_free_bytes: int,
     priority_request: Path | None,
     regional_request: Path | None,
+    mandatory_fresh_first: bool = False,
 ) -> dict[str, object]:
     """Reuse one lazy browser session for one bounded sequential corpus pass."""
     async with eis_browser_transport() as transport:
@@ -81,6 +109,7 @@ async def _corpus_pass(
             priority_request=priority_request,
             regional_request=regional_request,
             transport=transport,
+            mandatory_fresh_first=mandatory_fresh_first,
         )
 
 
@@ -133,6 +162,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-database-gib", type=int, default=100)
     parser.add_argument("--min-free-gib", type=int, default=40)
     parser.add_argument("--max-seconds", type=int)
+    parser.add_argument("--checkpointed", action="store_true")
+    parser.add_argument("--mandatory-only", action="store_true")
+    parser.add_argument("--mandatory-fresh-first", action="store_true")
     parser.add_argument("--cadence-seconds", type=int, default=300)
     parser.add_argument("--sample-limit", type=int, default=20)
     parser.add_argument("--priority-request", type=Path)
@@ -243,13 +275,24 @@ def main(argv: list[str] | None = None) -> int:
             token = os.environ.get("EIS_GETDOCS_IP_TOKEN")
             if not token or not args.regions or args.regions == "all":
                 parser.error("fresh requires token and an explicit measured region scope")
+            regions = tuple(args.regions.split(","))
+            if args.regions == "official":
+                from procurement.storage.eis_223_regions import _accepted_catalog
+
+                with journal.storage.transaction(args.company_id, consistent_read=True) as conn:
+                    catalog = _accepted_catalog(conn, args.company_id)
+                if catalog is None:
+                    raise ValueError("OFFICIAL_REGION_CATALOG_MISSING")
+                regions = tuple(sorted(catalog["regions"]))
             report = asyncio.run(
                 _fresh_pass(
                     journal,
                     token,
                     EisFreshnessScope(
-                        tuple(args.regions.split(",")),
+                        regions,
                         tuple(args.document_types or SUPPORTED_NOTICE_TYPES),
+                        checkpointed=args.checkpointed,
+                        mandatory_only=args.mandatory_only,
                     ),
                     now=now,
                     max_windows=args.max_windows,
@@ -287,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
                     min_free_bytes=args.min_free_gib * 1024**3,
                     priority_request=args.priority_request,
                     regional_request=args.regional_request,
+                    mandatory_fresh_first=args.mandatory_fresh_first,
                 )
             )
         print(json.dumps(result, default=str))

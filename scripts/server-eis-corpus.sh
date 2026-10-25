@@ -56,6 +56,7 @@ if sudo -n docker compose -p vibe-seller -f docker-compose.server.yml run --rm -
   python -m procurement.eis_corpus_cli "$@" \
   --priority-request /var/lib/eis-browser/eis-priority.request \
   --regional-request /var/lib/eis-browser/eis-223-refresh.request \
+  --mandatory-fresh-first \
   --company-id local-eis-supplier --actor-id server-corpus-worker; then worker_exit=0; else worker_exit=$?; fi
 if [[ "$worker_exit" == 0 ]]; then work_result=SUCCESS; else work_result=ERROR; fi
 eis_metric work_finish "$work_result" "$worker_exit"

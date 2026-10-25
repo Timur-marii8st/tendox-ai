@@ -1,8 +1,11 @@
 # ADR0110 — ограниченный второй сегмент NO_DATA evidence
 
-Дата решения: 2026-10-19. Статус: CANDIDATE, активация не выполнена.
-Effective date эксплуатационной policy — время будущей exact-payload активации,
-до него действует ADR0079. Владелец root; основание — подтверждённое исчерпание
+Дата решения: 2026-10-19. Статус: ACTIVE; bounded production recovery подтверждено21Oct.
+API reader установлен2026-10-21T13:16:27UTC по payloadv3; полный writer route
+исправлен по отдельному exact approvalv3.1. Effective date эксплуатационной policy:
+2026-10-21T13:51:54UTC. Ordinary cron/new overflow/raw+manifest/audit/journal proof
+PASS13:55:25UTC; до переключения writer действовал ADR0079. Факт не означает
+восстановления утраченных исторических raw или полноты источника. Владелец root; основание — подтверждённое исчерпание
 128MiB и потеря новых raw replies, [диагностика](../operations/121-eis-production-readiness.md).
 
 ## Контекст

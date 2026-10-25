@@ -28,7 +28,7 @@
 | Очереди | Celery/ARQ (решение отложено, см. ADR) | Долгие задачи парсинга и RFQ |
 | Пакеты | `uv` | Быстрый lockfile, воспроизводимость |
 | Качество | pytest, ruff, mypy (strict на `domain/`) | Домен — критичный код |
-| Frontend | Next.js (появится на этапе MVP-UI) | Корпоративный web-инструмент, не Telegram Mini App |
+| Frontend | Next.js (внутренний интерфейс в `web/`) | Корпоративный web-инструмент, не Telegram Mini App |
 
 ## Команды
 

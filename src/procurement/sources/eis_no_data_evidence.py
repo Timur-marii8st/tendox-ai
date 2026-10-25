@@ -356,7 +356,9 @@ def _quota_error(error: ValueError | sqlite3.Error) -> bool:
 @contextmanager
 def _retention_lock(root: Path) -> Iterator[None]:
     """Serialize the two-file transition; never wait more than one second."""
-    _private_path(root, create=True)
+    _private_path(root, create=False)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _private_path(root, create=False)
     path = root / "no-data.lock"
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise ValueError("STORE_UNSAFE")
@@ -541,6 +543,8 @@ def _verify_no_data_reply_file(
         path = _private_path(root, create=False, store_file=store_file)
         if not path.exists():
             return NoDataVerification(status="UNKNOWN", reason="ARTIFACT_MISSING", **base)
+        if store_file == OVERFLOW_FILE and not _private_path(root, create=False).exists():
+            return NoDataVerification(status="UNKNOWN", reason="STORE_UNAVAILABLE", **base)
         conn = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=1)
         conn.execute("PRAGMA query_only=ON")
         conn.execute("PRAGMA trusted_schema=OFF")

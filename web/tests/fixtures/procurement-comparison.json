@@ -1,0 +1,3247 @@
+{
+  "schema_version": "selected-company-comparison-v1",
+  "company_id": "demo-company",
+  "comparison_id": "local-0ac1dccf6461dc46d585d8f307a00c867e5545b30e08b364731065d5d62647ea",
+  "profile_ref": {
+    "version": 1,
+    "snapshot_sha256": "0ab1adbeef97cd4c36df63fdbd1b590838f0b25de8c5069ff86940b72007ecbd"
+  },
+  "compared_at": "2026-10-14T10:00:00+03:00",
+  "comparison_policy_version": "selected-company-comparison-v1/Europe-Moscow",
+  "input_sha256": "0ac1dccf6461dc46d585d8f307a00c867e5545b30e08b364731065d5d62647ea",
+  "profile_name": "Синтетическая демо-компания — не реальный участник",
+  "profile_created_at": "2026-10-12T06:00:00Z",
+  "persistence": "LOCAL_DEMO_EPHEMERAL",
+  "audit_event_id": null,
+  "rows": [
+    {
+      "case_ref": {
+        "case_id": "comparison-case-1",
+        "version": 1,
+        "input_sha256": "ea5fbac177b28b2184ab8162ab24fb5ec7926ba6f21f8a4d75ab0c16c10cfb6c"
+      },
+      "case_snapshot_sha256": "9a65f09b7a5aaca50b2c07f7a946c3ef5b0479faddf8718aed751d3752275f7d",
+      "subject": "ДЕМО: бумага в Казань — полные сценарии",
+      "deadline": "2026-11-15T12:00:00+03:00",
+      "nmck_ex_vat": "1500000",
+      "overall_status": "UNKNOWN",
+      "checks": [
+        {
+          "check_id": "activity",
+          "label": "Деятельность",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "MAPPING_NOT_REVIEWED",
+          "reason": "Нужно проверенное сопоставление предмета закупки с товарами, работами и услугами. Заявленные товары: Офисная бумага А4, 500 листов. Совпадение текста или ОКВЭД не подтверждает исполнение.",
+          "profile_field_paths": [
+            "supplied_goods",
+            "performed_works",
+            "provided_services",
+            "okved"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "supplied_goods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "performed_works",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "provided_services",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "okved",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "проверенное сопоставление деятельности"
+          ]
+        },
+        {
+          "check_id": "geography",
+          "label": "Территория",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "DECLARED_TERRITORY",
+          "reason": "Адреса: Татарстан / Казань. Входят в заявленную территорию; маршрут и доставка не проверены.",
+          "profile_field_paths": [
+            "geography.all_russia",
+            "geography.regions",
+            "geography.cities",
+            "geography.federal_districts",
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.all_russia",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.regions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.cities",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.federal_districts",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "distance",
+          "label": "Расстояние",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ROUTE_NOT_KNOWN",
+          "reason": "Выполнимость маршрута не подтверждена: нет исходной точки и расчёта расстояния.",
+          "profile_field_paths": [
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "исходная точка и подтверждённый маршрут"
+          ]
+        },
+        {
+          "check_id": "submission",
+          "label": "Срок подачи",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "SUBMISSION_OPEN",
+          "reason": "Срок: 2026-11-15T12:00:00+03:00; стадия: submission_open. Подача открыта на момент сравнения.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "execution",
+          "label": "Возможность исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "EXECUTION_NOT_PROVEN",
+          "reason": "Открытый срок подачи не доказывает исполнение: нет проверенного срока поставки, производственного плана и ресурсов компании.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "срок исполнения",
+            "ресурсы, производство и логистический план"
+          ]
+        },
+        {
+          "check_id": "amount",
+          "label": "Финансовый диапазон",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "AMOUNT_RANGE",
+          "reason": "НМЦК 1500000 RUB без НДС; лимиты 500000–10000000. Проверен только диапазон суммы, это не выручка и не прибыль.",
+          "profile_field_paths": [
+            "finance.min_contract_amount",
+            "finance.max_contract_amount"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.min_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "method",
+          "label": "Способ закупки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "ALLOWED_METHOD",
+          "reason": "Способ: electronic_auction; разрешённые способы: ['electronic_auction']. Проверяется явный выбор профиля, а не юридический допуск.",
+          "profile_field_paths": [
+            "allowed_procedure_methods"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "allowed_procedure_methods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "application_security",
+          "label": "Обеспечение заявки",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 300000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_application_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_application_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "performance_security",
+          "label": "Обеспечение исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 1000000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_performance_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_performance_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "extra_approval",
+          "label": "Внутреннее согласование суммы",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "WITHIN_APPROVAL_LIMIT",
+          "reason": "Лимит 5000000 RUB без НДС. Сумма в лимите; внешнее действие требует exact-payload approval.",
+          "profile_field_paths": [
+            "finance.max_contract_without_extra_approval"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_without_extra_approval",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_legal",
+          "label": "Правовые условия",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка legal для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "legal",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_participant",
+          "label": "Требования к участнику",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка participant для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "participant",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_technical",
+          "label": "Технические требования",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка technical для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "technical",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_document",
+          "label": "Документы заявки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка document для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-review",
+              "locator": "document",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "policy",
+          "label": "Площадки, субподряд и запреты",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "PREDICATE_UNSUPPORTED",
+          "reason": "Нет platform_id и фактов субподряда в кейсе; condition запретов не исполняется как код. Применимость правил и полный охват обязательных условий не подтверждены.",
+          "profile_field_paths": [
+            "enabled_platforms",
+            "subcontracting_allowed",
+            "prohibitions"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "enabled_platforms",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "subcontracting_allowed",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "prohibitions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "площадка",
+            "условия субподряда",
+            "применимость и полнота правил"
+          ]
+        },
+        {
+          "check_id": "unsupported_finance",
+          "label": "Оплата, налоги и оборотные средства",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "UNSUPPORTED_FIELD",
+          "reason": "В SnapshotV1 нет налоговой политики, аванса/отсрочки, оборотных средств и лицензий. Эти условия требуют отдельной проверки.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [],
+          "missing": [
+            "налоговая политика",
+            "аванс/отсрочка",
+            "оборотные средства",
+            "лицензии"
+          ]
+        },
+        {
+          "check_id": "economics",
+          "label": "Экономика",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "CONFIRMED_SCENARIOS",
+          "reason": "Показаны три сохранённых сценария с полными расходами, выручкой, явными налогами и допущениями. Реалистичный прогноз: прибыль 365000.00 RUB без НДС; минимум 150000; минимальная маржа (доля) 0.15. Выручка 1450000; диапазон 500000–10000000. Пороги выполнены. Это прогноз, а не рекомендация участия или ранжирование прибыльности.",
+          "profile_field_paths": [
+            "finance.min_margin",
+            "finance.min_expected_profit",
+            "finance.min_contract_amount",
+            "finance.max_contract_amount"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.min_margin",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.min_expected_profit",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.min_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-1-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            {
+              "document_id": "SYNTHETIC-confirmed-scenario-ledger-case-1",
+              "locator": "base/realistic/conservative: revenue, all 18 costs, VAT and assumptions; synthetic manual declaration",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        }
+      ],
+      "economics": [
+        {
+          "kind": "base",
+          "revenue_ex_vat": "1500000",
+          "costs_ex_vat": "1065000.00",
+          "profit_ex_vat": "435000.00",
+          "nds_rate": "0",
+          "taxes": "50000",
+          "assumptions": [
+            "Все суммы и нули заданы только для синтетического примера",
+            "Расходы введены вручную; ставка не является налоговой рекомендацией"
+          ],
+          "sources": [
+            {
+              "document_id": "SYNTHETIC-confirmed-scenario-ledger-case-1",
+              "locator": "base/realistic/conservative: revenue, all 18 costs, VAT and assumptions; synthetic manual declaration",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "realistic",
+          "revenue_ex_vat": "1450000",
+          "costs_ex_vat": "1085000.00",
+          "profit_ex_vat": "365000.00",
+          "nds_rate": "0",
+          "taxes": "50000",
+          "assumptions": [
+            "Все суммы и нули заданы только для синтетического примера",
+            "Расходы введены вручную; ставка не является налоговой рекомендацией"
+          ],
+          "sources": [
+            {
+              "document_id": "SYNTHETIC-confirmed-scenario-ledger-case-1",
+              "locator": "base/realistic/conservative: revenue, all 18 costs, VAT and assumptions; synthetic manual declaration",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "kind": "conservative",
+          "revenue_ex_vat": "1350000",
+          "costs_ex_vat": "1115000.00",
+          "profit_ex_vat": "235000.00",
+          "nds_rate": "0",
+          "taxes": "50000",
+          "assumptions": [
+            "Все суммы и нули заданы только для синтетического примера",
+            "Расходы введены вручную; ставка не является налоговой рекомендацией"
+          ],
+          "sources": [
+            {
+              "document_id": "SYNTHETIC-confirmed-scenario-ledger-case-1",
+              "locator": "base/realistic/conservative: revenue, all 18 costs, VAT and assumptions; synthetic manual declaration",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_ref": {
+        "case_id": "comparison-case-2",
+        "version": 1,
+        "input_sha256": "02bb1b1eceebf49641c72013fa2bb58c433e97976318a9c7cf01444e008f3c98"
+      },
+      "case_snapshot_sha256": "2f602c5c208464e8c23bf1290eb58c985d9f2ea0263d8066dc096985d0049497",
+      "subject": "ДЕМО: бумага — сумма выше лимита",
+      "deadline": "2026-11-15T12:00:00+03:00",
+      "nmck_ex_vat": "16000000",
+      "overall_status": "FAIL",
+      "checks": [
+        {
+          "check_id": "activity",
+          "label": "Деятельность",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "MAPPING_NOT_REVIEWED",
+          "reason": "Нужно проверенное сопоставление предмета закупки с товарами, работами и услугами. Заявленные товары: Офисная бумага А4, 500 листов. Совпадение текста или ОКВЭД не подтверждает исполнение.",
+          "profile_field_paths": [
+            "supplied_goods",
+            "performed_works",
+            "provided_services",
+            "okved"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "supplied_goods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "performed_works",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "provided_services",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "okved",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "проверенное сопоставление деятельности"
+          ]
+        },
+        {
+          "check_id": "geography",
+          "label": "Территория",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "DECLARED_TERRITORY",
+          "reason": "Адреса: Татарстан / Казань. Входят в заявленную территорию; маршрут и доставка не проверены.",
+          "profile_field_paths": [
+            "geography.all_russia",
+            "geography.regions",
+            "geography.cities",
+            "geography.federal_districts",
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.all_russia",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.regions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.cities",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.federal_districts",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "distance",
+          "label": "Расстояние",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ROUTE_NOT_KNOWN",
+          "reason": "Выполнимость маршрута не подтверждена: нет исходной точки и расчёта расстояния.",
+          "profile_field_paths": [
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "исходная точка и подтверждённый маршрут"
+          ]
+        },
+        {
+          "check_id": "submission",
+          "label": "Срок подачи",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "SUBMISSION_OPEN",
+          "reason": "Срок: 2026-11-15T12:00:00+03:00; стадия: submission_open. Подача открыта на момент сравнения.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "execution",
+          "label": "Возможность исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "EXECUTION_NOT_PROVEN",
+          "reason": "Открытый срок подачи не доказывает исполнение: нет проверенного срока поставки, производственного плана и ресурсов компании.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "срок исполнения",
+            "ресурсы, производство и логистический план"
+          ]
+        },
+        {
+          "check_id": "amount",
+          "label": "Финансовый диапазон",
+          "mandatory": true,
+          "status": "FAIL",
+          "reason_code": "AMOUNT_RANGE",
+          "reason": "НМЦК 16000000 RUB без НДС; лимиты 500000–10000000. Проверен только диапазон суммы, это не выручка и не прибыль.",
+          "profile_field_paths": [
+            "finance.min_contract_amount",
+            "finance.max_contract_amount"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.min_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "method",
+          "label": "Способ закупки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "ALLOWED_METHOD",
+          "reason": "Способ: electronic_auction; разрешённые способы: ['electronic_auction']. Проверяется явный выбор профиля, а не юридический допуск.",
+          "profile_field_paths": [
+            "allowed_procedure_methods"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "allowed_procedure_methods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "application_security",
+          "label": "Обеспечение заявки",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 300000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_application_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_application_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "performance_security",
+          "label": "Обеспечение исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 1000000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_performance_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_performance_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "extra_approval",
+          "label": "Внутреннее согласование суммы",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "APPROVAL_REQUIRED",
+          "reason": "Лимит 5000000 RUB без НДС. Нужно отдельное подтверждение владельца.",
+          "profile_field_paths": [
+            "finance.max_contract_without_extra_approval"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_without_extra_approval",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "подтверждение владельца"
+          ]
+        },
+        {
+          "check_id": "mandatory_legal",
+          "label": "Правовые условия",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка legal для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-review",
+              "locator": "legal",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_participant",
+          "label": "Требования к участнику",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка participant для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-review",
+              "locator": "participant",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_technical",
+          "label": "Технические требования",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка technical для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-review",
+              "locator": "technical",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_document",
+          "label": "Документы заявки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка document для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-2-review",
+              "locator": "document",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "policy",
+          "label": "Площадки, субподряд и запреты",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "PREDICATE_UNSUPPORTED",
+          "reason": "Нет platform_id и фактов субподряда в кейсе; condition запретов не исполняется как код. Применимость правил и полный охват обязательных условий не подтверждены.",
+          "profile_field_paths": [
+            "enabled_platforms",
+            "subcontracting_allowed",
+            "prohibitions"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "enabled_platforms",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "subcontracting_allowed",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "prohibitions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "площадка",
+            "условия субподряда",
+            "применимость и полнота правил"
+          ]
+        },
+        {
+          "check_id": "unsupported_finance",
+          "label": "Оплата, налоги и оборотные средства",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "UNSUPPORTED_FIELD",
+          "reason": "В SnapshotV1 нет налоговой политики, аванса/отсрочки, оборотных средств и лицензий. Эти условия требуют отдельной проверки.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [],
+          "missing": [
+            "налоговая политика",
+            "аванс/отсрочка",
+            "оборотные средства",
+            "лицензии"
+          ]
+        },
+        {
+          "check_id": "economics",
+          "label": "Экономика",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ECONOMICS_INCOMPLETE",
+          "reason": "Экономика UNKNOWN. Не хватает: полное КП на весь объём; сценарии base, realistic и conservative; источники выручки и всех статей расходов; подтверждение сценарных сумм для точной версии кейса. Из одной НМЦК прибыль не рассчитывается.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [],
+          "missing": [
+            "полное КП на весь объём",
+            "сценарии base, realistic и conservative",
+            "источники выручки и всех статей расходов",
+            "подтверждение сценарных сумм для точной версии кейса"
+          ]
+        }
+      ],
+      "economics": []
+    },
+    {
+      "case_ref": {
+        "case_id": "comparison-case-3",
+        "version": 1,
+        "input_sha256": "d349a4373997d15ab40e9e39fb715a5733c247afc25da0db8199f5ddd6ce82a3"
+      },
+      "case_snapshot_sha256": "75d88e29d79e1cb105070254dc144f787f6098b648e0c90f1009f82b438eb106",
+      "subject": "ДЕМО: бумага в Москву",
+      "deadline": "2026-11-15T12:00:00+03:00",
+      "nmck_ex_vat": "1500000",
+      "overall_status": "FAIL",
+      "checks": [
+        {
+          "check_id": "activity",
+          "label": "Деятельность",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "MAPPING_NOT_REVIEWED",
+          "reason": "Нужно проверенное сопоставление предмета закупки с товарами, работами и услугами. Заявленные товары: Офисная бумага А4, 500 листов. Совпадение текста или ОКВЭД не подтверждает исполнение.",
+          "profile_field_paths": [
+            "supplied_goods",
+            "performed_works",
+            "provided_services",
+            "okved"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "supplied_goods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "performed_works",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "provided_services",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "okved",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "проверенное сопоставление деятельности"
+          ]
+        },
+        {
+          "check_id": "geography",
+          "label": "Территория",
+          "mandatory": true,
+          "status": "FAIL",
+          "reason_code": "DECLARED_TERRITORY",
+          "reason": "Адреса: Москва / Москва. Как минимум один регион вне явно разрешённой территории.",
+          "profile_field_paths": [
+            "geography.all_russia",
+            "geography.regions",
+            "geography.cities",
+            "geography.federal_districts",
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.all_russia",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.regions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.cities",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.federal_districts",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "distance",
+          "label": "Расстояние",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ROUTE_NOT_KNOWN",
+          "reason": "Выполнимость маршрута не подтверждена: нет исходной точки и расчёта расстояния.",
+          "profile_field_paths": [
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "исходная точка и подтверждённый маршрут"
+          ]
+        },
+        {
+          "check_id": "submission",
+          "label": "Срок подачи",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "SUBMISSION_OPEN",
+          "reason": "Срок: 2026-11-15T12:00:00+03:00; стадия: submission_open. Подача открыта на момент сравнения.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "execution",
+          "label": "Возможность исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "EXECUTION_NOT_PROVEN",
+          "reason": "Открытый срок подачи не доказывает исполнение: нет проверенного срока поставки, производственного плана и ресурсов компании.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "срок исполнения",
+            "ресурсы, производство и логистический план"
+          ]
+        },
+        {
+          "check_id": "amount",
+          "label": "Финансовый диапазон",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "AMOUNT_RANGE",
+          "reason": "НМЦК 1500000 RUB без НДС; лимиты 500000–10000000. Проверен только диапазон суммы, это не выручка и не прибыль.",
+          "profile_field_paths": [
+            "finance.min_contract_amount",
+            "finance.max_contract_amount"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.min_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "method",
+          "label": "Способ закупки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "ALLOWED_METHOD",
+          "reason": "Способ: electronic_auction; разрешённые способы: ['electronic_auction']. Проверяется явный выбор профиля, а не юридический допуск.",
+          "profile_field_paths": [
+            "allowed_procedure_methods"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "allowed_procedure_methods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "application_security",
+          "label": "Обеспечение заявки",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 300000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_application_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_application_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "performance_security",
+          "label": "Обеспечение исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 1000000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_performance_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_performance_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "extra_approval",
+          "label": "Внутреннее согласование суммы",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "WITHIN_APPROVAL_LIMIT",
+          "reason": "Лимит 5000000 RUB без НДС. Сумма в лимите; внешнее действие требует exact-payload approval.",
+          "profile_field_paths": [
+            "finance.max_contract_without_extra_approval"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_without_extra_approval",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_legal",
+          "label": "Правовые условия",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка legal для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-review",
+              "locator": "legal",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_participant",
+          "label": "Требования к участнику",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка participant для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-review",
+              "locator": "participant",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_technical",
+          "label": "Технические требования",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка technical для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-review",
+              "locator": "technical",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_document",
+          "label": "Документы заявки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка document для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-review",
+              "locator": "document",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "policy",
+          "label": "Площадки, субподряд и запреты",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "PREDICATE_UNSUPPORTED",
+          "reason": "Нет platform_id и фактов субподряда в кейсе; condition запретов не исполняется как код. Применимость правил и полный охват обязательных условий не подтверждены.",
+          "profile_field_paths": [
+            "enabled_platforms",
+            "subcontracting_allowed",
+            "prohibitions"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "enabled_platforms",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "subcontracting_allowed",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "prohibitions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "площадка",
+            "условия субподряда",
+            "применимость и полнота правил"
+          ]
+        },
+        {
+          "check_id": "unsupported_finance",
+          "label": "Оплата, налоги и оборотные средства",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "UNSUPPORTED_FIELD",
+          "reason": "В SnapshotV1 нет налоговой политики, аванса/отсрочки, оборотных средств и лицензий. Эти условия требуют отдельной проверки.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [],
+          "missing": [
+            "налоговая политика",
+            "аванс/отсрочка",
+            "оборотные средства",
+            "лицензии"
+          ]
+        },
+        {
+          "check_id": "economics",
+          "label": "Экономика",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ECONOMICS_INCOMPLETE",
+          "reason": "Экономика UNKNOWN. Не хватает: источники выручки и всех статей расходов; подтверждение сценарных сумм для точной версии кейса. Из одной НМЦК прибыль не рассчитывается.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-3-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "источники выручки и всех статей расходов",
+            "подтверждение сценарных сумм для точной версии кейса"
+          ]
+        }
+      ],
+      "economics": []
+    },
+    {
+      "case_ref": {
+        "case_id": "comparison-case-4",
+        "version": 1,
+        "input_sha256": "6da6b7e68aef15bfa2901916bf3d6a7ecfacb884ddb9f393e8b5b04a7f5575ee"
+      },
+      "case_snapshot_sha256": "00cc9c922eb9fd7c79a07bd8d31e7136f473e3cc51a8563bfa272c3a6dce4951",
+      "subject": "ДЕМО: бумага — срок подачи истёк",
+      "deadline": "2026-10-14T09:00:00+03:00",
+      "nmck_ex_vat": "1500000",
+      "overall_status": "FAIL",
+      "checks": [
+        {
+          "check_id": "activity",
+          "label": "Деятельность",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "MAPPING_NOT_REVIEWED",
+          "reason": "Нужно проверенное сопоставление предмета закупки с товарами, работами и услугами. Заявленные товары: Офисная бумага А4, 500 листов. Совпадение текста или ОКВЭД не подтверждает исполнение.",
+          "profile_field_paths": [
+            "supplied_goods",
+            "performed_works",
+            "provided_services",
+            "okved"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "supplied_goods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "performed_works",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "provided_services",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "okved",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "проверенное сопоставление деятельности"
+          ]
+        },
+        {
+          "check_id": "geography",
+          "label": "Территория",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "DECLARED_TERRITORY",
+          "reason": "Адреса: Татарстан / Казань. Входят в заявленную территорию; маршрут и доставка не проверены.",
+          "profile_field_paths": [
+            "geography.all_russia",
+            "geography.regions",
+            "geography.cities",
+            "geography.federal_districts",
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.all_russia",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.regions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.cities",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.federal_districts",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "distance",
+          "label": "Расстояние",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ROUTE_NOT_KNOWN",
+          "reason": "Выполнимость маршрута не подтверждена: нет исходной точки и расчёта расстояния.",
+          "profile_field_paths": [
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "исходная точка и подтверждённый маршрут"
+          ]
+        },
+        {
+          "check_id": "submission",
+          "label": "Срок подачи",
+          "mandatory": true,
+          "status": "FAIL",
+          "reason_code": "SUBMISSION_UNAVAILABLE",
+          "reason": "Срок: 2026-10-14T09:00:00+03:00; стадия: submission_open. Срок истёк или стадия не допускает подачу.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "execution",
+          "label": "Возможность исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "EXECUTION_NOT_PROVEN",
+          "reason": "Открытый срок подачи не доказывает исполнение: нет проверенного срока поставки, производственного плана и ресурсов компании.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "срок исполнения",
+            "ресурсы, производство и логистический план"
+          ]
+        },
+        {
+          "check_id": "amount",
+          "label": "Финансовый диапазон",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "AMOUNT_RANGE",
+          "reason": "НМЦК 1500000 RUB без НДС; лимиты 500000–10000000. Проверен только диапазон суммы, это не выручка и не прибыль.",
+          "profile_field_paths": [
+            "finance.min_contract_amount",
+            "finance.max_contract_amount"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.min_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "method",
+          "label": "Способ закупки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "ALLOWED_METHOD",
+          "reason": "Способ: electronic_auction; разрешённые способы: ['electronic_auction']. Проверяется явный выбор профиля, а не юридический допуск.",
+          "profile_field_paths": [
+            "allowed_procedure_methods"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "allowed_procedure_methods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "application_security",
+          "label": "Обеспечение заявки",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 300000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_application_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_application_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "performance_security",
+          "label": "Обеспечение исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 1000000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_performance_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_performance_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "extra_approval",
+          "label": "Внутреннее согласование суммы",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "WITHIN_APPROVAL_LIMIT",
+          "reason": "Лимит 5000000 RUB без НДС. Сумма в лимите; внешнее действие требует exact-payload approval.",
+          "profile_field_paths": [
+            "finance.max_contract_without_extra_approval"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_without_extra_approval",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_legal",
+          "label": "Правовые условия",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка legal для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-review",
+              "locator": "legal",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_participant",
+          "label": "Требования к участнику",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка participant для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-review",
+              "locator": "participant",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_technical",
+          "label": "Технические требования",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка technical для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-review",
+              "locator": "technical",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_document",
+          "label": "Документы заявки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка document для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-review",
+              "locator": "document",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "policy",
+          "label": "Площадки, субподряд и запреты",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "PREDICATE_UNSUPPORTED",
+          "reason": "Нет platform_id и фактов субподряда в кейсе; condition запретов не исполняется как код. Применимость правил и полный охват обязательных условий не подтверждены.",
+          "profile_field_paths": [
+            "enabled_platforms",
+            "subcontracting_allowed",
+            "prohibitions"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "enabled_platforms",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "subcontracting_allowed",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "prohibitions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "площадка",
+            "условия субподряда",
+            "применимость и полнота правил"
+          ]
+        },
+        {
+          "check_id": "unsupported_finance",
+          "label": "Оплата, налоги и оборотные средства",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "UNSUPPORTED_FIELD",
+          "reason": "В SnapshotV1 нет налоговой политики, аванса/отсрочки, оборотных средств и лицензий. Эти условия требуют отдельной проверки.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [],
+          "missing": [
+            "налоговая политика",
+            "аванс/отсрочка",
+            "оборотные средства",
+            "лицензии"
+          ]
+        },
+        {
+          "check_id": "economics",
+          "label": "Экономика",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ECONOMICS_INCOMPLETE",
+          "reason": "Экономика UNKNOWN. Не хватает: источники выручки и всех статей расходов; подтверждение сценарных сумм для точной версии кейса. Из одной НМЦК прибыль не рассчитывается.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-4-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "источники выручки и всех статей расходов",
+            "подтверждение сценарных сумм для точной версии кейса"
+          ]
+        }
+      ],
+      "economics": []
+    },
+    {
+      "case_ref": {
+        "case_id": "comparison-case-5",
+        "version": 1,
+        "input_sha256": "3af0a3d29fa14c12f7d6db55e862bbfa1f163d365efa5e3e22955d9a64748328"
+      },
+      "case_snapshot_sha256": "c6c2df6dc883ae4d7fa9cf0b4239709626b9bf0999c269ccd3b47eac62b69d5d",
+      "subject": "ДЕМО: обязательное требование нарушено, только НМЦК",
+      "deadline": "2026-11-15T12:00:00+03:00",
+      "nmck_ex_vat": "1500000",
+      "overall_status": "FAIL",
+      "checks": [
+        {
+          "check_id": "activity",
+          "label": "Деятельность",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "MAPPING_NOT_REVIEWED",
+          "reason": "Нужно проверенное сопоставление предмета закупки с товарами, работами и услугами. Заявленные товары: Офисная бумага А4, 500 листов. Совпадение текста или ОКВЭД не подтверждает исполнение.",
+          "profile_field_paths": [
+            "supplied_goods",
+            "performed_works",
+            "provided_services",
+            "okved"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "supplied_goods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "performed_works",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "provided_services",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "okved",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "проверенное сопоставление деятельности"
+          ]
+        },
+        {
+          "check_id": "geography",
+          "label": "Территория",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "DECLARED_TERRITORY",
+          "reason": "Адреса: Татарстан / Казань. Входят в заявленную территорию; маршрут и доставка не проверены.",
+          "profile_field_paths": [
+            "geography.all_russia",
+            "geography.regions",
+            "geography.cities",
+            "geography.federal_districts",
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.all_russia",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.regions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.cities",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.federal_districts",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "distance",
+          "label": "Расстояние",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ROUTE_NOT_KNOWN",
+          "reason": "Выполнимость маршрута не подтверждена: нет исходной точки и расчёта расстояния.",
+          "profile_field_paths": [
+            "geography.max_distance_km"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "geography.max_distance_km",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "исходная точка и подтверждённый маршрут"
+          ]
+        },
+        {
+          "check_id": "submission",
+          "label": "Срок подачи",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "SUBMISSION_OPEN",
+          "reason": "Срок: 2026-11-15T12:00:00+03:00; стадия: submission_open. Подача открыта на момент сравнения.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            },
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "execution",
+          "label": "Возможность исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "EXECUTION_NOT_PROVEN",
+          "reason": "Открытый срок подачи не доказывает исполнение: нет проверенного срока поставки, производственного плана и ресурсов компании.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": [
+            "срок исполнения",
+            "ресурсы, производство и логистический план"
+          ]
+        },
+        {
+          "check_id": "amount",
+          "label": "Финансовый диапазон",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "AMOUNT_RANGE",
+          "reason": "НМЦК 1500000 RUB без НДС; лимиты 500000–10000000. Проверен только диапазон суммы, это не выручка и не прибыль.",
+          "profile_field_paths": [
+            "finance.min_contract_amount",
+            "finance.max_contract_amount"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.min_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_amount",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "method",
+          "label": "Способ закупки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "ALLOWED_METHOD",
+          "reason": "Способ: electronic_auction; разрешённые способы: ['electronic_auction']. Проверяется явный выбор профиля, а не юридический допуск.",
+          "profile_field_paths": [
+            "allowed_procedure_methods"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "allowed_procedure_methods",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "application_security",
+          "label": "Обеспечение заявки",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 300000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_application_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_application_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "performance_security",
+          "label": "Обеспечение исполнения",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "CASE_FIELD_MISSING",
+          "reason": "Лимит профиля: 1000000. Сумма/условия и источник на стороне кейса отсутствуют. Обеспечение не приравнивается к расходу.",
+          "profile_field_paths": [
+            "finance.max_performance_security"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_performance_security",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "сумма и условия обеспечения"
+          ]
+        },
+        {
+          "check_id": "extra_approval",
+          "label": "Внутреннее согласование суммы",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "WITHIN_APPROVAL_LIMIT",
+          "reason": "Лимит 5000000 RUB без НДС. Сумма в лимите; внешнее действие требует exact-payload approval.",
+          "profile_field_paths": [
+            "finance.max_contract_without_extra_approval"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "finance.max_contract_without_extra_approval",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-evidence",
+              "locator": "synthetic scenario specification",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_legal",
+          "label": "Правовые условия",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка legal для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "legal",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_participant",
+          "label": "Требования к участнику",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка participant для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "participant",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_technical",
+          "label": "Технические требования",
+          "mandatory": true,
+          "status": "FAIL",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая ручная проверка: обязательная белизна не соответствует ТЗ",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "technical",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "mandatory_document",
+          "label": "Документы заявки",
+          "mandatory": true,
+          "status": "PASS",
+          "reason_code": "RETAINED_EXACT_ASSESSMENT",
+          "reason": "Синтетическая проверка document для точного исходного кейса",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [
+            {
+              "document_id": "SYNTHETIC-comparison-case-5-review",
+              "locator": "document",
+              "extractor": "manual",
+              "confidence": 1.0
+            }
+          ],
+          "missing": []
+        },
+        {
+          "check_id": "policy",
+          "label": "Площадки, субподряд и запреты",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "PREDICATE_UNSUPPORTED",
+          "reason": "Нет platform_id и фактов субподряда в кейсе; condition запретов не исполняется как код. Применимость правил и полный охват обязательных условий не подтверждены.",
+          "profile_field_paths": [
+            "enabled_platforms",
+            "subcontracting_allowed",
+            "prohibitions"
+          ],
+          "profile_sources": [
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "enabled_platforms",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "subcontracting_allowed",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            },
+            {
+              "provenance": {
+                "document_id": "SYNTHETIC-profile-command-v1",
+                "locator": "prohibitions",
+                "extractor": "manual",
+                "confidence": 1.0
+              },
+              "kind": "manual_declaration",
+              "source_sha256": "5dfb1153750095b0e4f7102cc161a5c19b18a85acd1689a96692869a5f3303a4",
+              "recorded_at": "2026-10-12T06:00:00Z",
+              "recorded_by": "synthetic-owner",
+              "source_url": null
+            }
+          ],
+          "case_sources": [],
+          "missing": [
+            "площадка",
+            "условия субподряда",
+            "применимость и полнота правил"
+          ]
+        },
+        {
+          "check_id": "unsupported_finance",
+          "label": "Оплата, налоги и оборотные средства",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "UNSUPPORTED_FIELD",
+          "reason": "В SnapshotV1 нет налоговой политики, аванса/отсрочки, оборотных средств и лицензий. Эти условия требуют отдельной проверки.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [],
+          "missing": [
+            "налоговая политика",
+            "аванс/отсрочка",
+            "оборотные средства",
+            "лицензии"
+          ]
+        },
+        {
+          "check_id": "economics",
+          "label": "Экономика",
+          "mandatory": true,
+          "status": "UNKNOWN",
+          "reason_code": "ECONOMICS_INCOMPLETE",
+          "reason": "Экономика UNKNOWN. Не хватает: полное КП на весь объём; сценарии base, realistic и conservative; источники выручки и всех статей расходов; подтверждение сценарных сумм для точной версии кейса. Из одной НМЦК прибыль не рассчитывается.",
+          "profile_field_paths": [],
+          "profile_sources": [],
+          "case_sources": [],
+          "missing": [
+            "полное КП на весь объём",
+            "сценарии base, realistic и conservative",
+            "источники выручки и всех статей расходов",
+            "подтверждение сценарных сумм для точной версии кейса"
+          ]
+        }
+      ],
+      "economics": []
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -15,6 +16,14 @@ LIMITS = {
     "AGENTS.md": 100,
     "docs/README.md": 100,
     "docs/15-implementation-plan.md": 120,
+}
+# Character budgets bound context even when paragraphs are compressed into long lines.
+CHAR_LIMITS = {
+    "README.md": 6000,
+    "AGENTS.md": 7000,
+    "CLAUDE.md": 10000,
+    "docs/README.md": 4000,
+    "docs/15-implementation-plan.md": 6500,
 }
 # This retained user document is deliberately excluded from release snapshots.
 # Its literal local-only index entry must work both with and without the file.
@@ -55,7 +64,7 @@ def numeric_key(path: Path) -> tuple[int, str]:
     return (int(match[1]) if match else 999999, path.name)
 
 
-def main() -> int:
+def main(layout: str = "modern") -> int:
     """Verify files, anchors, full sorted indices and bounded entry points."""
     sources = [
         *sorted(DOCS.rglob("*.md")),
@@ -65,7 +74,7 @@ def main() -> int:
         ROOT / "web/README.md",
         ROOT / "web/AGENTS.md",
         ROOT / "web/CLAUDE.md",
-        ROOT / "src/procurement/AGENTS.md",
+        *([ROOT / "src/procurement/AGENTS.md"] if layout == "modern" else []),
     ]
     errors: list[str] = []
     links = 0
@@ -86,7 +95,7 @@ def main() -> int:
                 if fragment not in anchors_cache[target]:
                     errors.append(f"{source.relative_to(ROOT)}: missing anchor {raw}")
 
-    folders = [DOCS, *(p for p in DOCS.rglob("*") if p.is_dir())]
+    folders = [DOCS, *(p for p in DOCS.rglob("*") if p.is_dir())] if layout == "modern" else []
     for folder in sorted(folders):
         index = folder / "README.md"
         if not index.exists():
@@ -122,10 +131,15 @@ def main() -> int:
         if numbered != sorted(numbered, key=numeric_key):
             errors.append(f"{index.relative_to(ROOT)}: numbered files are not sorted")
 
-    for name, limit in LIMITS.items():
+    for name, limit in (LIMITS.items() if layout == "modern" else []):
         count = len((ROOT / name).read_text(encoding="utf-8").splitlines())
         if count > limit:
             errors.append(f"{name}: {count} lines exceeds entry-point budget {limit}")
+
+    for name, limit in (CHAR_LIMITS.items() if layout == "modern" else []):
+        count = len((ROOT / name).read_text(encoding="utf-8"))
+        if count > limit:
+            errors.append(f"{name}: {count} characters exceeds entry-point budget {limit}")
 
     if errors:
         print("Documentation check FAIL:")
@@ -133,10 +147,16 @@ def main() -> int:
         return 1
     print(
         f"Documentation check PASS: {len(sources)} Markdown files, {links} local links, "
-        f"{len(folders)} complete indices; entry-point budgets respected."
+        + (
+            f"{len(folders)} complete indices; entry-point budgets respected."
+            if layout == "modern"
+            else "legacy-flat local links and anchors verified."
+        )
     )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--layout", choices=("modern", "legacy-flat"), default="modern")
+    sys.exit(main(parser.parse_args().layout))

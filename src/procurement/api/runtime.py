@@ -30,4 +30,5 @@ def create_runtime_app() -> FastAPI:
         ocr_runner=PaddleOcrRunner(),
         eis_index_storage=storage,
         eis_number_token=os.environ.get("EIS_GETDOCS_IP_TOKEN"),
+        profile_storage=storage,
     )

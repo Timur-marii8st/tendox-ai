@@ -1,4 +1,6 @@
 import "server-only";
+import { cookies } from "next/headers";
+import { profileCookie } from "./company-profile-api";
 import { validProposalRequest, validDecisionRequest, validReviewId, savedProposalMatches, savedDecisionMatches, comparisonMatches, type ProposalRequest, type DecisionRequest, type RequirementProposal, type SavedRequirementProposal, type SavedRequirementDecision, type RequirementComparison } from "./eis-requirement-review";
 import { validRequirementPreviewRequest, requirementPreviewMatches, type RequirementPreviewRequest, type RequirementPreview } from "./eis-requirement-preview";
 import { validSupplierPageRequest, supplierPageMatches, type SupplierPageRequest, type SavedSupplierPage } from "./eis-supplier-page";
@@ -1488,8 +1490,10 @@ function submissionExecutorConfiguration(): { baseUrl: string; token: string } {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const { baseUrl, token } = configuration();
+  // Signed-in company searches must never silently use the shared pilot tenant.
+  const personal = path.startsWith("/v1/tender-discovery/") ? (await cookies()).get(profileCookie)?.value : undefined;
   const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${token}`);
+  headers.set("Authorization", `Bearer ${personal ?? token}`);
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     cache: "no-store",
@@ -1583,7 +1587,8 @@ export type Eis223SearchResult = {
       manifest_status: "COUNT_CONSISTENT" | "UNKNOWN"; manifest_count: Eis223TextFact;
       lots: Array<{
         ordinal: Eis223TextFact; subject: Eis223TextFact; initial_sum: Eis223TextFact;
-        currency: Eis223TextFact; initial_sum_rub: string | null; provenance: Provenance;
+        currency: Eis223TextFact; initial_sum_rub: string | null;
+    currency_numeric?: Eis223TextFact; source_price_formula_present?: boolean | null; source_commodity_price_present?: boolean | null; provenance: Provenance;
         cancelled_raw: Eis223TextFact;
         for_small_or_middle_raw?: Eis223TextFact | null;
         detail_status?: "PRESENT" | "UNKNOWN" | null;
@@ -3130,3 +3135,31 @@ export async function readManufacturerDecision(id: string, proposal: Manufacture
 export async function readManufacturerArtifactMetadata(proposalId: string, artifactId: string, expectedSha256?: string): Promise<ManufacturerArtifact> { if (!UUID_PATTERN.test(proposalId) || !UUID_PATTERN.test(artifactId)) throw new ApiError(422); const value = await manufacturerReviewerRequest(`/v1/manufacturer-review/proposals/${encodeURIComponent(proposalId)}/artifacts/${encodeURIComponent(artifactId)}/metadata`); if (!artifactMatches(value) || value.artifact_id !== artifactId || (expectedSha256 !== undefined && value.sha256 !== expectedSha256)) throw new ApiError(422); return value; }
 export async function downloadManufacturerArtifact(proposalId: string, artifactId: string): Promise<{ bytes: Uint8Array; sha256: string }> { if (!UUID_PATTERN.test(proposalId) || !UUID_PATTERN.test(artifactId)) throw new ApiError(422); const { baseUrl, token } = manufacturerReviewerConfiguration(); const response = await fetch(`${baseUrl}/v1/manufacturer-review/proposals/${encodeURIComponent(proposalId)}/artifacts/${encodeURIComponent(artifactId)}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000) }); if (!response.ok) throw new ApiError(response.status); const sha256 = response.headers.get("x-content-sha256"); const contentType = response.headers.get("content-type")?.split(";")[0]; const bytes = new Uint8Array(await response.arrayBuffer()); if (!sha256 || !/^[0-9a-f]{64}$/.test(sha256) || contentType !== "application/pdf" || bytes.length < 1 || bytes.length > 2 * 1024 * 1024) throw new ApiError(422); return { bytes, sha256 }; }
 
+
+
+export function readIndexedPublicUnitPrice(requestValue: import("./eis-supplier-product").SupplierProductRequest): Promise<import("./public-unit-price").PublicUnitPriceReport> {
+  return request("/v1/tender-discovery/eis-public-unit-price/read", {
+    method: "POST", body: JSON.stringify({ request: requestValue }),
+  });
+}
+
+export async function readTenderNavigation(ref: MixedNoticeRef): Promise<import("./tender-workspace").TenderNavigation> {
+  return request("/v1/tender-discovery/eis-navigation/read", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request: ref }), signal: AbortSignal.timeout(30_000),
+  });
+}
+
+
+export type GlobalPriceResult = {
+  query: string; law: "all" | "44" | "223"; delivery_region: string; include_unknown_region: boolean;
+  result44: EisIndexedSearchResult | null; result223: Eis223SearchResult | null;
+  navigation: Record<string, import("./tender-workspace").TenderNavigation>;
+  matched_count: number; unknown_region_count: number; next_cursor: string | null;
+  page_snapshot_sha256: string; snapshot_at: string;
+};
+export function searchGlobalPrice(query: string, law: "all" | "44" | "223", region: string, includeUnknown: boolean, cursor?: string): Promise<GlobalPriceResult> {
+  const params = new URLSearchParams({ query, law, delivery_region: region, include_unknown_region: String(includeUnknown), page_size: "100" });
+  if (cursor) params.set("cursor", cursor);
+  return request<GlobalPriceResult>(`/v1/tender-discovery/global-price?${params}`, { signal: AbortSignal.timeout(60_000) });
+}

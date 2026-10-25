@@ -36,7 +36,7 @@ class MixedNoticeRef(BaseModel):
 
 class MixedComparisonRequest(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-    notices: tuple[MixedNoticeRef, ...] = Field(min_length=2, max_length=3)
+    notices: tuple[MixedNoticeRef, ...] = Field(min_length=2, max_length=5)
 
     @model_validator(mode="after")
     def different_purchases(self) -> MixedComparisonRequest:
@@ -68,7 +68,7 @@ class MixedComparisonResult(BaseModel):
     coverage: Literal["UNKNOWN"] = "UNKNOWN"
     profit_order_status: Literal["UNKNOWN"] = "UNKNOWN"
     economic_comparability: Literal["UNKNOWN"] = "UNKNOWN"
-    rows: tuple[MixedRow, ...] = Field(min_length=2, max_length=3)
+    rows: tuple[MixedRow, ...] = Field(min_length=2, max_length=5)
     position_links: tuple[PositionLinkLead, ...] = Field(default=(), max_length=24)
     position_links_truncated: bool = False
 
