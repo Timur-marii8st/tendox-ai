@@ -27,11 +27,13 @@ from procurement.sources.eis_index_search import (
     exact_purchase_number,
     search_query_keys_v1,
 )
+from procurement.sources.eis_position_evidence import PositionEvidenceSet
 from procurement.sources.eis_procedure_state import EisProcedureState, resolve_procedure_state
 from procurement.storage.eis_notice_hold import (
     notice_receipt_integrity_hold_clause,
     notice_variant_hold_clause,
 )
+from procurement.storage.eis_position_projection import read_position_projection_page
 from procurement.storage.eis_search_pagination import PAGE_COMPARISONS, SearchPagination
 from procurement.storage.models import (
     eis_feed_windows,
@@ -100,6 +102,7 @@ class EisIndexedLead(BaseModel):
     lot_items: tuple[EisIndexedLotItem, ...]
     attachments: tuple[EisIndexedAttachment, ...]
     term_evidence: tuple[EisSearchTermEvidence, ...] = ()
+    position_set: PositionEvidenceSet | None = None
 
 
 class EisIndexedSearchResult(BaseModel):
@@ -500,9 +503,13 @@ def search_eis_index(
                     for digest, window in source_windows.items()
                     if digest in kept_digests
                 }
-    output = tuple(
-        _indexed_lead(item, source_windows[item.snapshot.xml_sha256]) for item in leaders
-    )
+        # Derived source facts are read only for the final returned page, after
+        # cached comparisons. They never change canonical matching or analog inputs.
+        output = tuple(
+            _indexed_lead(item, source_windows[item.snapshot.xml_sha256]) for item in leaders
+        )
+        if on_matches is None:
+            output = attach_saved_positions(connection, company_id, output)
     fingerprint, next_cursor = (
         pager.finish(
             _rank_key(leaders[-1]) if leaders else None,
@@ -590,6 +597,30 @@ def _compare_page_batch(
         ).encode(),
     )
     return compared, False
+
+
+def attach_saved_positions(
+    connection: Connection, company: str, leads: Sequence[EisIndexedLead]
+) -> tuple[EisIndexedLead, ...]:
+    """Read only the selected bounded page; never enrich a streamed corpus."""
+    from procurement.storage.eis_document_store import NoticeDocumentRef
+
+    if len(leads) > 100:
+        raise ValueError("POSITION_PAGE_SIZE_LIMIT")
+    refs = tuple(
+        NoticeDocumentRef(
+            purchase_number=lead.purchase_number,
+            version_number=lead.version_number,
+            notice_xml_sha256=lead.xml_sha256,
+        )
+        for lead in leads
+        if not lead.lot_items
+    )
+    results = iter(read_position_projection_page(connection, company, refs))
+    return tuple(
+        lead.model_copy(update={"position_set": next(results)}) if not lead.lot_items else lead
+        for lead in leads
+    )
 
 
 def _indexed_lead(item: EisComparedNotice, window: str) -> EisIndexedLead:

@@ -18,6 +18,11 @@ from procurement.domain.discovery_economics import (
 from procurement.domain.economics import COST_FIELD_NAMES, CostBreakdown
 from procurement.domain.provenance import Provenance
 from procurement.domain.quotes import Quote
+from procurement.domain.regional_discount import (
+    RegionalDiscountReport,
+    RegionalHistory,
+    regional_discount,
+)
 
 
 class BetaQuoteInput(BaseModel):
@@ -43,6 +48,7 @@ class BetaQuoteInput(BaseModel):
     realistic_discount: Decimal = Field(ge=0, lt=1)
     conservative_discount: Decimal = Field(ge=0, lt=1)
     conservative_cost_growth: Decimal = Field(ge=0, le=1)
+    discount_mode: Literal["MANUAL", "REGIONAL"] = "MANUAL"
 
     @field_validator("amount_ex_vat", mode="before")
     @classmethod
@@ -94,6 +100,8 @@ class BetaQuoteCalculation(BaseModel):
     scenarios: tuple[DiscoveryScenario, ...] = ()
     reasons: tuple[str, ...] = ()
     participation: Literal["UNKNOWN"] = "UNKNOWN"
+    regional_discount: RegionalDiscountReport | None = None
+    discount_basis: Literal["MANUAL", "REGIONAL_HISTORY"] = "MANUAL"
 
 
 def calculate_quote(
@@ -108,6 +116,8 @@ def calculate_quote(
     deadline: datetime | None,
     blocked: bool,
     now: datetime,
+    regional_history: RegionalHistory | None = None,
+    revenue_source: Provenance | None = None,
 ) -> BetaQuoteCalculation:
     """Recheck quote validity and complete costs at every read before computing scenarios."""
     if now.tzinfo is None or now.utcoffset() is None:
@@ -131,6 +141,15 @@ def calculate_quote(
     )
     costs = CostBreakdown(goods=data.amount_ex_vat, **data.expenses)
     reasons: list[str] = []
+    history_report = None
+    realistic_discount = data.realistic_discount
+    conservative_discount = data.conservative_discount
+    history_basis = ""
+    if regional_history is not None:
+        cohort = regional_history.cohort
+        if cohort.company_id != company or cohort.target_id != tender_id:
+            raise ValueError("HISTORY_TARGET_CONTEXT_MISMATCH")
+        history_report = regional_discount(regional_history, now=now)
     if blocked or (deadline is not None and deadline <= now):
         status = "BLOCKED"
         reasons.append("PROCEDURE_BLOCKED_OR_EXPIRED")
@@ -144,6 +163,31 @@ def calculate_quote(
             reasons.append("EXPENSES_INCOMPLETE")
         if nmck_gross is None:
             reasons.append("SOURCE_REVENUE_UNKNOWN")
+        if data.discount_mode == "REGIONAL" and history_report is None:
+            reasons.append("REGIONAL_HISTORY_UNKNOWN")
+        if history_report is not None:
+            if revenue_source is None or history_report.cohort.source != revenue_source:
+                reasons.append("REGIONAL_HISTORY_REVENUE_SOURCE_MISMATCH")
+            elif history_report.status != "PASS":
+                reasons.append("REGIONAL_HISTORY_UNKNOWN")
+            else:
+                assert history_report.realistic_discount is not None
+                assert history_report.conservative_discount is not None
+                realistic_discount = max(realistic_discount, history_report.realistic_discount)
+                conservative_discount = max(
+                    conservative_discount,
+                    realistic_discount,
+                    history_report.conservative_discount,
+                )
+                history_basis = (
+                    f"; региональная история {history_report.policy}: "
+                    f"{history_report.cohort.region}, {history_report.sample_size} закупок, "
+                    f"{history_report.cohort.period_start.isoformat()} — "
+                    f"{history_report.cohort.period_end.isoformat()}; "
+                    f"снижение {realistic_discount}/{conservative_discount}, "
+                    "max(ручное, nearest-rank median/p75); сценарное допущение, "
+                    "не вероятность победы и не гарантия консервативности"
+                )
     scenarios: tuple[DiscoveryScenario, ...] = ()
     if not reasons:
         estimate = calculate_discovery_economics(
@@ -152,11 +196,14 @@ def calculate_quote(
                 goods=data.amount_ex_vat,
                 expenses=sum(data.expenses.values(), Decimal("0")),
                 vat_rate=data.output_vat_rate,
-                realistic_discount=data.realistic_discount,
-                conservative_discount=data.conservative_discount,
+                realistic_discount=realistic_discount,
+                conservative_discount=conservative_discount,
                 conservative_cost_growth=data.conservative_cost_growth,
                 basis=(
                     f"КП {data.document}; расходы: {data.expense_basis}; налоги: {data.tax_model}"
+                    if not history_basis
+                    else f"КП {quote_id}; расходы: см. expense_source; налоги: {data.tax_model}"
+                    + history_basis
                 ),
                 costs_complete_ack=True,
             ),
@@ -173,4 +220,6 @@ def calculate_quote(
         tax_model=data.tax_model,
         scenarios=scenarios,
         reasons=tuple(reasons),
+        regional_discount=history_report,
+        discount_basis="REGIONAL_HISTORY" if regional_history is not None else "MANUAL",
     )

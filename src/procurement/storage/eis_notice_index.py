@@ -393,6 +393,11 @@ def ingest_ready_window(
                     notice.title,
                     (item.name for item in notice.lot_items),
                 )
+                from procurement.storage.eis_position_projection import derive_new_drug_positions
+
+                derive_new_drug_positions(
+                    connection, company_id, notice, content, actor_id=actor_id
+                )
                 new_versions += 1
             for event in inspection.events:
                 existing_event = connection.execute(

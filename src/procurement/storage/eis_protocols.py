@@ -55,14 +55,21 @@ class EisHistoricalProtocolReport(ProtocolModel):
 
 
 def read_historical_protocols(
-    storage: PostgresStorage, company_id: str, ref: NoticeDocumentRef, *, now: datetime
+    storage: PostgresStorage,
+    company_id: str,
+    ref: NoticeDocumentRef,
+    *,
+    now: datetime,
+    statement_timeout_ms: int = 20000,
 ) -> EisHistoricalProtocolReport:
     """Читать только сохранённые bytes; не изменять индекс и не обращаться к ЕИС."""
     if not company_id.strip() or now.utcoffset() is None:
         raise ValueError("PROTOCOL_REQUEST_INVALID")
+    if type(statement_timeout_ms) is not int or not 1 <= statement_timeout_ms <= 20000:
+        raise ValueError("PROTOCOL_TIMEOUT_INVALID")
     a, n, e = eis_feed_archives, eis_notice_versions, eis_procedure_events
     with storage.transaction(company_id, consistent_read=True) as conn:
-        conn.exec_driver_sql("SET LOCAL statement_timeout = '20s'")
+        conn.exec_driver_sql(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'")
         conn.exec_driver_sql("SET LOCAL lock_timeout = '2s'")
         assert_notice_source_usable(conn, company_id, ref.purchase_number, ref.version_number)
         notice = (

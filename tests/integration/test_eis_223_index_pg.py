@@ -888,11 +888,13 @@ def test_223_refresh_families_are_fair_bounded_and_sql_scoped(storage):
     company = "test223-" + uuid4().hex
     now = NOW + timedelta(hours=10)
     initial = due_windows(storage, company, now)
-    assert len(initial) == 6
+    assert len(initial) == 10
     assert {t.document_type for t in initial} == {
         "purchaseNoticeAESMBO",
         "purchaseNoticeZKESMBO",
         "purchaseNotice",
+        "purchaseNoticeKESMBO",
+        "purchaseNoticeZPESMBO",
     }
     for target in initial[:2]:
         record_attempt(
@@ -904,7 +906,7 @@ def test_223_refresh_families_are_fair_bounded_and_sql_scoped(storage):
             checked_at=now,
             response_sha256="a" * 64,
         )
-    # Batch cap leaves the other four targets first, even if the first batch becomes due again.
+    # Batch cap leaves the other eight targets first, even if the first batch becomes due again.
     assert due_windows(storage, company, now) == initial[2:]
     assert due_windows(storage, company, now + timedelta(hours=6))[:2] == initial[2:4]
     for target in initial[2:]:
@@ -918,12 +920,12 @@ def test_223_refresh_families_are_fair_bounded_and_sql_scoped(storage):
             response_sha256="b" * 64,
         )
     assert due_windows(storage, company, now + timedelta(hours=5)) == ()
-    assert len(due_windows(storage, "other-" + company, now)) == 6
+    assert len(due_windows(storage, "other-" + company, now)) == 10
     tomorrow = due_windows(storage, company, now + timedelta(days=1))
-    assert len(tomorrow) == 6 and all(
+    assert len(tomorrow) == 10 and all(
         t.day.isoformat() in {"2026-10-02", "2026-10-03"} for t in tomorrow
     )
-    assert [t.day.isoformat() for t in tomorrow[:3]] == ["2026-10-03"] * 3
+    assert [t.day.isoformat() for t in tomorrow[:5]] == ["2026-10-03"] * 5
     for invalid in ("purchaseNoticeAE", "purchaseNoticeAESMBO/extra"):
         key = window_key(initial[0].day).replace("purchaseNoticeAESMBO", invalid)
         with pytest.raises(ValueError, match="ATTEMPT_SCOPE_INVALID"):
@@ -949,17 +951,18 @@ def test_223_refresh_families_are_fair_bounded_and_sql_scoped(storage):
                 )
             )
     # Cross-tenant checkpoint cannot be forged for the new family either.
-    quotation = next(t for t in initial if t.document_type == "purchaseNoticeZKESMBO")
-    with pytest.raises(ValueError, match="SYNCED_CHECKPOINT_MISSING"):
-        record_attempt(
-            storage,
-            company,
-            window_key(quotation.day, quotation.document_type),
-            "SYNCED",
-            actor_id="operator",
-            checked_at=now,
-            response_sha256="a" * 64,
-        )
+    for family in ("purchaseNoticeZKESMBO", "purchaseNoticeZPESMBO"):
+        quotation = next(t for t in initial if t.document_type == family)
+        with pytest.raises(ValueError, match="SYNCED_CHECKPOINT_MISSING"):
+            record_attempt(
+                storage,
+                company,
+                window_key(quotation.day, quotation.document_type),
+                "SYNCED",
+                actor_id="operator",
+                checked_at=now,
+                response_sha256="a" * 64,
+            )
     guard_before = counts(storage, company)
     with storage.transaction(company, consistent_read=True) as conn:
         attempt_count = conn.scalar(select(func.count()).select_from(eis_223_sync_attempts))

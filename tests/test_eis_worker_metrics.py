@@ -121,15 +121,20 @@ def wrappers(tmp_path):
         content = content.replace("/home/syurai/vibe-seller", str(workspace))
         content = content.replace("/var/lib/eis-browser", str(browser))
         content = content.replace("flock -w 300 9", "flock -w 2 9")
+        content = content.replace("flock -w 300 8", "flock -w 2 8")
         (scripts / name).write_text(content)
     (scripts / "server-eis-223-refresh.py").write_text("# fake probe input\n")
     sudo = binary / "sudo"
     sudo.write_text("""#!/usr/bin/env python3
 import json,os,subprocess,sys
+from pathlib import Path
 args=sys.argv[1:]
 if args[0]=='-n':args=args[1:]
 assert args.pop(0)=='docker'
 command=args.pop(0)
+if os.environ.get('STUB_CALLS'):
+ with open(os.environ['STUB_CALLS'],'a') as stream:
+  stream.write(json.dumps({'command':command,'args':args})+'\\n')
 if command=='inspect':print(os.environ.get('STUB_HEALTH','healthy'))
 elif command=='exec':
  if '-c' in args:
@@ -139,14 +144,25 @@ elif command=='exec':
  if os.environ.get('STUB_PROBE_FAIL'):sys.exit(41)
  default={'status':'READY','source_requests':0}
  if 'procurement.eis_document_dispatch_cli' in args:default['law']='44'
- print(os.environ.get('STUB_PROBE_JSON',json.dumps(default)))
+ if os.environ.get('STUB_PROBE_FILE'):payload=Path(os.environ['STUB_PROBE_FILE']).read_text()
+ else:payload=os.environ.get('STUB_PROBE_JSON',json.dumps(default))
+ print(payload)
 elif command=='compose':
  print(os.environ.get('STUB_WORKER_JSON','{"status":"PROCESSED","attempted":1}'))
  sys.exit(int(os.environ.get('STUB_WORKER_EXIT','0')))
 else:sys.exit(91)
 """)
     sudo.chmod(0o700)
-    return scripts, state, browser, {**os.environ, "PATH": f"{binary}:{os.environ['PATH']}"}
+    return (
+        scripts,
+        state,
+        browser,
+        {
+            **os.environ,
+            "PATH": f"{binary}:{os.environ['PATH']}",
+            "STUB_CALLS": str(workspace / "docker-calls.jsonl"),
+        },
+    )
 
 
 def run_wrapper(fixture, name, *, args=(), **updates):
@@ -358,7 +374,10 @@ def test_dispatch_busy_preserves_foreign_marker(wrappers, name, lockname):
     _, state, browser, _ = wrappers
     marker = browser / ("eis-223-refresh.request" if "223" in name else "eis-priority.request")
     marker.write_text("foreign owner")
-    with (state / lockname).open("w") as lock:
+    # Freshness now coalesces at its private dispatch lock; shared FD8 is a
+    # bounded handoff, exercised separately by the real timeout/signal tests.
+    dispatch_lock = "eis-freshness-dispatch.lock" if name == "server-eis-priority.sh" else lockname
+    with (state / dispatch_lock).open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         result = run_wrapper(wrappers, name)
     assert result.returncode == 75 and marker.read_text() == "foreign owner"
@@ -449,3 +468,236 @@ def test_missing_host_python_during_metrics_init_does_not_abort_caller(tmp_path)
         check=False,
     )
     assert result.returncode == 0 and result.stdout == "preserved" and result.stderr == ""
+
+
+def _waiting_flock(process, descriptor):
+    """Observe the real child so signal/duplicate tests never race a shell sleep."""
+    deadline = time.monotonic() + 1.5
+    while time.monotonic() < deadline:
+        assert process.poll() is None, "fresh dispatch discarded the known lock handoff"
+        children = Path(f"/proc/{process.pid}/task/{process.pid}/children")
+        for child in children.read_text().split():
+            try:
+                command = Path(f"/proc/{child}/cmdline").read_bytes().split(b"\0")
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            if command and b"flock" in command[0] and command[-2] == str(descriptor).encode():
+                return int(child)
+        time.sleep(0.01)
+    raise AssertionError("no bounded flock child observed")
+
+
+def _docker_calls(env):
+    path = Path(env["STUB_CALLS"])
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+@LINUX
+def test_fresh_priority_wait_coalesces_ticks_and_preserves_document_owner(wrappers):
+    import fcntl
+
+    scripts, state, browser, env = wrappers
+    marker = browser / "eis-priority.request"
+    marker.write_text("documents owns this")
+    with (state / "eis-priority.lock").open("w") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        owner = subprocess.Popen(
+            ["bash", str(scripts / "server-eis-priority.sh")],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            _waiting_flock(owner, 8)
+            assert _docker_calls(env) == []
+            duplicate = run_wrapper(wrappers, "server-eis-priority.sh")
+            assert duplicate.returncode == 75
+            assert json.loads(duplicate.stdout)["reason"] == "FRESHNESS_DISPATCH_BUSY"
+            assert marker.read_text() == "documents owns this" and _docker_calls(env) == []
+            # The document owner finishes its own cleanup before releasing FD8.
+            marker.unlink()
+            fcntl.flock(holder, fcntl.LOCK_UN)
+            stdout, stderr = owner.communicate(timeout=5)
+            assert owner.returncode == 0 and not stderr
+            assert json.loads(stdout)["attempted"] == 1 and not marker.exists()
+            calls = _docker_calls(env)
+            assert sum("procurement.eis_freshness_dispatch_cli" in c["args"] for c in calls) == 1
+            assert sum(c["command"] == "compose" for c in calls) == 1
+        finally:
+            if owner.poll() is None:
+                owner.terminate()
+                owner.wait(timeout=3)
+
+
+@LINUX
+@pytest.mark.parametrize("signum,code", [(signal.SIGINT, 130), (signal.SIGTERM, 143)])
+def test_fresh_priority_wait_signal_reaps_child_and_releases_dispatch(wrappers, signum, code):
+    import fcntl
+
+    scripts, state, browser, env = wrappers
+    marker = browser / "eis-priority.request"
+    marker.write_text("foreign owner")
+    with (state / "eis-priority.lock").open("w") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        owner = subprocess.Popen(
+            ["bash", str(scripts / "server-eis-priority.sh")],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            child = _waiting_flock(owner, 8)
+            owner.send_signal(signum)
+            stdout, stderr = owner.communicate(timeout=2)
+            assert owner.returncode == code and stdout == stderr == ""
+            assert not Path(f"/proc/{child}").exists()
+            assert marker.read_text() == "foreign owner" and _docker_calls(env) == []
+            # No descendant may retain the private dispatch lock after cancellation.
+            with (state / "eis-freshness-dispatch.lock").open("a") as dispatch:
+                fcntl.flock(dispatch, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            if owner.poll() is None:
+                owner.terminate()
+                owner.wait(timeout=3)
+    following = run_wrapper(
+        wrappers,
+        "server-eis-priority.sh",
+        STUB_PROBE_JSON='{"status":"IDLE"}',
+    )
+    assert following.returncode == 0 and marker.read_text() == "foreign owner"
+
+
+@LINUX
+def test_fresh_priority_timeout_has_no_import_or_source_and_preserves_marker(wrappers):
+    import fcntl
+
+    _, state, browser, env = wrappers
+    marker = browser / "eis-priority.request"
+    marker.write_text("foreign owner")
+    with (state / "eis-priority.lock").open("w") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = run_wrapper(wrappers, "server-eis-priority.sh")
+    assert result.returncode == 75
+    assert json.loads(result.stdout)["reason"] == "PRIORITY_LOCK_TIMEOUT"
+    assert marker.read_text() == "foreign owner" and _docker_calls(env) == []
+    assert [x["phase"] for x in events(state)] == ["dispatch_start", "dispatch_finish"]
+    assert events(state)[-1]["result"] == "TIMEOUT"
+
+
+@LINUX
+@pytest.mark.parametrize(
+    "status,probe_fail", [("IDLE", False), ("BLOCKED", False), ("OTHER", False), ("READY", True)]
+)
+def test_fresh_priority_wait_rechecks_current_readiness(wrappers, status, probe_fail):
+    import fcntl
+
+    scripts, state, browser, env = wrappers
+    probe = state / "readiness.json"
+    probe.write_text('{"status":"READY"}')
+    env = {**env, "STUB_PROBE_FILE": str(probe)}
+    if probe_fail:
+        env["STUB_PROBE_FAIL"] = "1"
+    with (state / "eis-priority.lock").open("w") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        owner = subprocess.Popen(
+            ["bash", str(scripts / "server-eis-priority.sh")],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            _waiting_flock(owner, 8)
+            assert _docker_calls(env) == []
+            probe.write_text(json.dumps({"status": status}))
+            fcntl.flock(holder, fcntl.LOCK_UN)
+            owner.communicate(timeout=5)
+            assert owner.returncode == (69 if probe_fail else 0)
+            assert not list(browser.iterdir())
+            calls = _docker_calls(env)
+            assert sum("procurement.eis_freshness_dispatch_cli" in c["args"] for c in calls) == 1
+            assert all(c["command"] != "compose" for c in calls)
+        finally:
+            if owner.poll() is None:
+                owner.terminate()
+                owner.wait(timeout=3)
+
+
+@LINUX
+def test_fresh_wait_preserves_document_handoff_after_223_atomic_owner(wrappers):
+    import fcntl
+
+    scripts, state, browser, env = wrappers
+    processes = []
+    with (state / "eis-import.lock").open("w") as atomic223:
+        fcntl.flock(atomic223, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            document = subprocess.Popen(
+                ["bash", str(scripts / "server-eis-documents.sh")],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            processes.append(document)
+            _waiting_flock(document, 9)
+            fresh = subprocess.Popen(
+                ["bash", str(scripts / "server-eis-priority.sh")],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            processes.append(fresh)
+            _waiting_flock(fresh, 8)
+            calls = _docker_calls(env)
+            assert all(c["command"] != "compose" for c in calls)
+            assert not any("procurement.eis_freshness_dispatch_cli" in c["args"] for c in calls)
+            duplicate = run_wrapper(wrappers, "server-eis-priority.sh")
+            assert json.loads(duplicate.stdout)["reason"] == "FRESHNESS_DISPATCH_BUSY"
+            # The already running223 atomic owner completes; neither wrapper interrupts it.
+            fcntl.flock(atomic223, fcntl.LOCK_UN)
+            for process in processes:
+                stdout, stderr = process.communicate(timeout=5)
+                assert process.returncode == 0 and not stderr
+                assert json.loads(stdout)["attempted"] == 1
+            workers = [c["args"] for c in _docker_calls(env) if c["command"] == "compose"]
+            assert len(workers) == 2
+            assert "procurement.eis_documents_cli" in workers[0]
+            assert "procurement.eis_corpus_cli" in workers[1]
+            assert not (browser / "eis-priority.request").exists()
+        finally:
+            for process in processes:
+                if process.poll() is None:
+                    process.terminate()
+                    process.wait(timeout=3)
+
+
+@LINUX
+@pytest.mark.parametrize("vanished", [FileNotFoundError, ProcessLookupError])
+def test_flock_observer_skips_exited_child_and_requires_real_waiter(monkeypatch, vanished):
+    from types import SimpleNamespace
+
+    reads = []
+    original_text, original_bytes = Path.read_text, Path.read_bytes
+
+    def children(path, *args, **kwargs):
+        if str(path) == "/proc/4242/task/4242/children":
+            return "5555 6666"
+        return original_text(path, *args, **kwargs)
+
+    def cmdline(path):
+        if str(path) == "/proc/5555/cmdline":
+            reads.append("vanished")
+            raise vanished("child exited after enumeration")
+        if str(path) == "/proc/6666/cmdline":
+            reads.append("waiter")
+            return b"\0".join((b"/usr/bin/flock", b"-w", b"300", b"8", b""))
+        return original_bytes(path)
+
+    monkeypatch.setattr(Path, "read_text", children)
+    monkeypatch.setattr(Path, "read_bytes", cmdline)
+    assert _waiting_flock(SimpleNamespace(pid=4242, poll=lambda: None), 8) == 6666
+    assert reads == ["vanished", "waiter"]

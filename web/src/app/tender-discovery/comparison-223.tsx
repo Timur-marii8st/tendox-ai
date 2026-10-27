@@ -8,6 +8,8 @@ type Notice223 = Comparison223Result["rows"][number]["notice"];
 export const family223Labels: Record<Eis223DocumentType, string> = {
   purchaseNoticeAESMBO: "Электронный аукцион для МСП",
   purchaseNoticeZKESMBO: "Электронные котировки для МСП",
+  purchaseNoticeKESMBO: "Электронный конкурс для МСП",
+  purchaseNoticeZPESMBO: "Электронный запрос предложений для МСП",
   purchaseNotice: "Иной способ — ограничения участия проверяются по лоту",
 };
 export const price223Labels: Record<Eis223SourcePriceKind, string> = {

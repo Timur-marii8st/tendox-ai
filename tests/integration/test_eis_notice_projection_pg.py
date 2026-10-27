@@ -105,13 +105,16 @@ def _assert_search_matches_installed_baseline(storage, company, *, now=None):
                     expected = module.search_eis_index(storage, tenant, "бумага", **kwargs)
                     assert actual.reused_candidate_notices == 0  # Every call starts a fresh page.
                     assert actual.compared_candidate_notices == expected.evaluated_candidate_notices
-                    assert actual.model_dump(
+                    actual_payload = actual.model_dump(
                         exclude={
                             "search_elapsed_ms",
                             "compared_candidate_notices",
                             "reused_candidate_notices",
                         }
-                    ) == expected.model_dump(exclude={"search_elapsed_ms"})
+                    )
+                    for lead in actual_payload["matched"]:
+                        assert lead.pop("position_set") is None
+                    assert actual_payload == expected.model_dump(exclude={"search_elapsed_ms"})
                 finally:
                     PAGE_COMPARISONS.clear()
     assert counts(storage, company) == before

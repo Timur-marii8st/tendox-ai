@@ -150,8 +150,58 @@ def test_http_source_quote_costs_profile_and_financial_order_roundtrip(storage):
     assert ranked.json()["financial_order"] == [payload["record_id"]]
     assert ranked.json()["profile"]["snapshot_sha256"] == p.snapshot_sha256
     assert ranked.json()["rows"][0]["profile_status"] == "UNKNOWN"
+    unit_ranked = c.post(
+        "/v1/beta-procurement/shortlist",
+        json={"notices": [ref], "region": "Moscow", "ranking": "UNIT_PROFIT"},
+        headers=headers,
+    )
+    assert unit_ranked.status_code == 200, unit_ranked.text
+    unit_result = unit_ranked.json()
+    assert unit_result["financial_order"] == []
+    assert unit_result["unit_orders"] == [{"unit": "пачка", "record_ids": [payload["record_id"]]}]
+    unit_row = unit_result["rows"][0]
+    assert unit_row["unit_profit"] == "350.00"
+    assert unit_row["report"]["unit_quantity"]["value"] == "100"
+    assert (
+        unit_row["report"]["unit_quantity"]["provenance"]["document_id"]
+        == ref["notice"]["notice_xml_sha256"]
+    )
+    assert unit_result["eligibility"] == "UNKNOWN"
     retry = c.post("/v1/beta-procurement/quote/save", json=payload, headers=headers)
     assert retry.status_code == 200, retry.text
+
+    # Shared public source must not change private quote/profile ownership.
+    from procurement.storage.beta_quote import BetaQuoteCommand, BetaQuoteRef, quote_report
+    from procurement.storage.beta_shortlist import BetaShortlistRequest, shortlist
+
+    profits = []
+    for index in range(2):
+        private = "beta-private-unit-" + uuid4().hex
+        profile(storage, private)
+        declared = declaration(ref)
+        declared["quote"]["amount_ex_vat"] = str(55000 + index * 10000)
+        declared["quote"]["supplier"] = f"Private unit supplier {index}"
+        command = BetaQuoteCommand.model_validate(declared)
+        bound_ref = BetaQuoteRef.model_validate(ref)
+        saved_private = quote_report(
+            storage, private, bound_ref, actor="synthetic", command=command, source_company=company
+        )
+        ranked_private = shortlist(
+            storage,
+            private,
+            BetaShortlistRequest(notices=(bound_ref,), ranking="UNIT_PROFIT"),
+            actor="synthetic",
+            source_company=company,
+        )
+        assert ranked_private.profile.company_id == private
+        assert ranked_private.unit_orders[0].record_ids == (saved_private.record_id,)
+        assert ranked_private.rows[0].report.input.supplier == f"Private unit supplier {index}"
+        assert (
+            ranked_private.rows[0].report.unit_quantity.provenance.document_id
+            == ref["notice"]["notice_xml_sha256"]
+        )
+        profits.append(ranked_private.rows[0].unit_profit)
+    assert profits[0] > profits[1]
 
 
 def test_foreign_tenant_cannot_read_navigation_or_quote_and_auditor_cannot_write(storage):

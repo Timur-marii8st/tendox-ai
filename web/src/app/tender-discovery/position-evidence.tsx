@@ -13,7 +13,7 @@ function Fact({ label, fact }: { label: string; fact: PositionFact }) {
 export function PositionEvidenceView({ set }: { set?: PositionEvidenceSet | null }) {
   if (!set) return <p className="text-sm">Структурированные характеристики: UNKNOWN.</p>;
   return <section aria-label={`Позиции и характеристики ${set.law}-ФЗ ${set.purchase_number}`}
-    className="mt-3 min-w-0 rounded border bg-white p-3 text-sm">
+    className="mt-3 min-w-0 rounded border bg-white p-3 text-sm text-slate-900 [color-scheme:light]">
     <h5 className="font-bold">Позиции и характеристики из источника</h5>
     <p>Показано {set.positions.length} из {set.positions_total} позиций.
       {set.positions_truncated && " Список сокращён."}</p>

@@ -37,6 +37,9 @@ COMPANION_TYPES = (
     "epProtocolEOK2020FirstSections",
     "epProtocolEOK2020SecondSections",
     "epProtocolEOK2020Final",
+    "epProtocolEZK2020Final",
+    "epProtocolEF2020SubmitOffers",
+    "epProtocolEF2020Final",
     "fcsPlacementResult",
     "fcsProposalsResult",
 )

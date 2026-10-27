@@ -14,9 +14,11 @@ from procurement.domain.actions import payload_digest
 from procurement.domain.beta_quote import BetaQuoteCalculation, BetaQuoteInput, calculate_quote
 from procurement.domain.discovery_economics import DiscoveryCostInput
 from procurement.domain.provenance import Extractor, Provenance
-from procurement.sources.eis_223_archive import Eis223NoticeSnapshot
+from procurement.domain.regional_discount import RegionalDiscountReport, regional_discount
+from procurement.sources.eis_223_archive import DecimalFact, Eis223NoticeSnapshot, TextFact
 from procurement.sources.eis_223_policy import deadline223
 from procurement.storage.beta_quote_schema import beta_quote_records as records
+from procurement.storage.eis_contract_results import automatic_history
 from procurement.storage.eis_mixed_comparison import MixedNoticeRef
 from procurement.storage.eis_source_estimate import SourceEstimateRequest, get_source_estimate
 from procurement.storage.models import audit_events, eis_223_notice_versions, eis_notice_versions
@@ -47,9 +49,35 @@ class BetaQuoteReport(BaseModel):
     input: BetaQuoteInput | None = None
     calculation: BetaQuoteCalculation | None = None
     source_reasons: tuple[str, ...] = ()
+    unit_quantity: DecimalFact | None = None
+    quantity_unit: TextFact | None = None
     revenue_source: Provenance | None = None
     source_status: Literal["CHECKED", "NO_QUOTE"]
     declaration_kind: Literal["USER_DECLARED_QUOTE_AND_COSTS"] = "USER_DECLARED_QUOTE_AND_COSTS"
+
+
+class BetaHistoryReport(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    ref: BetaQuoteRef
+    history: RegionalDiscountReport
+    source_reasons: tuple[str, ...] = ()
+
+
+def history_report(
+    storage: PostgresStorage,
+    company: str,
+    ref: BetaQuoteRef,
+    *,
+    actor: str,
+    source_company: str | None = None,
+    now: datetime | None = None,
+) -> BetaHistoryReport:
+    """Personal read-only source-backed history, available before a supplier quote."""
+    at = now or datetime.now(UTC)
+    history = automatic_history(storage, company, ref, source_company=source_company, now=at)
+    return BetaHistoryReport(
+        ref=ref, history=regional_discount(history, now=at), source_reasons=history.source_reasons
+    )
 
 
 def quote_report(
@@ -59,6 +87,7 @@ def quote_report(
     *,
     actor: str,
     command: BetaQuoteCommand | None = None,
+    source_company: str | None = None,
     now: datetime | None = None,
 ) -> BetaQuoteReport:
     """Save immutable declarations, or recompute latest saved quote on current source gates."""
@@ -103,19 +132,20 @@ def quote_report(
         basis=data.expense_basis,
         costs_complete_ack=False,
     )
+    source_company = source_company or company
     source = get_source_estimate(
         storage,
-        company,
+        source_company,
         SourceEstimateRequest(notice=r, lot_index=ref.lot_index, costs=costs),
         actor_id=actor,
         now=at,
     )
-    with storage.transaction(company, consistent_read=True) as conn:
+    with storage.transaction(source_company, consistent_read=True) as conn:
         n = eis_notice_versions if r.law == "44" else eis_223_notice_versions
         notice = (
             conn.execute(
                 select(n).where(
-                    n.c.company_id == company,
+                    n.c.company_id == source_company,
                     n.c.purchase_number == r.purchase_number,
                     n.c.version_number == r.version_number,
                     n.c.xml_sha256 == r.notice_xml_sha256,
@@ -155,6 +185,12 @@ def quote_report(
         deadline=deadline,
         blocked=bool(source.blocking_reasons) or source.source_schema_status == "FAIL",
         now=at,
+        regional_history=(
+            automatic_history(storage, company, ref, source_company=source_company, now=at)
+            if data.discount_mode == "REGIONAL"
+            else None
+        ),
+        revenue_source=source.ceiling.provenance,
     )
     if command is not None:
         payload = data.model_dump(mode="json")
@@ -219,5 +255,7 @@ def quote_report(
         calculation=calculation,
         source_reasons=source.blocking_reasons + source.source_reasons,
         revenue_source=source.ceiling.provenance,
+        unit_quantity=source.unit_quantity,
+        quantity_unit=source.quantity_unit,
         source_status="CHECKED",
     )

@@ -1,5 +1,6 @@
 # Архитектурные решения
 
+
 [Карта документации](../README.md) · [Текущий статус](../15-implementation-plan.md)
 
 Одно решение — один файл NNNN-kebab-title.md: Контекст / Решение / Последствия / Альтернативы.
@@ -130,3 +131,14 @@
 - [0116-eis-hybrid-discovery-recovery.md](0116-eis-hybrid-discovery-recovery.md) — Ограниченная очередь пропусков из публичной выдачи и штатный адресный intake.
 
 - [0117-eis-active-sweep.md](0117-eis-active-sweep.md) — Обход активных44 без query, атомарные диапазоны и очередь.
+
+- [0118-eis-regional-contract-history.md](0118-eis-regional-contract-history.md) — V45: официальные контрактные результаты, объём заказчика и региональные сценарии; выпуск не принят.
+- [0119-eis-drug-position-projections.md](0119-eis-drug-position-projections.md) — отдельные исходные лекарственные позиции; реализация V50.
+
+- [0120-eis-freshness-priority-wait.md](0120-eis-freshness-priority-wait.md) — V51: один fresh waiter и bounded priority handoff; IMPLEMENTING.
+
+- [0121-eis-223-regular-kesmbo.md](0121-eis-223-regular-kesmbo.md) — V52: регулярный KESMBO, additive6family wave и защита истории; IMPLEMENTING.
+
+- [0122-eis-223-regular-zpesmbo.md](0122-eis-223-regular-zpesmbo.md) — V54: ZP source binding и add-only5/6→7scope; contract review.
+
+- [0123: joint positions223](0123-eis-223-joint-position-projection.md).

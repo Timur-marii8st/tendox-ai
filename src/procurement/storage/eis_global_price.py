@@ -20,6 +20,7 @@ from procurement.storage.eis_223_index import (
 from procurement.storage.eis_index_query import (
     EisIndexedLead,
     EisIndexedSearchResult,
+    attach_saved_positions,
     search_eis_index,
 )
 from procurement.storage.eis_mixed_comparison import MixedNoticeRef
@@ -300,6 +301,14 @@ def search_global_price(
             else None
         )
         selected, next_cursor, fingerprint = collector.finish()
+        projected44 = iter(
+            attach_saved_positions(
+                connection, company, tuple(lead for law, lead, _ in selected if law == "44")
+            )
+        )
+        selected = [
+            (law, next(projected44) if law == "44" else lead, nav) for law, lead, nav in selected
+        ]
         navigation = {}
         prime_navigation_cache(
             shared,

@@ -94,7 +94,7 @@ def test_search_visits_all_bounded_batches_and_matches_global_oracle(size):
             r.notice.purchase_number,
         ),
     )
-    batches, transactions, quality_refs = [], [], []
+    batches, transactions, quality_refs, projection_refs = [], [], [], []
 
     class Result:
         def __init__(self, values):
@@ -126,6 +126,9 @@ def test_search_visits_all_bounded_batches_and_matches_global_oracle(size):
                 return Result([])
             if "FROM eis_223_schema_checks" in sql:
                 quality_refs.extend(next(v for v in params.values() if isinstance(v, list)))
+                return Result([])
+            if "FROM eis_223_position_projections" in sql:
+                projection_refs.extend(next(v for v in params.values() if isinstance(v, list)))
                 return Result([])
             if "count(" in sql:
                 return Result([])
@@ -165,6 +168,7 @@ def test_search_visits_all_bounded_batches_and_matches_global_oracle(size):
     ]
     assert list(result.matched) == expected
     assert len(quality_refs) == min(100, len(oracle))
+    assert len(projection_refs) == min(100, len(oracle))
     if size == 451:
         assert (
             batches == [200, 200, 51] and result.matched[0].notice.purchase_number == "32600000431"

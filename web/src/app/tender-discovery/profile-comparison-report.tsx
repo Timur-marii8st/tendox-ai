@@ -3,7 +3,7 @@ import type { MixedComparisonResult } from "../../lib/procurement-api";
 
 const methodLabels: Record<string, string> = {
   epNotificationEF2020: "Электронный аукцион", epNotificationEZK2020: "Электронный запрос котировок", epNotificationEOK2020: "Электронный открытый конкурс",
-  purchaseNoticeAESMBO: "Электронный аукцион для МСП", purchaseNoticeZKESMBO: "Электронные котировки для МСП", purchaseNotice: "Иной способ закупки",
+  purchaseNoticeAESMBO: "Электронный аукцион для МСП", purchaseNoticeZKESMBO: "Электронные котировки для МСП", purchaseNoticeKESMBO: "Электронный конкурс для МСП", purchaseNoticeZPESMBO: "Электронный запрос предложений для МСП", purchaseNotice: "Иной способ закупки",
 };
 
 function Facts({ row, kind }: { row: MixedComparisonResult["rows"][number]; kind: "price" | "deadline" | "method" }) {

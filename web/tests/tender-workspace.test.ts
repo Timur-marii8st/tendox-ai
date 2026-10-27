@@ -248,3 +248,22 @@ test("region filtering and appended pages retain descending price order without 
   assert.deepEqual(sortTenderRows(selected, "price_desc").map(row => row.purchaseNumber[0]), ["4", "2", "1"]);
   assert.equal(sortTenderRows(filterDeliveryRegion(values, "Московская область", true), "price_desc")[0].purchaseNumber[0], "3");
 });
+
+test("saved source positions stay separate from canonical analog inputs and require exact notice identity", () => {
+  const set = { law: "44" as const, purchase_number: lead44.purchase_number, version_number: 1,
+    notice_xml_sha256: lead44.xml_sha256, positions: [], positions_total: 26,
+    positions_truncated: true, native_tables: [], review_status: "UNKNOWN" as const,
+    specification_completeness: "UNKNOWN" as const };
+  const row = rowsFromResult({ query: "лекарства", law: "44",
+    result44: result44([{ ...lead44, lot_items: [], position_set: set }]) })[0];
+  assert.deepEqual(row.positionSet, set);
+  assert.deepEqual(row.positions, []);
+  assert.deepEqual(row.raw44?.lot_items, []);
+  assert.match(row.statusLabel, /UNKNOWN/);
+  for (const bad of [{ ...set, purchase_number: "other" }, { ...set, version_number: 2 },
+    { ...set, notice_xml_sha256: "b".repeat(64) }]) {
+    const invalid = rowsFromResult({ query: "лекарства", law: "44",
+      result44: result44([{ ...lead44, lot_items: [], position_set: bad }]) })[0];
+    assert.equal(invalid.positionSet, null);
+  }
+});

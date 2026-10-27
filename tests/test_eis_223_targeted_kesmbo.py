@@ -56,15 +56,16 @@ def test_actual_gap_shape_keeps_unknown_time_state_and_family_provenance():
     assert notice.application_status == "UNKNOWN"
     assert notice.title.provenance.locator.startswith(FAMILY + "/")
     assert notice.lots[0].initial_sum_rub is not None
-    assert FAMILY not in SUPPORTED_DOCUMENT_TYPES  # no automatic additional source workload
-    with pytest.raises(ValueError, match="REQUEST_CONFIG_INVALID"):
-        notice223_request(
-            "synthetic-token-123",
-            "11111111-1111-4111-8111-111111111111",
-            "50",
-            date(2026, 10, 8),
-            document_type=FAMILY,
-        )
+    # V52 explicitly admits regular KESMBO; targeted identity guards still apply.
+    assert FAMILY in SUPPORTED_DOCUMENT_TYPES
+    request = notice223_request(
+        "synthetic-token-123",
+        "11111111-1111-4111-8111-111111111111",
+        "50",
+        date(2026, 10, 8),
+        document_type=FAMILY,
+    )
+    assert b"<documentType223>purchaseNoticeKESMBO</documentType223>" in request
 
 
 def test_number_binding_checks_full_set_and_all_records_without_fabricating_region_day():
@@ -91,7 +92,7 @@ def test_mixed_family_and_forged_day_selection_are_rejected():
     raw = zip_bytes([("kesmbo.xml", kesmbo_xml()), ("other.xml", xml())])
     with pytest.raises(ValueError, match="DOCUMENT_TYPE_UNSUPPORTED"):
         preflight_notice223_window("tenant-a", window(raw).model_copy(update={"window_key": KEY}))
-    with pytest.raises(ValueError, match="WINDOW_INVALID"):
+    with pytest.raises(ValueError, match="SOURCE_BINDING_INVALID"):
         preflight_notice223_window(
             "tenant-a",
             targeted_window().model_copy(
@@ -109,7 +110,10 @@ def test_mixed_family_and_forged_day_selection_are_rejected():
     ],
 )
 def test_targeted_support_does_not_admit_unverified_families_or_identities(key):
-    with pytest.raises(ValueError, match="WINDOW_INVALID"):
+    # ZP now has an admitted key shape, but an unbound legacy KES payload
+    # cannot acquire the new family's authenticated source permission.
+    error = "SOURCE_BINDING_INVALID" if key.endswith("/purchaseNoticeZPESMBO") else "WINDOW_INVALID"
+    with pytest.raises(ValueError, match=error):
         preflight_notice223_window(
             "tenant-a", targeted_window().model_copy(update={"window_key": key})
         )
@@ -121,9 +125,12 @@ def test_exact_number_search_keeps_cached_kesmbo_unknown_and_identity_evidence(n
         kesmbo_xml(number=number), source_member="synthetic-kesmbo.xml", document_type=FAMILY
     )
     lead = compare_notice223(
-        notice, " " + number + " ", now=NOW,
+        notice,
+        " " + number + " ",
+        now=NOW,
         source_window=f"getDocsIP/RI223/by-number/{number}/{FAMILY}",
-        source_response_sha256="b" * 64, archive_sha256="c" * 64,
+        source_response_sha256="b" * 64,
+        archive_sha256="c" * 64,
     )
     assert lead is not None and lead.notice.purchase_number == number
     assert lead.match_quality == "STRONG"
@@ -131,8 +138,14 @@ def test_exact_number_search_keeps_cached_kesmbo_unknown_and_identity_evidence(n
     assert lead.term_evidence[0].value_kind == "PURCHASE_NUMBER"
     assert lead.term_evidence[0].source_value == number
     assert lead.term_evidence[0].locator.startswith(FAMILY + "/")
-    assert compare_notice223(
-        notice, "32699999999", now=NOW,
-        source_window=f"getDocsIP/RI223/by-number/{number}/{FAMILY}",
-        source_response_sha256="b" * 64, archive_sha256="c" * 64,
-    ) is None
+    assert (
+        compare_notice223(
+            notice,
+            "32699999999",
+            now=NOW,
+            source_window=f"getDocsIP/RI223/by-number/{number}/{FAMILY}",
+            source_response_sha256="b" * 64,
+            archive_sha256="c" * 64,
+        )
+        is None
+    )

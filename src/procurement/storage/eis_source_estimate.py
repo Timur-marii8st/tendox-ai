@@ -63,6 +63,8 @@ class SourceEstimateResult(BaseModel):
     manual_provenance: Provenance
     ceiling: DecimalFact
     ceiling_rub: Decimal | None
+    unit_quantity: DecimalFact | None = None
+    quantity_unit: TextFact | None = None
     lot_ordinal: TextFact | None = None
     currency: TextFact | None = None
     source_schema_status: Literal["PASS", "FAIL", "UNKNOWN"] = "UNKNOWN"
@@ -86,6 +88,12 @@ class SourceEstimateResult(BaseModel):
             raise ValueError("NOW_TIMEZONE_MISSING")
         if self.ceiling.provenance.document_id != self.request.notice.notice_xml_sha256:
             raise ValueError("CEILING_EVIDENCE_MISMATCH")
+        for fact in (self.unit_quantity, self.quantity_unit):
+            if (
+                fact is not None
+                and fact.provenance.document_id != self.request.notice.notice_xml_sha256
+            ):
+                raise ValueError("UNIT_BASIS_EVIDENCE_MISMATCH")
         if self.manual_provenance.extractor != Extractor.MANUAL:
             raise ValueError("MANUAL_INPUT_REQUIRED")
         if self.ceiling_rub is not None and self.ceiling_rub != self.ceiling.value:
@@ -112,6 +120,7 @@ def get_source_estimate(
     chosen = request.notice
     payload = chosen.model_dump(exclude={"law"})
     ordinal = currency = None
+    unit_quantity = quantity_unit = None
     cancellation_state = None
     lot_cancellation_state = None
     selected_state = None
@@ -131,6 +140,15 @@ def get_source_estimate(
             blockers = row.blocking_reasons
             reasons = row.reasons + bridge.application_reasons
             ceiling_rub = bridge.nmck_rub
+            positions = bridge.position_set
+            if (
+                positions is not None
+                and positions.positions_total == 1
+                and not positions.positions_truncated
+                and len(positions.positions) == 1
+            ):
+                unit_quantity = positions.positions[0].quantity
+                quantity_unit = positions.positions[0].unit
             ceiling = DecimalFact(
                 value=ceiling_rub,
                 raw=None,
@@ -152,6 +170,9 @@ def get_source_estimate(
             if index is None or index > len(row223.notice.lots):
                 raise SourceLotError("SELECTED_LOT_NOT_FOUND")
             lot = row223.notice.lots[index - 1]
+            if len(lot.items) == 1:
+                unit_quantity = lot.items[0].quantity
+                quantity_unit = lot.items[0].unit_name
             blockers = tuple(
                 code
                 for code in row223.blocking_reasons
@@ -234,6 +255,8 @@ def get_source_estimate(
         ),
         ceiling=ceiling,
         ceiling_rub=ceiling_rub,
+        unit_quantity=unit_quantity,
+        quantity_unit=quantity_unit,
         lot_ordinal=ordinal,
         currency=currency,
         blocking_reasons=blockers,

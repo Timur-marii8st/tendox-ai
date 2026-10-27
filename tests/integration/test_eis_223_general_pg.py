@@ -193,7 +193,7 @@ def test_targeted_downgrade_rejects_hidden_history_and_keeps_exact_schema_head(s
     try:
         with engine.connect() as conn:
             original_head = conn.scalar(text("SELECT version_num FROM alembic_version"))
-            assert original_head == "20261021_01"
+            assert original_head == "20261027_03"
     finally:
         engine.dispose()
     assert_direct_downgrade_guard(

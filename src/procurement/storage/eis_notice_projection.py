@@ -463,6 +463,7 @@ def project_retained_notice_variants(
                     (
                         _notice_values(company, window, inspection, candidate.snapshot, now),
                         candidate.snapshot,
+                        candidate.archive_ordinal,
                     )
                 )
         batch = dict(
@@ -503,7 +504,7 @@ def project_retained_notice_variants(
             if payload["snapshot"] is None:
                 payload["snapshot"] = null()
             conn.execute(insert(eis_notice_projection_decisions).values(**payload))
-        for values, snapshot in notice_rows:
+        for values, snapshot, _archive_ordinal in notice_rows:
             conn.execute(insert(eis_notice_versions).values(**values))
             insert_search_keys(
                 conn,
@@ -525,6 +526,14 @@ def project_retained_notice_variants(
                 occurred_at=now,
             )
         )
+        # The variant admission proof includes this audit. Derive only after it
+        # exists in the same atomic transaction, retaining normal HOLD checks.
+        from procurement.storage.eis_position_projection import derive_new_drug_positions
+
+        for _values, snapshot, archive_ordinal in notice_rows:
+            derive_new_drug_positions(
+                conn, company, snapshot, archives[archive_ordinal], actor_id=actor_id
+            )
     return _report(batch, False)
 
 

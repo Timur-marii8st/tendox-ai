@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { noticeReportMatches, type NoticeProfileContext, type NoticeProfileReport } from "../src/lib/notice-profile-comparison";
 import { NoticeProfileReportView } from "../src/app/tender-discovery/profile-comparison-report";
+import type { Eis223DocumentType, MixedComparisonResult } from "../src/lib/procurement-api";
 
 const context: NoticeProfileContext = { company_id: "synthetic", actor_id: "operator", selection_id: "selection", profile_name: "Компания", profile_ref: { version: 1, snapshot_sha256: "a".repeat(64) } };
 function fixture(count = 2): NoticeProfileReport {
@@ -31,4 +32,36 @@ test("notice table preserves source price, unknown deadline, escaped text and in
   const report = fixture(); const html = renderToStaticMarkup(createElement(NoticeProfileReportView, { report }));
   for (const text of ["123.45", "Срок UNKNOWN", "Прибыль не рассчитана", "не сохраняется", "версия 1", "сопоставление"]) assert.ok(html.includes(text), text);
   assert.equal(html.includes("<script>"), false); assert.ok(html.includes("&lt;script&gt;"));
+});
+
+test("regular KESMBO renders its method without inventing a timezone or participation approval", () => {
+  const report = fixture();
+  const documentType: Eis223DocumentType = "purchaseNoticeKESMBO";
+  report.source.rows[0] = {
+    law: "223",
+    notice: {
+      document_type: documentType, method_name: { value: null },
+      deadline: { value: null, raw: "2026-10-16T10:00:00" }, lots: [],
+    },
+  } as unknown as MixedComparisonResult["rows"][number];
+  const html = renderToStaticMarkup(createElement(NoticeProfileReportView, { report }));
+  for (const text of ["Электронный конкурс для МСП", "2026-10-16T10:00:00", "часовой пояс / применимость UNKNOWN", "Прибыль не рассчитана"])
+    assert.ok(html.includes(text), text);
+  assert.equal(html.includes("PARTICIPATE"), false);
+});
+
+test("regular ZPESMBO renders its method without inventing a timezone or participation approval", () => {
+  const report = fixture();
+  const documentType: Eis223DocumentType = "purchaseNoticeZPESMBO";
+  report.source.rows[0] = {
+    law: "223",
+    notice: {
+      document_type: documentType, method_name: { value: null },
+      deadline: { value: null, raw: "2026-10-16T10:00:00" }, lots: [],
+    },
+  } as unknown as MixedComparisonResult["rows"][number];
+  const html = renderToStaticMarkup(createElement(NoticeProfileReportView, { report }));
+  for (const text of ["Электронный запрос предложений для МСП", "2026-10-16T10:00:00", "часовой пояс / применимость UNKNOWN", "Прибыль не рассчитана"])
+    assert.ok(html.includes(text), text);
+  assert.equal(html.includes("PARTICIPATE"), false);
 });

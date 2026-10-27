@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Date, DateTime, and_, cast, func, insert, or_, select, union_all
+from sqlalchemy import Date, DateTime, and_, cast, exists, func, insert, or_, select, union_all
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.sql.selectable import CTE, Subquery
 
@@ -51,6 +53,11 @@ if TYPE_CHECKING:
 
 TERMINAL = ("SYNCED", "NO_DATA")
 FAMILIES = (*SUPPORTED_DOCUMENT_TYPES, "purchaseRejection", "purchaseLotCancellation")
+LEGACY_FAMILY_SCOPES = (
+    tuple(f for f in FAMILIES if f != "purchaseNoticeZPESMBO"),
+    tuple(f for f in FAMILIES if f not in ("purchaseNoticeKESMBO", "purchaseNoticeZPESMBO")),
+)
+MAX_WAVE_TARGETS = 99 * 2 * len(FAMILIES)
 
 
 class Eis223RegionalCoverage(BaseModel):
@@ -121,11 +128,33 @@ def _latest(company: str) -> CTE:
 
 
 def _current(conn: Connection, company: str) -> RowMapping | None:
+    # Prefer additive ZP, then KES scopes for equal calendar/created timestamps. UUID
+    # order alone could keep the predecessor current and append forever.
+    expanded = exists(
+        select(targets.c.window_key).where(
+            targets.c.company_id == waves.c.company_id,
+            targets.c.wave_id == waves.c.wave_id,
+            targets.c.window_key.like("%/purchaseNoticeKESMBO"),
+        )
+    ).correlate(waves)
+    zp_expanded = exists(
+        select(targets.c.window_key).where(
+            targets.c.company_id == waves.c.company_id,
+            targets.c.wave_id == waves.c.wave_id,
+            targets.c.window_key.like("%/purchaseNoticeZPESMBO"),
+        )
+    ).correlate(waves)
     return (
         conn.execute(
             select(waves)
             .where(waves.c.company_id == company)
-            .order_by(waves.c.end_day.desc(), waves.c.created_at.desc(), waves.c.wave_id.desc())
+            .order_by(
+                waves.c.end_day.desc(),
+                zp_expanded.desc(),
+                expanded.desc(),
+                waves.c.created_at.desc(),
+                waves.c.wave_id.desc(),
+            )
             .limit(1)
         )
         .mappings()
@@ -237,6 +266,127 @@ def _accepted_catalog(conn: Connection, company: str) -> RowMapping | None:
     )
 
 
+def _create_wave(
+    conn: Connection,
+    company: str,
+    now: datetime,
+    actor: str,
+    catalog_sha256: str,
+    start_day: date,
+    end_day: date,
+    keys: tuple[str, ...],
+    *,
+    transition: dict[str, object] | None = None,
+) -> str:
+    identity = str(uuid4())
+    conn.execute(
+        insert(waves).values(
+            company_id=company,
+            wave_id=identity,
+            catalog_sha256=catalog_sha256,
+            start_day=start_day,
+            end_day=end_day,
+            target_count=len(keys),
+            created_at=now,
+        )
+    )
+    conn.execute(
+        insert(targets),
+        [
+            dict(company_id=company, wave_id=identity, window_key=key, ordinal=index)
+            for index, key in enumerate(keys)
+        ],
+    )
+    _audit(
+        conn,
+        company,
+        actor,
+        "EIS_223_REGIONAL_WAVE_CREATED",
+        identity,
+        now,
+        {
+            "catalog_sha256": catalog_sha256,
+            "target_count": len(keys),
+            "start_day": start_day.isoformat(),
+            "end_day": end_day.isoformat(),
+            "coverage": "UNKNOWN",
+            **(transition or {}),
+        },
+    )
+    return identity
+
+
+def _expand_family_scope(
+    conn: Connection,
+    company: str,
+    current: RowMapping,
+    catalog: RowMapping,
+    now: datetime,
+    actor: str,
+) -> str | None:
+    """Append only recognized complete five/six-to-seven family transitions."""
+    regions = conn.scalar(
+        select(catalogs.c.regions).where(
+            catalogs.c.company_id == company,
+            catalogs.c.catalog_sha256 == current["catalog_sha256"],
+        )
+    )
+    if not regions or not 1 <= current["target_count"] <= MAX_WAVE_TARGETS:
+        raise ValueError("REGIONAL_FAMILY_SCOPE_UNVERIFIED")
+    desired = tuple(
+        refresh_window_key(t)
+        for t in plan_targets(tuple(sorted(regions)), current["start_day"], current["end_day"])
+    )
+    actual = tuple(
+        conn.scalars(
+            select(targets.c.window_key)
+            .where(
+                targets.c.company_id == company,
+                targets.c.wave_id == current["wave_id"],
+            )
+            .order_by(targets.c.ordinal)
+            .limit(MAX_WAVE_TARGETS + 1)
+        )
+    )
+    if len(actual) != current["target_count"] or len(set(actual)) != len(actual):
+        raise ValueError("REGIONAL_FAMILY_SCOPE_UNVERIFIED")
+    if set(actual) == set(desired):
+        return None
+    previous_families = next(
+        (
+            families
+            for families in LEGACY_FAMILY_SCOPES
+            if set(actual) == {k for k in desired if k.rsplit("/", 1)[1] in families}
+        ),
+        None,
+    )
+    if previous_families is None or current["catalog_sha256"] != catalog["catalog_sha256"]:
+        raise ValueError("REGIONAL_FAMILY_SCOPE_UNVERIFIED")
+
+    def digest(keys: tuple[str, ...]) -> str:
+        return hashlib.sha256(json.dumps(sorted(keys), separators=(",", ":")).encode()).hexdigest()
+
+    return _create_wave(
+        conn,
+        company,
+        now,
+        actor,
+        current["catalog_sha256"],
+        current["start_day"],
+        current["end_day"],
+        desired,
+        transition={
+            "change": "REGULAR_ZPESMBO_FAMILY_EXPANSION",
+            "predecessor_wave_id": current["wave_id"],
+            "previous_families": list(previous_families),
+            "families": list(FAMILIES),
+            "previous_target_count": len(actual),
+            "previous_scope_sha256": digest(actual),
+            "scope_sha256": digest(desired),
+        },
+    )
+
+
 def ensure_region_wave(
     storage: PostgresStorage,
     company: str,
@@ -260,6 +410,10 @@ def ensure_region_wave(
         if catalog is None:
             return None
         current = _current(conn, company)
+        if current is not None:
+            expanded = _expand_family_scope(conn, company, current, catalog, now, actor_id)
+            if expanded is not None:
+                return expanded
         end_day = today
         if current and fresh_first:
             if current["end_day"] >= today:
@@ -294,41 +448,9 @@ def ensure_region_wave(
             refresh_window_key(target)
             for target in plan_targets(tuple(sorted(catalog["regions"])), start_day, end_day)
         )
-        identity = str(uuid4())
-        conn.execute(
-            insert(waves).values(
-                company_id=company,
-                wave_id=identity,
-                catalog_sha256=catalog["catalog_sha256"],
-                start_day=start_day,
-                end_day=end_day,
-                target_count=len(keys),
-                created_at=now,
-            )
+        return _create_wave(
+            conn, company, now, actor_id, catalog["catalog_sha256"], start_day, end_day, keys
         )
-        conn.execute(
-            insert(targets),
-            [
-                dict(company_id=company, wave_id=identity, window_key=key, ordinal=index)
-                for index, key in enumerate(keys)
-            ],
-        )
-        _audit(
-            conn,
-            company,
-            actor_id,
-            "EIS_223_REGIONAL_WAVE_CREATED",
-            identity,
-            now,
-            {
-                "catalog_sha256": catalog["catalog_sha256"],
-                "target_count": len(keys),
-                "start_day": start_day.isoformat(),
-                "end_day": end_day.isoformat(),
-                "coverage": "UNKNOWN",
-            },
-        )
-        return identity
 
 
 def plan_targets(
@@ -637,12 +759,12 @@ def read_region_coverage(
                 .select_from(targets.outerjoin(latest, targets.c.window_key == latest.c.window_key))
                 .where(targets.c.company_id == company, targets.c.wave_id == current["wave_id"])
                 .order_by(targets.c.ordinal)
-                .limit(991)
+                .limit(MAX_WAVE_TARGETS + 1)
             )
             .mappings()
             .all()
         )
-        if len(rows) != current["target_count"] or len(rows) > 990:
+        if len(rows) != current["target_count"] or len(rows) > MAX_WAVE_TARGETS:
             raise ValueError("REGIONAL_PLAN_INCOMPLETE")
         scope = _scope(company)
         old = conn.execute(

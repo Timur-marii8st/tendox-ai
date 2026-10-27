@@ -242,7 +242,7 @@ def test_uncertain_event_never_passes_and_refresh_journal_requires_real_checkpoi
         storage, company, key, "SYNCED", actor_id="test", checked_at=NOW, response_sha256="a" * 64
     )
     targets = due_windows(storage, company, NOW, include_events=True)
-    assert len(targets) == 9
+    assert len(targets) == 13
     assert sum(t.document_type == "purchaseRejection" for t in targets) == 1
 
 

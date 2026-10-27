@@ -74,7 +74,7 @@ def record_attempt(
     _aware(checked_at)
     if not actor_id.strip() or not re.fullmatch(
         r"getDocsIP/RI223/(?:0[1-9]|[1-9][0-9])/[0-9]{4}-[0-9]{2}-[0-9]{2}\+03:00/"
-        r"(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice|purchaseRejection|purchaseLotCancellation)",
+        r"(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice|purchaseNoticeKESMBO|purchaseNoticeZPESMBO|purchaseRejection|purchaseLotCancellation)",
         key,
     ):
         raise ValueError("ATTEMPT_SCOPE_INVALID")

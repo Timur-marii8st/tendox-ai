@@ -6,6 +6,7 @@
 
 ## Файлы
 
+
 - [35-eis-document-catalog.md](35-eis-document-catalog.md) — Официальный каталог типов документов ЕИС.
 - [37-eis-223-notices.md](37-eis-223-notices.md) — Отдельный reader извещений 223-ФЗ.
 - [38-eis-223-families.md](38-eis-223-families.md) — Проверка дополнительных семейств 223-ФЗ.
@@ -46,3 +47,23 @@
 - [85-eis-mixed-number-archives.md](85-eis-mixed-number-archives.md) — S202 — смешанные адресные архивы ЕИС.
 
 - [120-eis-national-coverage.md](120-eis-national-coverage.md) — Национальный приоритет, production census и закрытие фактических пробелов.
+- [134-eis-ezk-final-companion.md](134-eis-ezk-final-companion.md) — V46: полный адресный архив извещения ЭЗК с итоговым протоколом, сохранение source и проверка поиска.
+
+- [137-eis-completeness-recovery.md](137-eis-completeness-recovery.md) — V49: свежий census44/223, официальная сверка и восстановление полноты; в работе.
+- [138-eis-drug-positions.md](138-eis-drug-positions.md) — V50: 26 лекарственных позиций из retained XML; installed bounded PASS.
+
+- [140-eis-223-regular-kesmbo.md](140-eis-223-regular-kesmbo.md) — V52: региональный KESMBO установлен; native312/UI/49штатных окон, bounded PASS.
+
+- [141-eis-kes-five-live.md](141-eis-kes-five-live.md) — V53: пять разных штатных KES архивов, native/mainHTTP/actualUI5, bounded PASS.
+
+- [142-eis-223-regular-zpesmbo.md](142-eis-223-regular-zpesmbo.md) — V54: подтверждённый unsupported ZP, source0 и контракт регулярного потока.
+
+- [V55: позиции совместных закупок223](143-eis-223-joint-positions.md) — installed joint2/control1 и review PASS.
+
+- [V56: сохранённый корпус ZP и joint backfill](144-eis-223-joint-backfill.md) —135native XML, source0 repair и fiveHTTP/UI приняты bounded.
+
+- [V57: полный зафиксированный ZP corpus в поиске](145-eis-zp-corpus-search.md) —135mainAPI/287nativeitems, bounded review PASS.
+
+- [V58: свежий census44/223](146-eis-completeness-census.md) — 6drug/14позиций восстановлены; HTTP/UI6 и review PASS,106joint далее.
+
+- [V59: joint general/KES/AES](147-eis-223-joint-families.md) —106nativeitems/6карточек; ограниченная реализация готовится.

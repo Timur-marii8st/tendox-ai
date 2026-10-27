@@ -232,7 +232,7 @@ def test_real_family_journal_checkpoint_and_shared_ten_targets(storage):
     )
     targets = due_windows(storage, company, NOW, include_events=True)
     assert (
-        len(targets) == 9
+        len(targets) == 13
         and sum(t.document_type == "purchaseLotCancellation" for t in targets) == 1
     )
 

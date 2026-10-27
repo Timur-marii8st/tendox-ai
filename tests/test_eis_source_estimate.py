@@ -250,3 +250,42 @@ def test_api_safe_errors(monkeypatch, error, status):
         "POST", "/v1/tender-discovery/eis-source-estimate", body=request().model_dump(mode="json")
     )
     assert response.status_code == status and "secret" not in response.text
+
+
+@pytest.mark.parametrize("count,truncated", [(1, False), (2, False), (1, True)])
+def test_unit_denominator_requires_complete_single_source_position(monkeypatch, count, truncated):
+    from dataclasses import replace
+
+    from procurement.sources.eis_position_evidence import positions44
+    from test_eis_position_evidence import notice44
+
+    bridge = two_bridges()[0]
+    positions = positions44(
+        replace(notice44(), xml_sha256=bridge.notice.notice_xml_sha256)
+    ).model_copy(
+        update={
+            "positions_total": count,
+            "positions_truncated": truncated,
+        }
+    )
+    bridge = bridge.model_copy(update={"position_set": positions})
+    result = compute(monkeypatch, bridge=bridge)
+    if count == 1 and not truncated:
+        assert result.unit_quantity == positions.positions[0].quantity
+        assert result.quantity_unit == positions.positions[0].unit
+    else:
+        assert result.unit_quantity is result.quantity_unit is None
+
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_223_quantity_belongs_to_selected_lot_not_other_lots(monkeypatch, count):
+    row = row223()
+    lot = row.notice.lots[0]
+    changed = lot.model_copy(update={"items": lot.items * count})
+    row = row.model_copy(update={"notice": row.notice.model_copy(update={"lots": (changed, lot)})})
+    result = compute(monkeypatch, request("223"), lotrow=row)
+    if count == 1:
+        assert result.unit_quantity == lot.items[0].quantity
+        assert result.quantity_unit == lot.items[0].unit_name
+    else:
+        assert result.unit_quantity is result.quantity_unit is None

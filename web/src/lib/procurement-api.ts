@@ -274,6 +274,7 @@ export type EisDiscoveryResult = {
   coverage: "UPLOADED_EXPORT_ONLY"; source_authenticity: "UNKNOWN";
 };
 export type EisIndexedLead = {
+  position_set?: PositionEvidenceSet | null;
   document_type: string;
   purchase_number: string; version_number: number; title: string; notice_url: string;
   nmck_rub: string | null; deadline: string | null;
@@ -1525,7 +1526,7 @@ export function searchIndexedEis(
   );
 }
 
-type Eis223TextFact = { value: string | null; raw: string | null; provenance: Provenance };
+export type Eis223TextFact = { value: string | null; raw: string | null; provenance: Provenance };
 type Eis223TimeFact = Eis223TextFact & { status: "AWARE" | "UNKNOWN" };
 type Eis223DateFact = Eis223TextFact & { timezone_raw: string | null; status: "DATE" | "UNKNOWN" };
 export type Eis223LotCancellation = {
@@ -1560,7 +1561,20 @@ export type Eis223RejectionState = {
     xml_sha256: string; source_member: string }>;
 };
 export type Eis223SourcePriceKind = "INITIAL_SUM" | "MAX_CONTRACT_PRICE" | "TEXT_ONLY" | "UNKNOWN";
-export type Eis223DocumentType = "purchaseNoticeAESMBO" | "purchaseNoticeZKESMBO" | "purchaseNotice";
+export type Eis223DocumentType = "purchaseNoticeAESMBO" | "purchaseNoticeZKESMBO" | "purchaseNoticeKESMBO" | "purchaseNoticeZPESMBO" | "purchaseNotice";
+export type Eis223PositionProjection = {
+  law: "223"; document_type: Exclude<Eis223DocumentType, "purchaseNoticeZKESMBO">; purchase_number: string;
+  version_number: number; notice_xml_sha256: string; source_member: string;
+  parser_version: "eis223-joint-positions-v1"; source_item_coverage: "PASS" | "UNKNOWN";
+  specification_completeness: "UNKNOWN"; economics_status: "UNKNOWN"; reasons: string[];
+  lots: Array<{ lot_index: number; ordinal: Eis223TextFact; provenance: Provenance;
+    customers: Array<{ customer_index: number; name: Eis223TextFact; inn: Eis223TextFact;
+      kpp: Eis223TextFact; iko: Eis223TextFact; provenance: Provenance;
+      items: Array<{ description: Eis223TextFact; classification_code: Eis223TextFact;
+        classification_name: Eis223TextFact; quantity: Eis223TextFact;
+        unit_code: Eis223TextFact; unit_name: Eis223TextFact; provenance: Provenance }> }> }>;
+};
+
 export type Eis223SearchResult = {
   next_cursor?: string | null; page_snapshot_sha256?: string | null; snapshot_at?: string | null;
   query: string; checked_at: string; indexed_current_notices: number; indexed_windows: number;
@@ -1570,6 +1584,7 @@ export type Eis223SearchResult = {
   matched: Array<{
     cancellation_state?: Eis223RejectionState | null;
     lot_cancellation_state?: Eis223LotCancellationState | null;
+    position_projection?: Eis223PositionProjection | null;
     notice: {
       law: "223"; document_type: Eis223DocumentType; purchase_number: string;
       version_number: number; xml_sha256: string; source_member: string;

@@ -13,9 +13,7 @@ from test_eis_feed_sync import SOAP_NS, TOKEN, UID, _response
 
 
 class Transport:
-    def __init__(
-        self, state="READY", failure=None, family="purchaseNoticeAESMBO", region="50"
-    ):
+    def __init__(self, state="READY", failure=None, family="purchaseNoticeAESMBO", region="50"):
         self.family = family
         self.region = region
         self.state, self.failure = state, failure
@@ -109,10 +107,14 @@ class MultiArchiveTransport:
                 f"?docRequestUid={uid}&compoundUid={index:032x}"
                 for index in range(1, self.count + 1)
             )
-            content = "<dataInfo>" + "".join(
-                f"<archiveUrl>{source_url.replace('&', '&amp;')}</archiveUrl>"
-                for source_url in self.urls
-            ) + "</dataInfo>"
+            content = (
+                "<dataInfo>"
+                + "".join(
+                    f"<archiveUrl>{source_url.replace('&', '&amp;')}</archiveUrl>"
+                    for source_url in self.urls
+                )
+                + "</dataInfo>"
+            )
             return 200, _response("getDocsByOrgRegionResponse", content, uid)
         content = f"<docRequestUid>{self.initial_uid}</docRequestUid>"
         content += "<dataInfo><isPreparationCompleted>true</isPreparationCompleted>"
@@ -404,6 +406,8 @@ def test_refresh_batch_caps_two_windows_and_passes_their_exact_family(monkeypatc
         "purchaseNoticeAESMBO",
         "purchaseNoticeZKESMBO",
         "purchaseNotice",
+        "purchaseNoticeKESMBO",
+        "purchaseNoticeZPESMBO",
     )
     targets = tuple(
         Eis223RefreshTarget(day, family)
@@ -428,7 +432,7 @@ def test_refresh_batch_caps_two_windows_and_passes_their_exact_family(monkeypatc
     result = asyncio.run(runner.run())
     assert calls == [(target.day, target.document_type) for target in targets[:2]]
     assert (
-        result["attempted"] == 2 and result["due_windows"] == 6 and result["deferred_windows"] == 4
+        result["attempted"] == 2 and result["due_windows"] == 10 and result["deferred_windows"] == 8
     )
     assert len(records) == 2 and records[0].endswith("purchaseNoticeAESMBO")
 

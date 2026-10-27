@@ -70,3 +70,34 @@ def test_unauthorized_and_oversized_payloads_never_reach_storage(monkeypatch):
         content=b" " * 32769,
     )
     assert r.status_code == 413 and not calls
+
+
+def test_history_read_is_private_server_derived_and_rejects_client_eligibility(monkeypatch):
+    from procurement.domain.regional_discount import regional_discount
+    from procurement.storage.beta_quote import BetaHistoryReport
+    from test_regional_discount import NOW, history
+
+    calls = []
+
+    def read_history(storage, company, ref, *, actor):
+        calls.append((company, actor))
+        data = history(
+            observations=[],
+            company_id=company,
+            target_id=f"44:{ref.notice.purchase_number}:0",
+        )
+        return BetaHistoryReport(ref=ref, history=regional_discount(data, now=NOW))
+
+    monkeypatch.setattr(api, "history_report", read_history)
+    c, _ = client(monkeypatch)
+    url = "/v1/beta-procurement/history/read"
+    assert c.post(url, json=REF).status_code == 401
+    headers = {"Authorization": "Bearer personal"}
+    for extra in ({"company_id": "foreign"}, {"observations": []}, {"current_result": True}):
+        assert c.post(url, json=REF | extra, headers=headers).status_code == 422
+    assert not calls
+    result = c.post(url, json=REF, headers=headers)
+    assert result.status_code == 200 and result.headers["cache-control"] == "no-store"
+    assert calls == [("server-tenant", "server-actor")]
+    assert result.json()["history"]["status"] == "UNKNOWN"
+    assert result.json()["history"]["realistic_discount"] is None

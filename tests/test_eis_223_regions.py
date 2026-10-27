@@ -83,10 +83,10 @@ def test_changed_missing_duplicate_or_truncated_catalog_is_rejected(content):
 
 def test_matrix_is_single_parameterized_loader_interleaved_and_exact_roundtrip():
     targets = plan_targets(("01", "50", "77", "78", "99"), date(2026, 10, 2), date(2026, 10, 3))
-    assert len(targets) == 50
+    assert len(targets) == 70
     assert [t.region for t in targets[:10:2]] == ["01", "50", "77", "78", "99"]
     assert [t.day for t in targets[:2]] == [date(2026, 10, 3), date(2026, 10, 2)]
-    assert len({refresh_window_key(t) for t in targets}) == 50
+    assert len({refresh_window_key(t) for t in targets}) == 70
     assert all(target_from_key(refresh_window_key(t)) == t for t in targets)
 
 

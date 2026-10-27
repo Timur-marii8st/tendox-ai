@@ -90,7 +90,13 @@ def extract_navigation(
     nst = "http://zakupki.gov.ru/223fz/types/1"
     if law == "223":
         kind = root.tag.removeprefix(f"{{{nsp}}}")
-        if kind not in {"purchaseNotice", "purchaseNoticeAESMBO", "purchaseNoticeZKESMBO"}:
+        if kind not in {
+            "purchaseNotice",
+            "purchaseNoticeAESMBO",
+            "purchaseNoticeZKESMBO",
+            "purchaseNoticeKESMBO",
+            "purchaseNoticeZPESMBO",
+        }:
             raise ValueError("NAVIGATION_NOTICE_TYPE")
         prefix = f"{{{nsp}}}body/{{{nsp}}}item/{{{nsp}}}{kind}Data"
         nodes = root.findall(prefix)

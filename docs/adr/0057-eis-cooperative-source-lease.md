@@ -89,3 +89,9 @@ progress и передачу lease после atomic window, не полный r
 момент передачи evidence root; его итог не приписывается canary. Full900sweep,
 устойчивая6h freshness и строгая fairness SLA не доказаны. Whole coverage/
 freshness остаются UNKNOWN; последующие operational результаты ведёт root.
+
+## Дополнение26Oct2026
+
+[ADR120](0120-eis-freshness-priority-wait.md) уточняет fresh priority handoff:
+один fresh dispatch waiter вместо потери tick при document priority ownership.
+Document/import300s и прежние source/lease guards сохраняются; статус V51 в ADR120.

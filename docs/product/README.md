@@ -12,3 +12,4 @@
 - [12-requirements-traceability.md](12-requirements-traceability.md) — 12-requirements-traceability.
 - [14-product-agents.md](14-product-agents.md) — AGENTS.md — реестр ИИ-агентов продукта.
 - [16-improvement-program.md](16-improvement-program.md) — ordered improvement program, acceptance targets and evidence handoff contract.
+- [17-economists-investor-brief.md](17-economists-investor-brief.md) — Комплект и задание для бизнес-плана и инвесторской презентации.

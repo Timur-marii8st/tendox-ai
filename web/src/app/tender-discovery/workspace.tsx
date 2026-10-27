@@ -7,6 +7,8 @@ import { BetaFinancialComparison } from "./beta-shortlist";
 import { betaProfileSearch } from "./beta-actions";
 import { TenderDocuments } from "./tender-documents";
 import { IndexedDocuments } from "./indexed-documents";
+import { PositionEvidenceView } from "./position-evidence";
+import { PositionEvidence223View } from "./position-evidence-223";
 import { AddToMixedComparison } from "./mixed-comparison";
 import { mergeSearchPage } from "./paged-results";
 import { loadWorkspacePage, searchWorkspace, searchGlobalWorkspace } from "./workspace-actions";
@@ -228,7 +230,7 @@ function TenderDetail({ row, headingRef, onQuoteSaved }: { row: TenderRow; headi
     <h2 id="tender-detail-title" ref={headingRef} tabIndex={-1}>{row.title}</h2>
     <span className={`${styles.statusBadge} ${row.blocked ? styles.blocked : ""}`}>{row.statusLabel}</span>
     <div className={styles.facts}><div><p>{row.priceLabel}</p><strong>{row.priceValue}</strong></div><div><p>Окончание подачи</p><strong className={styles.deadlineValue}>{formatTenderDeadline(row.deadline)}</strong></div></div>
-    <section className={styles.positions}><h3>Что закупают</h3>{row.positions.length ? <><p className={styles.muted}>Позиции из сохранённого извещения. Полнота ТЗ требует проверки.</p><ul>{row.positions.slice(0, 6).map((item, index) => <li key={`${item.locator}:${index}`}><span>{item.name}</span><strong>{item.quantity} <small>{item.unit}</small></strong></li>)}</ul>{row.positions.length > 6 && <p className={styles.muted}>Показано 6 из {row.positions.length} позиций. Полный список — в источниках ниже.</p>}</> : <p className={styles.muted}>Позиции не подтверждены. Проверьте документы закупки.</p>}</section>
+    <section className={styles.positions}><h3>Что закупают</h3>{row.raw223?.position_projection ? <PositionEvidence223View projection={row.raw223.position_projection} ordinaryPositions={row.positions} /> : row.positionSet ? <PositionEvidenceView set={row.positionSet} /> : row.positions.length ? <><p className={styles.muted}>Позиции из сохранённого извещения. Полнота ТЗ требует проверки.</p><ul>{row.positions.slice(0, 6).map((item, index) => <li key={`${item.locator}:${index}`}><span>{item.name}</span><strong>{item.quantity} <small>{item.unit}</small></strong></li>)}</ul>{row.positions.length > 6 && <p className={styles.muted}>Показано 6 из {row.positions.length} позиций. Полный список — в источниках ниже.</p>}</> : <p className={styles.muted}>Позиции не подтверждены. Проверьте документы закупки.</p>}</section>
     <section><h3>Место поставки</h3><p>{row.deliveryRegions?.map(fact => fact.value).join("; ") || "Регион поставки не подтверждён"}</p>{row.navigation?.delivery_addresses?.map((fact,index) => <p key={index}>{fact.value}</p>)}<p className={styles.muted}>Полнота мест исполнения требует проверки ТЗ.</p></section>
     <TenderDocuments row={row} />
     <BetaQuote notice={{ law: row.law, purchase_number: row.purchaseNumber, version_number: row.version, notice_xml_sha256: row.xmlSha256 }} lotCount={row.raw223?.notice.lots.length ?? 1} deadline={row.deadline} blocked={row.blocked} onSaved={onQuoteSaved} />

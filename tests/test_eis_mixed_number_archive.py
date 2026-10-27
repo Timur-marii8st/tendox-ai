@@ -84,17 +84,59 @@ def test_foreign_number_in_any_family_blocks_entire_set(kind):
 def test_mixed_all_members_are_admitted_only_by_number():
     raw = mixed(*(companion(kind) for kind in COMPANION_TYPES))
     flight = preflight_ready_window(window(raw))
-    assert flight.notice_count == 7
-    assert len(flight.inspections[0].events) == 6
+    assert flight.notice_count == 1 + len(COMPANION_TYPES)
+    assert len(flight.inspections[0].events) == len(COMPANION_TYPES)
     initial, prepared = _responses()
     with pytest.raises(EisFeedArchiveError, match="DOCUMENT_TYPE_UNSUPPORTED"):
         preflight_ready_window(bind_ready_window(WINDOW, initial, prepared, {URL: raw}))
+
+
+def _assert_protocol_retained_without_masking_cancellation(kind):
+    xml = companion(kind)
+    raw = mixed(xml)
+    inspection = preflight_ready_window(window(raw)).inspections[0]
+    assert inspection.archive_sha256 == hashlib.sha256(raw).hexdigest()
+    assert len(inspection.records) == len(inspection.events) == 1
+    final = inspection.events[0]
+    assert final.document_type == kind
+    assert final.document_id == "sha256:" + hashlib.sha256(xml).hexdigest()
+    assert final.locator == kind + "/commonInfo/purchaseNumber"
+    assert final.published_at == datetime.fromisoformat("2026-10-04T15:00:00+03:00")
+    cancel = parse(event_zip(number=NUMBER))
+    state = resolve_procedure_state((cancel, final), purchase_number=NUMBER, now=NOW)
+    assert state.application_status == "FAIL"
+    assert any(final.xml_sha256 in reason for reason in state.reasons)
+
+
+def test_ezk_final_is_retained_with_notice_and_cannot_mask_cancellation():
+    _assert_protocol_retained_without_masking_cancellation("epProtocolEZK2020Final")
+
+
+@pytest.mark.parametrize("kind", ["epProtocolEF2020SubmitOffers", "epProtocolEF2020Final"])
+def test_ea_protocol_is_retained_without_masking_cancellation(kind):
+    _assert_protocol_retained_without_masking_cancellation(kind)
 
 
 @pytest.mark.parametrize("namespace", ["urn:forged", "http://zakupki.gov.ru/oos/export/1"])
 def test_namespace_spoof_is_not_number_evidence(namespace):
     with pytest.raises(EisFeedArchiveError, match="COMPANION_FIELD_NAMESPACE_INVALID"):
         preflight_ready_window(window(mixed(companion(COMPANION_TYPES[0], namespace=namespace))))
+
+
+def _assert_protocol_namespace_spoof_rejected(namespace, kind):
+    with pytest.raises(EisFeedArchiveError, match="COMPANION_FIELD_NAMESPACE_INVALID"):
+        preflight_ready_window(window(mixed(companion(kind, namespace=namespace))))
+
+
+@pytest.mark.parametrize("namespace", ["urn:forged", "http://zakupki.gov.ru/oos/export/1"])
+def test_ezk_final_namespace_spoof_is_rejected(namespace):
+    _assert_protocol_namespace_spoof_rejected(namespace, "epProtocolEZK2020Final")
+
+
+@pytest.mark.parametrize("namespace", ["urn:forged", "http://zakupki.gov.ru/oos/export/1"])
+@pytest.mark.parametrize("kind", ["epProtocolEF2020SubmitOffers", "epProtocolEF2020Final"])
+def test_ea_protocol_namespace_spoof_is_rejected(namespace, kind):
+    _assert_protocol_namespace_spoof_rejected(namespace, kind)
 
 
 def test_nested_number_and_unknown_member_are_not_silently_skipped():
@@ -163,7 +205,7 @@ def test_isolated_pg_atomic_complete_metadata_index_replay_and_constraints():
     bound = window(raw)
     try:
         report = ingest_ready_window(storage, "s202-synthetic", bound, actor_id="synthetic")
-        assert report.new_versions == 1 and report.new_events == 6
+        assert report.new_versions == 1 and report.new_events == len(COMPANION_TYPES)
         replay = ingest_ready_window(storage, "s202-synthetic", bound, actor_id="synthetic")
         assert replay.replayed and replay.new_versions == replay.new_events == 0
         with storage.transaction("s202-synthetic", consistent_read=True) as conn:
@@ -171,7 +213,7 @@ def test_isolated_pg_atomic_complete_metadata_index_replay_and_constraints():
             assert conn.scalar(select(func.count()).select_from(eis_notice_search_keys)) == 1
             events = conn.execute(select(eis_procedure_events)).mappings().all()
             notice = conn.execute(select(eis_notice_versions)).mappings().one()
-        assert len(events) == 6
+        assert len(events) == len(COMPANION_TYPES)
         ref = NoticeDocumentRef(
             purchase_number=NUMBER, version_number=1, notice_xml_sha256=notice["xml_sha256"]
         )

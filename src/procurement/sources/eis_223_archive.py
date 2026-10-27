@@ -22,17 +22,17 @@ TYPES_NS = "http://zakupki.gov.ru/223fz/types/1"
 DOCUMENT_TYPE: Literal["purchaseNoticeAESMBO"] = "purchaseNoticeAESMBO"
 TARGETED_DOCUMENT_TYPE: Literal["purchaseNoticeKESMBO"] = "purchaseNoticeKESMBO"
 Eis223DocumentType = Literal[
-    "purchaseNoticeAESMBO", "purchaseNoticeZKESMBO", "purchaseNotice", "purchaseNoticeKESMBO"
+    "purchaseNoticeAESMBO", "purchaseNoticeZKESMBO", "purchaseNotice", "purchaseNoticeKESMBO",
+    "purchaseNoticeZPESMBO",
 ]
 SUPPORTED_DOCUMENT_TYPES: tuple[Eis223DocumentType, ...] = (
     DOCUMENT_TYPE,
     "purchaseNoticeZKESMBO",
     "purchaseNotice",
-)
-PARSABLE_DOCUMENT_TYPES: tuple[Eis223DocumentType, ...] = (
-    *SUPPORTED_DOCUMENT_TYPES,
     TARGETED_DOCUMENT_TYPE,
+    "purchaseNoticeZPESMBO",
 )
+PARSABLE_DOCUMENT_TYPES: tuple[Eis223DocumentType, ...] = SUPPORTED_DOCUMENT_TYPES
 MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_XML_BYTES = 4 * 1024 * 1024  # Shared event/lot-event contract remains unchanged.
 MAX_NOTICE_XML_BYTES = 12 * 1024 * 1024
@@ -607,7 +607,7 @@ def parse_notice223_xml(
                     detail_path + "/t:forSmallOrMiddle",
                 ),
             }
-        if document_type == TARGETED_DOCUMENT_TYPE:
+        if document_type in (TARGETED_DOCUMENT_TYPE, "purchaseNoticeZPESMBO"):
             source_fields["guid"] = _text(lot, TYPES_NS, "guid", sha, path + "/t:guid")
         items_parent = _optional(detail, TYPES_NS, "lotItems")
         items = []
@@ -771,7 +771,7 @@ def parse_notice223_xml(
             "manifest_additional_count": additional_count,
             "manifest_references": tuple(manifest_references),
         }
-    if document_type == TARGETED_DOCUMENT_TYPE:
+    if document_type in (TARGETED_DOCUMENT_TYPE, "purchaseNoticeZPESMBO"):
         generic_fields = {
             "purchase_guid": _text(data, PURCHASE_NS, "guid", sha, base + "/p:guid"),
             "for_small_or_middle_raw": _text(

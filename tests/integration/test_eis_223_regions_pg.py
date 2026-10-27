@@ -13,6 +13,7 @@ from test_eis_223_index_pg import storage as pg_storage
 from procurement.sources.eis_223_regions import REGION_SELECTOR_URL
 from procurement.storage.eis_223_regions import (
     ensure_region_wave,
+    plan_targets,
     read_region_coverage,
     regional_due_windows,
     register_region_catalog,
@@ -66,8 +67,8 @@ def test_shared_fresh_turn_fills_repeat_slots_and_retains_old_history(storage):
         attempt(storage, company, target)
     later = NOW + timedelta(hours=6)
     due = regional_due_windows(storage, company, later, limit=32, fresh_first=True, fresh_only=True)
-    # All fifteen current-day coordinates are due, not the previous four-slot cap.
-    assert len(due) >= 15
+    # All eighteen current-day coordinates are due, not the previous four-slot cap.
+    assert len(due) >= 18
     assert all(t.day >= later.astimezone(MSK).date() - timedelta(days=1) for t in due)
     attempt(storage, company, first[0], outcome="FAILED")
     retried = regional_due_windows(
@@ -97,7 +98,7 @@ def test_shared_fresh_turn_fills_repeat_slots_and_retains_old_history(storage):
                     eis_223_region_targets.c.window_key.in_(old_keys),
                 )
             )
-            == 30
+            == 32
         )
 
 
@@ -133,7 +134,7 @@ def test_fresh_first_calendar_does_not_wait_for_old_wave_and_retains_date_gaps(s
                     eis_223_region_targets.c.wave_id == first_wave,
                 )
             )
-            == 30
+            == 42
         )
     covered = {d for start, end in intervals for d in (start, end)}
     assert all((NOW.date() - timedelta(days=1) + timedelta(days=i)) in covered for i in range(10))
@@ -144,7 +145,7 @@ def test_catalog_replay_and_rls_immutable_full_wave(storage):
     wave = seed(storage, company)
     assert seed(storage, company) == wave
     status = read_region_coverage(storage, company, now=NOW)
-    assert (status.catalog_regions, status.planned, status.unattempted) == (3, 30, 30)
+    assert (status.catalog_regions, status.planned, status.unattempted) == (3, 42, 42)
     assert status.observation_watermark is None and status.freshness == "UNKNOWN"
     other = read_region_coverage(storage, "other-" + uuid4().hex, now=NOW)
     assert other.planned == 0
@@ -158,7 +159,7 @@ def test_midnight_restart_retains_unseen_and_early_retry_survives_partial_batch(
     company = "fair-regions-" + uuid4().hex
     wave = seed(storage, company)
     first = regional_due_windows(storage, company, NOW)
-    assert len(first) == 30 and [t.region for t in first[:6:2]] == ["50", "77", "78"]
+    assert len(first) == 32 and [t.region for t in first[:6:2]] == ["50", "77", "78"]
     attempt(storage, company, first[0], outcome="FAILED")
     later = NOW + timedelta(days=3)
     assert ensure_region_wave(storage, company, later, actor_id="test") == wave
@@ -168,7 +169,7 @@ def test_midnight_restart_retains_unseen_and_early_retry_survives_partial_batch(
         first[1],
     )  # retry actually starts before the deadline can truncate batch
     status = read_region_coverage(storage, company, now=later)
-    assert (status.failed, status.unattempted, status.source_day_lag) == (1, 29, 3)
+    assert (status.failed, status.unattempted, status.source_day_lag) == (1, 41, 3)
     assert status.oldest_gap_day.isoformat() == "2026-10-02"
     with pytest.raises(ValueError, match="REGIONAL_BATCH_INVALID"):
         regional_due_windows(storage, company, later, limit=1)
@@ -178,7 +179,9 @@ def test_failed_gap_does_not_freeze_new_wave_and_catchup_does_not_skip_days(stor
     company = "advance-regions-" + uuid4().hex
     first_wave = seed(storage, company)
     first = regional_due_windows(storage, company, NOW)
-    for index, target in enumerate(first):
+    for index, target in enumerate(
+        plan_targets(("50", "77", "78"), NOW.date() - timedelta(days=1), NOW.date())
+    ):
         attempt(storage, company, target, outcome="FAILED" if index == 0 else "NO_DATA")
     assert regional_due_windows(storage, company, NOW + timedelta(minutes=59)) == ()
     later = NOW + timedelta(days=4)
@@ -196,10 +199,12 @@ def test_failed_gap_does_not_freeze_new_wave_and_catchup_does_not_skip_days(stor
 def test_exact_terminal_scope_has_oldest_watermark_but_never_full_eis_claim(storage):
     company = "complete-regions-" + uuid4().hex
     seed(storage, company)
-    for index, target in enumerate(regional_due_windows(storage, company, NOW)):
+    for index, target in enumerate(
+        plan_targets(("50", "77", "78"), NOW.date() - timedelta(days=1), NOW.date())
+    ):
         attempt(storage, company, target, now=NOW + timedelta(seconds=index))
     result = read_region_coverage(storage, company, now=NOW + timedelta(minutes=1))
-    assert result.scope_status == "COMPLETE" and result.no_data == 30
+    assert result.scope_status == "COMPLETE" and result.no_data == 42
     assert result.regions_terminal == 3 and result.observation_watermark == NOW
     assert result.first_sweep_finished and result.coverage == result.freshness == "UNKNOWN"
 
@@ -267,13 +272,13 @@ def test_early_fresh_and_retry_slots_precede_unseen_without_duplicates(storage):
     assert due == (first[0], first[1], first[2])
     assert regional_due_windows(storage, company, later, limit=2) == (first[1], first[2])
     all_due = regional_due_windows(storage, company, later)
-    assert len(all_due) == len(set(refresh_window_key(t) for t in all_due)) == 30
+    assert len(all_due) == len(set(refresh_window_key(t) for t in all_due)) == 32
 
 
 def test_finished_wave_advances_at_moscow_midnight_before_24h_without_skipping(storage):
     company = "midnight-fresh-" + uuid4().hex
     first_wave = seed(storage, company)
-    for target in regional_due_windows(storage, company, NOW):
+    for target in plan_targets(("50", "77", "78"), NOW.date() - timedelta(days=1), NOW.date()):
         attempt(storage, company, target)
     later = NOW + timedelta(hours=3)  # 00:00 MSK, only three hours since creation.
     second = ensure_region_wave(storage, company, later, actor_id="test")
@@ -383,7 +388,8 @@ def test_materialized_history_keeps_failure_ties_and_newer_terminal_evidence(sto
 
     company = "history-ties-" + uuid4().hex
     seed(storage, company)
-    planned = regional_due_windows(storage, company, NOW)
+    # History tie semantics cover every family, beyond the first32 dispatch batch.
+    planned = plan_targets(("50", "77", "78"), NOW.date() - timedelta(days=1), NOW.date())
     selected = [
         next(target for target in planned if refresh_window_key(target).endswith("/" + family))
         for family in regions.FAMILIES

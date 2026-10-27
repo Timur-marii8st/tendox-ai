@@ -808,7 +808,10 @@ eis_223_windows = Table(
     CheckConstraint(
         "window_key ~ '^getDocsIP/RI223/[0-9]{2}/[0-9]{4}-[0-9]{2}-[0-9]{2}"
         "[+]03:00/(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice)$' "
-        "OR window_key ~ '^getDocsIP/RI223/by-number/[0-9]{11}/purchaseNoticeKESMBO$'",
+        "OR window_key ~ '^getDocsIP/RI223/by-number/[0-9]{11}/"
+        "(purchaseNoticeKESMBO|purchaseNoticeZPESMBO)$' "
+        "OR window_key ~ '^getDocsIP/RI223/(0[1-9]|[1-9][0-9])/"
+        "[0-9]{4}-[0-9]{2}-[0-9]{2}[+]03:00/(purchaseNoticeKESMBO|purchaseNoticeZPESMBO)$'",
         name="ck_eis_223_window",
     ),
     CheckConstraint(
@@ -901,7 +904,8 @@ eis_223_notice_versions = Table(
     CheckConstraint(
         "COALESCE((jsonb_typeof(snapshot) = 'object' AND snapshot->>'law' = '223' "
         "AND snapshot->>'document_type' IN "
-        "('purchaseNoticeAESMBO','purchaseNoticeZKESMBO','purchaseNotice','purchaseNoticeKESMBO') "
+        "('purchaseNoticeAESMBO','purchaseNoticeZKESMBO','purchaseNotice',"
+        "'purchaseNoticeKESMBO','purchaseNoticeZPESMBO') "
         "AND snapshot->>'document_type' = split_part(window_key, '/', 5) "
         "AND snapshot->>'purchase_number' = purchase_number "
         "AND (split_part(window_key, '/', 3) <> 'by-number' "
@@ -912,6 +916,68 @@ eis_223_notice_versions = Table(
     ),
 )
 Index("ix_eis_223_search_keys", eis_223_notice_versions.c.search_keys, postgresql_using="gin")
+
+# Source-derived customer groups do not rewrite canonical notice versions.
+eis_223_position_projections = Table(
+    "eis_223_position_projections",
+    metadata,
+    Column("company_id", Text, nullable=False),
+    Column("purchase_number", Text, nullable=False),
+    Column("version_number", Integer, nullable=False),
+    Column("notice_xml_sha256", String(64), nullable=False),
+    Column("parser_version", Text, nullable=False),
+    Column("position_set", JSONB, nullable=False),
+    Column("projection_sha256", String(64), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    PrimaryKeyConstraint(
+        "company_id",
+        "purchase_number",
+        "version_number",
+        "parser_version",
+        name="pk_eis_223_position_projection",
+    ),
+    ForeignKeyConstraint(
+        ["company_id", "purchase_number", "version_number", "notice_xml_sha256"],
+        [
+            "eis_223_notice_versions.company_id",
+            "eis_223_notice_versions.purchase_number",
+            "eis_223_notice_versions.version_number",
+            "eis_223_notice_versions.xml_sha256",
+        ],
+        name="fk_eis_223_position_xml",
+    ),
+    CheckConstraint(
+        "btrim(company_id) <> '' AND parser_version = 'eis223-joint-positions-v1'",
+        name="ck_eis_223_position_text",
+    ),
+    CheckConstraint(
+        "notice_xml_sha256 ~ '^[0-9a-f]{64}$' AND projection_sha256 ~ '^[0-9a-f]{64}$'",
+        name="ck_eis_223_position_sha",
+    ),
+    CheckConstraint(
+        "COALESCE(jsonb_typeof(position_set) = 'object' AND position_set->>'law' = '223' AND "
+        "position_set->>'document_type' IN ('purchaseNoticeZPESMBO','purchaseNoticeKESMBO',"
+        "'purchaseNotice','purchaseNoticeAESMBO') AND "
+        "position_set->>'purchase_number' = purchase_number AND "
+        "(position_set->>'version_number')::integer = version_number AND "
+        "position_set->>'notice_xml_sha256' = notice_xml_sha256 AND "
+        "position_set->>'parser_version' = parser_version AND "
+        "jsonb_typeof(position_set->'lots') = 'array' AND "
+        "jsonb_array_length(position_set->'lots') > 0 AND "
+        "length(position_set->>'source_member') BETWEEN 1 AND 1024 AND "
+        "position_set->>'source_item_coverage' IN ('PASS','UNKNOWN') AND "
+        "position_set->>'specification_completeness' = 'UNKNOWN' AND "
+        "position_set->>'economics_status' = 'UNKNOWN', false)",
+        name="ck_eis_223_position_identity",
+    ),
+    CheckConstraint(
+        "NOT jsonb_path_exists(position_set, '$.**.provenance ? "
+        "(!exists(@.document_id) || @.document_id != $sha || !exists(@.locator))', "
+        "jsonb_build_object('sha', notice_xml_sha256)) AND "
+        "jsonb_path_exists(position_set, '$.lots[*].provenance.document_id')",
+        name="ck_eis_223_position_provenance",
+    ),
+)
 
 eis_223_schema_checks = Table(
     "eis_223_schema_checks",
@@ -1101,7 +1167,7 @@ eis_223_region_waves = Table(
         name="ck_eis_223_region_wave_identity",
     ),
     CheckConstraint(
-        "start_day <= end_day AND target_count BETWEEN 1 AND 990",
+        "start_day <= end_day AND target_count BETWEEN 1 AND 1386",
         name="ck_eis_223_region_wave_bounds",
     ),
 )
@@ -1124,7 +1190,7 @@ eis_223_region_targets = Table(
     CheckConstraint(
         "window_key ~ '^getDocsIP/RI223/(0[1-9]|[1-9][0-9])/"
         "[0-9]{4}-[0-9]{2}-[0-9]{2}[+]03:00/"
-        "(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice|"
+        "(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice|purchaseNoticeKESMBO|purchaseNoticeZPESMBO|"
         "purchaseRejection|purchaseLotCancellation)$'",
         name="ck_eis_223_region_target_scope",
     ),
@@ -1162,7 +1228,8 @@ eis_223_sync_attempts = Table(
     CheckConstraint(
         "window_key ~ '^getDocsIP/RI223/(0[1-9]|[1-9][0-9])/"
         "[0-9]{4}-[0-9]{2}-[0-9]{2}"
-        "[+]03:00/(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice)$'",
+        "[+]03:00/(purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice|"
+        "purchaseNoticeKESMBO|purchaseNoticeZPESMBO)$'",
         name="ck_eis_223_attempt_scope",
     ),
     CheckConstraint(
@@ -2419,7 +2486,8 @@ eis_procedure_events = Table(
         "(document_type = 'epNotificationCancelFailure' AND "
         "recovery_stage IN ('NP','AP','CW','FO','CO')) OR "
         "(document_type IN ('epClarificationDoc','epProtocolEOK2020FirstSections',"
-        "'epProtocolEOK2020SecondSections','epProtocolEOK2020Final',"
+        "'epProtocolEOK2020SecondSections','epProtocolEOK2020Final','epProtocolEZK2020Final',"
+        "'epProtocolEF2020SubmitOffers','epProtocolEF2020Final',"
         "'fcsPlacementResult','fcsProposalsResult') AND recovery_stage IS NULL)) IS TRUE",
         name="ck_eis_event_type_stage",
     ),
@@ -2427,7 +2495,8 @@ eis_procedure_events = Table(
         "((document_type IN ('epNotificationCancel','epNotificationCancelFailure') AND "
         "parser_version = 'eis-procedure-event-v1') OR "
         "(document_type IN ('epClarificationDoc','epProtocolEOK2020FirstSections',"
-        "'epProtocolEOK2020SecondSections','epProtocolEOK2020Final',"
+        "'epProtocolEOK2020SecondSections','epProtocolEOK2020Final','epProtocolEZK2020Final',"
+        "'epProtocolEF2020SubmitOffers','epProtocolEF2020Final',"
         "'fcsPlacementResult','fcsProposalsResult') AND "
         "parser_version = 'eis-companion-document-v1' AND "
         "document_id = 'sha256:' || xml_sha256)) IS TRUE",

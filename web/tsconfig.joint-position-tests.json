@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "rootDir": ".",
+    "outDir": "build/joint-position-tests",
+    "noEmitOnError": true
+  },
+  "include": [
+    "tests/position-evidence-223.test.tsx",
+    "src/app/tender-discovery/position-evidence-223.tsx"
+  ]
+}

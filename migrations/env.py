@@ -11,6 +11,7 @@ from sqlalchemy import engine_from_config, pool
 from procurement.storage import (
     beta_quote_schema,  # noqa: F401
     company_profile_schema,  # noqa: F401
+    eis_contract_schema,  # noqa: F401
 )
 from procurement.storage.models import metadata
 

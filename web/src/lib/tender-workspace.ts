@@ -1,4 +1,4 @@
-import type { Eis223SearchResult, EisIndexedLead, EisIndexedSearchResult } from "./procurement-api";
+import type { Eis223SearchResult, EisIndexedLead, EisIndexedSearchResult, PositionEvidenceSet } from "./procurement-api";
 
 export type TenderLaw = "44" | "223";
 export type TenderLawFilter = "all" | TenderLaw;
@@ -22,6 +22,7 @@ export type TenderRow = {
   statusLabel: string; reasons: string[];
   evidence: { label: string; value: string }[];
   positions: { name: string; quantity: string; unit: string; locator: string }[];
+  positionSet?: PositionEvidenceSet | null;
   documents: { filename: string; url: string | null; locator: string; available: boolean }[];
   deliveryRegions?: NavigationFact[]; platformUrl?: string | null; platformName?: string | null;
   navigation?: TenderNavigation;
@@ -97,6 +98,9 @@ function row44(lead: EisIndexedLead, now: number): TenderRow {
       return { filename: item.filename, url, locator: item.locator, available: url !== null };
     }),
     noticeUrl: officialNoticeUrl(lead.notice_url), raw44: lead,
+    positionSet: lead.position_set?.law === "44" && lead.position_set.purchase_number === lead.purchase_number &&
+      lead.position_set.version_number === lead.version_number && lead.position_set.notice_xml_sha256 === lead.xml_sha256
+      ? lead.position_set : null,
   };
 }
 

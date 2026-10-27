@@ -326,6 +326,59 @@ def _archive(
     return output.getvalue()
 
 
+def _assert_protocol_archive_search_replay_and_downgrade_guard(storage, kind, migration):
+    from hashlib import sha256
+
+    from migration_support import assert_direct_downgrade_guard
+
+    from procurement.storage.models import eis_feed_archives
+    from test_eis_mixed_number_archive import NUMBER, companion, mixed, window
+
+    company = "ezk-final-" + uuid.uuid4().hex
+    raw = mixed(companion(kind))
+    bound = window(raw)
+    report = ingest_ready_window(storage, company, bound, actor_id="ezk-test")
+    assert report.new_versions == report.new_events == 1
+    replay = ingest_ready_window(storage, company, bound, actor_id="ezk-test")
+    assert replay.replayed and replay.new_versions == replay.new_events == 0
+    now = datetime(2026, 10, 26, tzinfo=UTC)
+    result = search_eis_index(storage, company, NUMBER, now=now, search_scope="ALL_CACHED")
+    assert result.matched_count == 1
+    assert result.matched[0].purchase_number == NUMBER
+    assert result.matched[0].application_status == "FAIL"
+    assert result.matched[0].economic_status == "UNKNOWN"
+    assert any(kind in reason for reason in result.matched[0].reasons)
+    with storage.transaction(company, consistent_read=True) as conn:
+        archive = conn.execute(select(eis_feed_archives)).mappings().one()
+        event = conn.execute(select(eis_procedure_events)).mappings().one()
+        assert bytes(archive["content"]) == raw
+        assert event["archive_sha256"] == sha256(raw).hexdigest()
+        assert event["document_id"] == "sha256:" + event["xml_sha256"]
+        assert conn.scalar(select(func.count()).select_from(audit_events)) == 1
+    with storage.transaction(company + "-foreign", consistent_read=True) as conn:
+        assert conn.scalar(select(func.count()).select_from(eis_procedure_events)) == 0
+    assert_direct_downgrade_guard(
+        migration,
+        expected_database="procurement_eis_test_20261005_s209",
+        match="ck_eis_event_type_stage",
+        tenant_context=company,
+    )
+    assert search_eis_index(storage, company, NUMBER, now=now).matched_count == 1
+
+
+def test_ezk_final_complete_archive_search_replay_and_downgrade_guard(storage):
+    _assert_protocol_archive_search_replay_and_downgrade_guard(
+        storage, "epProtocolEZK2020Final", "20261026_01_ezk_final_companion"
+    )
+
+
+@pytest.mark.parametrize("kind", ["epProtocolEF2020SubmitOffers", "epProtocolEF2020Final"])
+def test_ea_protocol_complete_archive_search_replay_and_downgrade_guard(storage, kind):
+    _assert_protocol_archive_search_replay_and_downgrade_guard(
+        storage, kind, "20261026_02_ef_companions"
+    )
+
+
 def test_short_modifiers_are_compared_in_indexed_item_characteristics(storage):
     company = f"modifiers-{uuid.uuid4()}"
     number = "9000000000000000001"

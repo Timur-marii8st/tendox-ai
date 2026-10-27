@@ -11,9 +11,11 @@ from pydantic import BaseModel, ValidationError
 from procurement.access import AccessRole
 from procurement.api.contracts import Principal
 from procurement.storage.beta_quote import (
+    BetaHistoryReport,
     BetaQuoteCommand,
     BetaQuoteRef,
     BetaQuoteReport,
+    history_report,
     quote_report,
 )
 from procurement.storage.beta_shortlist import BetaShortlist, BetaShortlistRequest, shortlist
@@ -72,6 +74,10 @@ def beta_procurement_router(
             raise HTTPException(404, "beta_source_not_found", headers=headers) from error
         except ValueError as error:
             raise HTTPException(409, "beta_source_or_input_conflict", headers=headers) from error
+
+    @router.post("/history/read", response_model=BetaHistoryReport)
+    async def history(request: Request, principal: Annotated[Principal, Depends(reader)]) -> Any:
+        return await execute(request, BetaQuoteRef, history_report, principal)
 
     @router.post("/quote/read", response_model=BetaQuoteReport)
     async def read(request: Request, principal: Annotated[Principal, Depends(reader)]) -> Any:

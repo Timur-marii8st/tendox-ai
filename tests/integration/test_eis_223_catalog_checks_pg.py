@@ -13,8 +13,8 @@ from test_eis_223_regions_pg import storage as pg_storage
 from procurement.storage.eis_223_catalog_checks import catalog_refresh_due, record_catalog_check
 from procurement.storage.eis_223_regions import (
     ensure_region_wave,
+    plan_targets,
     read_region_coverage,
-    regional_due_windows,
 )
 from procurement.storage.models import (
     audit_events,
@@ -101,14 +101,14 @@ def test_added_catalog_applies_next_wave_and_rollback_cannot_drop_new_members(st
         storage, company, catalog_html(("50", "77", "78", "99")), now=NOW + timedelta(hours=1)
     )
     status = read_region_coverage(storage, company, now=NOW + timedelta(hours=1))
-    assert status.planned == 30 and status.catalog_sha256 == first.catalog_sha256
+    assert status.planned == 42 and status.catalog_sha256 == first.catalog_sha256
     assert status.latest_catalog_sha256 == added.catalog_sha256
     assert status.catalog_last_success_at == NOW
     assert ensure_region_wave(storage, company, NOW + timedelta(days=1), actor_id="test") == wave
-    for target in regional_due_windows(storage, company, NOW):
+    for target in plan_targets(("50", "77", "78"), NOW.date() - timedelta(days=1), NOW.date()):
         attempt(storage, company, target)
     assert ensure_region_wave(storage, company, NOW + timedelta(days=1), actor_id="test") != wave
-    assert read_region_coverage(storage, company, now=NOW + timedelta(days=1)).planned == 40
+    assert read_region_coverage(storage, company, now=NOW + timedelta(days=1)).planned == 56
     reverting = check(storage, company, catalog_html(), now=NOW + timedelta(days=1))
     assert reverting.status == "REVIEW_REQUIRED"
     assert (

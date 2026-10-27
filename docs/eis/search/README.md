@@ -47,3 +47,9 @@
 - [128-eis-hybrid-recovery.md](128-eis-hybrid-recovery.md) — Первый гибридный проход: обнаружение, durable queue и автоматическое восстановление.
 
 - [129-eis-active-sweep.md](129-eis-active-sweep.md) — Расширение гибридного обхода на активные44 без товарного запроса.
+
+- [133-eis-regional-discount.md](133-eis-regional-discount.md) — V45: официальные контрактные результаты, подбор истории и UI; установлен, +2результата контрактов; ≥5UNKNOWN; V46 восстановил контрольную закупку в поиске.
+- [135-eis-single-customer-history.md](135-eis-single-customer-history.md) — V47: единственный source customer, полная проверка allocation и автоматический контекст истории.
+- [136-eis-real-regional-five.md](136-eis-real-regional-five.md) — V48: пять реальных EA-аналогов/Decimal/native PASS; полный EA-архив и поиск установлены, исходная159цель UNKNOWN.
+
+- [139-eis-freshness-handoff.md](139-eis-freshness-handoff.md) — V51: single freshwaiter установлен; native handoff/5UI PASS, national UNKNOWN.

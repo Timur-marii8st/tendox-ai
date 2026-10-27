@@ -35,12 +35,25 @@ trap eis_metrics_exit EXIT
 operation=fresh
 [[ ${1:-} == --smoke ]] && operation=smoke
 eis_metrics_init priority "$operation"
-exec 8>/home/syurai/vibe-seller-state/eis-priority.lock
-if ! flock -n 8; then
+# Coalesce cron ticks while one freshness owner waits behind documents/deploy.
+# No probe or marker belongs to us until the shared priority lock is acquired.
+trap 'eis_metrics_signal=INT; eis_metrics_result=INTERRUPTED; exit 130' INT
+trap 'eis_metrics_signal=TERM; eis_metrics_result=INTERRUPTED; exit 143' TERM
+exec 7>/home/syurai/vibe-seller-state/eis-freshness-dispatch.lock
+if ! flock -n 7; then
   eis_metrics_result=BUSY
-  echo '{"status":"BLOCKED","reason":"PRIORITY_WORKER_BUSY","coverage":"UNKNOWN"}'
+  echo '{"status":"BLOCKED","reason":"FRESHNESS_DISPATCH_BUSY","coverage":"UNKNOWN"}'
   exit 75
 fi
+exec 8>/home/syurai/vibe-seller-state/eis-priority.lock
+flock -w 300 8 &
+lease_waiter=$!
+if ! wait "$lease_waiter"; then
+  eis_metrics_result=TIMEOUT
+  echo '{"status":"BLOCKED","reason":"PRIORITY_LOCK_TIMEOUT","coverage":"UNKNOWN"}'
+  exit 75
+fi
+lease_waiter=
 cd /home/syurai/vibe-seller
 regions=${EIS_FRESHNESS_REGIONS:-official}
 urgent=1
@@ -67,8 +80,6 @@ if [[ "$proxy_health" != healthy ]]; then
   echo '{"status":"BLOCKED","reason":"PROXY_UNAVAILABLE","coverage":"UNKNOWN"}'
   exit 69
 fi
-trap 'eis_metrics_signal=INT; eis_metrics_result=INTERRUPTED; exit 130' INT
-trap 'eis_metrics_signal=TERM; eis_metrics_result=INTERRUPTED; exit 143' TERM
 if [[ "$urgent" == 1 ]]; then
   marker_owned=1
   sudo -n docker exec vibe-seller-api-1 python -c \

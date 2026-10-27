@@ -191,3 +191,127 @@ def test_profile_min_margin_uses_exact_profit_and_revenue(monkeypatch, cost, min
     assert result.eligibility == "UNKNOWN"
     if min_margin is None:
         assert "PROFILE_MIN_MARGIN_UNKNOWN" in result.rows[0].reasons
+
+
+def test_unit_profit_reverses_total_profit_and_keeps_units_separate(monkeypatch):
+    setup(monkeypatch)
+    from procurement.domain.provenance import Extractor, Provenance
+    from procurement.sources.eis_223_archive import DecimalFact, TextFact
+
+    def read(storage, company, reference, **kwargs):
+        index = int(reference.notice.purchase_number)
+        data = quote(amount_ex_vat="10000" if index == 1 else "20000")
+        source = Provenance(
+            document_id="a" * 64, locator="/position/quantity", extractor=Extractor.API
+        )
+        return BetaQuoteReport(
+            ref=reference,
+            record_id=f"unit-{index}",
+            input=data,
+            calculation=calculate(data),
+            source_status="CHECKED",
+            unit_quantity=DecimalFact(
+                value=Decimal("1000" if index == 1 else "10"), raw=None, provenance=source
+            ),
+            quantity_unit=TextFact(value="шт" if index < 3 else "кг", raw=None, provenance=source),
+        )
+
+    monkeypatch.setattr(module, "quote_report", read)
+    request = dict(notices=(ref(1), ref(2), ref(3)))
+    total = shortlist(
+        object(), "tenant-a", BetaShortlistRequest(**request), actor="operator", now=NOW
+    )
+    assert total.financial_order[0] == "unit-1"
+    unit = shortlist(
+        object(),
+        "tenant-a",
+        BetaShortlistRequest(**request, ranking="UNIT_PROFIT"),
+        actor="operator",
+        now=NOW,
+    )
+    assert unit.financial_order == ()  # No fictitious common rank for kilograms and pieces.
+    groups = {g.unit: g.record_ids for g in unit.unit_orders}
+    assert groups == {"шт": ("unit-2", "unit-1"), "кг": ("unit-3",)}
+    assert unit.rows[1].unit_profit > unit.rows[0].unit_profit
+    assert unit.eligibility == "UNKNOWN"
+
+
+def test_unit_profit_missing_source_denominator_is_unknown(monkeypatch):
+    setup(monkeypatch)
+    result = shortlist(
+        object(),
+        "tenant-a",
+        BetaShortlistRequest(notices=(ref(1),), ranking="UNIT_PROFIT"),
+        actor="operator",
+        now=NOW,
+    )
+    assert result.financial_order == ()
+    assert result.unit_orders == ()
+    assert result.rows[0].unit_profit is None
+    assert "UNIT_PROFIT_BASIS_UNKNOWN" in result.rows[0].reasons
+
+
+@pytest.mark.parametrize(
+    "quantity,unit,sha",
+    [
+        ("0", "шт", "a" * 64),
+        (None, "шт", "a" * 64),
+        ("10", " ", "a" * 64),
+        ("10", "шт", "b" * 64),
+    ],
+)
+def test_unit_profit_rejects_unknown_zero_or_unbound_source(monkeypatch, quantity, unit, sha):
+    from procurement.domain.provenance import Extractor, Provenance
+    from procurement.sources.eis_223_archive import DecimalFact, TextFact
+
+    setup(monkeypatch)
+    read = module.quote_report
+    evidence = Provenance(document_id=sha, locator="/quantity", extractor=Extractor.API)
+
+    def source(*args, **kwargs):
+        return read(*args, **kwargs).model_copy(
+            update={
+                "unit_quantity": DecimalFact(value=quantity, raw=None, provenance=evidence),
+                "quantity_unit": TextFact(value=unit, raw=None, provenance=evidence),
+            }
+        )
+
+    monkeypatch.setattr(module, "quote_report", source)
+    result = shortlist(
+        object(),
+        "tenant-a",
+        BetaShortlistRequest(notices=(ref(1),), ranking="UNIT_PROFIT"),
+        actor="operator",
+        now=NOW,
+    )
+    assert result.unit_orders == ()
+    assert result.rows[0].unit_profit is None
+    assert result.eligibility == "UNKNOWN"
+
+
+def test_shared_source_corpus_does_not_replace_private_quote_tenant(monkeypatch):
+    setup(monkeypatch)
+    read = module.quote_report
+    calls = []
+
+    def private_quote(storage, company, reference, **kwargs):
+        calls.append((company, kwargs["source_company"]))
+        return read(storage, company, reference, **kwargs)
+
+    def public_navigation(storage, company, reference):
+        assert company == "public-corpus"
+        return SimpleNamespace(delivery_regions=())
+
+    monkeypatch.setattr(module, "quote_report", private_quote)
+    monkeypatch.setattr(module, "read_navigation", public_navigation)
+    result = shortlist(
+        object(),
+        "tenant-a",
+        BetaShortlistRequest(notices=(ref(1),)),
+        actor="operator",
+        now=NOW,
+        source_company="public-corpus",
+    )
+    assert calls == [("tenant-a", "public-corpus")]
+    assert result.financial_order
+    assert result.profile.company_id == "tenant-a"

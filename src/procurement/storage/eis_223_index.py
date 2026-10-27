@@ -25,6 +25,10 @@ from procurement.sources.eis_223_archive import (
     inspect_notice223_archive,
 )
 from procurement.sources.eis_223_events import Eis223RejectionState
+from procurement.sources.eis_223_joint_positions import (
+    SUPPORTED_JOINT_DOCUMENT_TYPES,
+    Eis223PositionProjection,
+)
 from procurement.sources.eis_223_lot_event_policy import Eis223LotCancellationState
 from procurement.sources.eis_223_policy import deadline223, unavailable223
 from procurement.sources.eis_223_schema import Eis223SchemaCheck, schema_quality
@@ -38,7 +42,7 @@ from procurement.sources.eis_223_window_limits import (
     MAX_NOTICE_MEMBERS,
     MAX_XML_BYTES,
 )
-from procurement.sources.eis_feed import validate_eis_archive_url
+from procurement.sources.eis_feed import EisFeedResponse, validate_eis_archive_url
 from procurement.sources.eis_index_search import (
     EisSearchTermEvidence,
     exact_purchase_number,
@@ -49,6 +53,11 @@ from procurement.sources.eis_index_search import (
 )
 from procurement.storage.eis_223_events import read_event223_states
 from procurement.storage.eis_223_lot_events import read_lot_event223_states
+from procurement.storage.eis_223_position_projection import (
+    derive_positions223,
+    read_position223_page,
+    xml_from_archive223,
+)
 from procurement.storage.eis_search_pagination import PAGE_COMPARISONS, SearchPagination
 from procurement.storage.models import (
     audit_events,
@@ -62,14 +71,13 @@ from procurement.storage.models import (
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
-    from procurement.sources.eis_feed import EisFeedResponse
     from procurement.storage.repository import PostgresStorage
 
 _WINDOW = re.compile(
     r"^getDocsIP/RI223/(?:(?:0[1-9]|[1-9][0-9])/"
     r"(?P<day>[0-9]{4}-[0-9]{2}-[0-9]{2})\+03:00/"
-    r"(?P<family>purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice)"
-    r"|by-number/(?P<number>[0-9]{11})/(?P<target_family>purchaseNoticeKESMBO))$"
+    r"(?P<family>purchaseNoticeAESMBO|purchaseNoticeZKESMBO|purchaseNotice|purchaseNoticeKESMBO|purchaseNoticeZPESMBO)"
+    r"|by-number/(?P<number>[0-9]{11})/(?P<target_family>purchaseNoticeKESMBO|purchaseNoticeZPESMBO))$"
 )
 _SEARCH_BATCH_SIZE = 200
 _SEARCH_RESULT_LIMIT = 100
@@ -83,12 +91,21 @@ class IndexModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+class Eis223SourceBinding(IndexModel):
+    """Checked request kind and original operational selection, not server coordinate echo."""
+
+    selection_key: str = Field(min_length=1, max_length=500)
+    initial: EisFeedResponse
+    prepared: EisFeedResponse
+
+
 class Eis223ReadyWindow(IndexModel):
     window_key: str
     response_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     prepared_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     archives: tuple[bytes, ...] = Field(min_length=1, max_length=MAX_NOTICE_ARCHIVES)
     archive_urls: tuple[str, ...] = Field(min_length=1, max_length=MAX_NOTICE_ARCHIVES)
+    source_binding: Eis223SourceBinding | None = None
 
 
 class Eis223IngestReport(IndexModel):
@@ -101,6 +118,7 @@ class Eis223IngestReport(IndexModel):
 
 
 class Eis223SearchLead(IndexModel):
+    position_projection: Eis223PositionProjection | None = None
     cancellation_state: Eis223RejectionState | None = None
     lot_cancellation_state: Eis223LotCancellationState | None = None
     notice: Eis223NoticeSnapshot
@@ -194,6 +212,9 @@ def bind_notice223_window(
         prepared_sha256=prepared.source_sha256,
         archive_urls=urls,
         archives=tuple(downloaded[url] for url in urls),
+        source_binding=Eis223SourceBinding(
+            selection_key=window_key, initial=initial, prepared=prepared
+        ),
     )
 
 
@@ -211,6 +232,30 @@ def preflight_notice223_window(
         raise Eis223IndexConflict("ARCHIVE_URL_DUPLICATE")
     for url in window.archive_urls:
         validate_eis_archive_url(url)
+    binding = window.source_binding
+    if binding is None:
+        # Legacy source0 BY_NUMBER and old three regional families keep their
+        # accepted contract. New ZP in either mode and regional KES require the factory.
+        if (
+            match["family"] in ("purchaseNoticeKESMBO", "purchaseNoticeZPESMBO")
+            or match["target_family"] == "purchaseNoticeZPESMBO"
+        ):
+            raise Eis223IndexConflict("SOURCE_BINDING_INVALID")
+    else:
+        if (
+            binding.selection_key != window.window_key
+            or binding.initial.source_sha256 != window.response_sha256
+            or binding.prepared.source_sha256 != window.prepared_sha256
+        ):
+            raise Eis223IndexConflict("SOURCE_BINDING_INVALID")
+        checked = bind_notice223_window(
+            window.window_key,
+            binding.initial,
+            binding.prepared,
+            dict(zip(window.archive_urls, window.archives, strict=True)),
+        )
+        if checked.archive_urls != window.archive_urls:
+            raise Eis223IndexConflict("SOURCE_BINDING_INVALID")
     expanded_bytes = 0
     member_count = 0
     try:
@@ -372,6 +417,9 @@ def ingest_notice223_window(
                         ingested_at=at,
                     )
                 )
+                if notice.document_type in SUPPORTED_JOINT_DOCUMENT_TYPES:
+                    raw = xml_from_archive223(content, inspection.archive_sha256, notice)
+                    derive_positions223(connection, company, notice, raw, actor_id=actor_id, now=at)
                 new += 1
         connection.execute(
             insert(audit_events).values(
@@ -392,6 +440,17 @@ def ingest_notice223_window(
                     "coverage": "UNKNOWN",
                     "law": "223",
                     "document_type": inspections[0].records[0].document_type,
+                    **(
+                        {
+                            "source_binding": {
+                                "selection_key": window.source_binding.selection_key,
+                                "request_kind": window.source_binding.initial.kind,
+                                "request_id": window.source_binding.initial.request_id,
+                            }
+                        }
+                        if window.source_binding is not None
+                        else {}
+                    ),
                 },
                 occurred_at=at,
             )
@@ -639,6 +698,26 @@ def search_notice223_index(
                 break
         if pager is None:
             matched = _with_schema_quality(connection, company, matched)
+        joint_notices = [
+            lead.notice
+            for lead in matched
+            if lead.notice.document_type in SUPPORTED_JOINT_DOCUMENT_TYPES
+        ]
+        projections = read_position223_page(connection, company, joint_notices)
+        by_ref = {
+            (notice.purchase_number, notice.version_number): projection
+            for notice, projection in zip(joint_notices, projections, strict=True)
+        }
+        matched = [
+            lead.model_copy(
+                update={
+                    "position_projection": by_ref.get(
+                        (lead.notice.purchase_number, lead.notice.version_number)
+                    )
+                }
+            )
+            for lead in matched
+        ]
     fingerprint, next_cursor = (
         pager.finish(_search_order(matched[-1]) if matched else None, len(matched))
         if pager is not None
