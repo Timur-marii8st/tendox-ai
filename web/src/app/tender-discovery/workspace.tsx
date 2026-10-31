@@ -11,7 +11,7 @@ import { PositionEvidenceView } from "./position-evidence";
 import { PositionEvidence223View } from "./position-evidence-223";
 import { AddToMixedComparison } from "./mixed-comparison";
 import { mergeSearchPage } from "./paged-results";
-import { loadWorkspacePage, searchWorkspace, searchGlobalWorkspace } from "./workspace-actions";
+import { enrichWorkspaceNavigation, loadWorkspacePage, searchWorkspace, searchGlobalWorkspace } from "./workspace-actions";
 import styles from "./workspace.module.css";
 
 type PageState = { pending?: boolean; error?: string; restart?: boolean };
@@ -20,7 +20,7 @@ function SearchIcon() {
   return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.7" /><path d="m16 16 4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>;
 }
 
-export function TenderWorkspace() {
+export function TenderWorkspace({ betaMode = false }: { betaMode?: boolean } = {}) {
   const [query, setQuery] = useState("");
   const [profileTerms, setProfileTerms] = useState<string[]>([]);
   const [profileError, setProfileError] = useState<string>();
@@ -34,12 +34,15 @@ export function TenderWorkspace() {
   const [globalPage, setGlobalPage] = useState<PageState>({});
   const [pages, setPages] = useState<Partial<Record<TenderLaw, PageState>>>({});
   const [pending, startSearch] = useTransition();
+  const [navigationPending, setNavigationPending] = useState(false);
+  const [navigationError, setNavigationError] = useState(false);
   const [clock, setClock] = useState(0);
   const generation = useRef(0);
   const loadingPages = useRef(new Set<TenderLaw>());
+  const navigationActive = useRef(false);
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const loadedRows = result ? rowsFromResult(result) : [];
-  const regionRows = result?.globalPrice ? loadedRows : filterDeliveryRegion(loadedRows, region, includeUnknownRegion);
+  const regionRows = result?.globalPrice ? loadedRows : navigationPending && region.trim() ? loadedRows : filterDeliveryRegion(loadedRows, region, includeUnknownRegion);
   const rows = sortTenderRows(result?.globalPrice ? [...regionRows].sort((a, b) => a.law === b.law ? a.purchaseNumber.localeCompare(b.purchaseNumber) : a.law.localeCompare(b.law)) : regionRows, order);
   const regions = [...new Set(loadedRows.flatMap(row => row.deliveryRegions?.map(fact => fact.value) ?? []))].sort();
   const selected = rows.find(row => row.id === selectedId) ?? rows[0];
@@ -59,16 +62,34 @@ export function TenderWorkspace() {
     return () => window.clearTimeout(timer);
   }, [result, clock]);
 
+  function hydrateNavigation(page: WorkspaceResult, epoch: number) {
+    const refs = rowsFromResult(page).slice(0, 200).map(row => ({ id: row.id, law: row.law,
+      number: row.purchaseNumber, version: row.version, sha256: row.xmlSha256 }));
+    if (!refs.length) { setNavigationPending(false); return; }
+    navigationActive.current = true; setNavigationPending(true);
+    void enrichWorkspaceNavigation(refs).then(({ navigation, failed }) => {
+      if (generation.current === epoch) {
+        setResult(value => value ? { ...value, navigation: { ...value.navigation, ...navigation } } : value);
+        if (failed) setNavigationError(true);
+      }
+    }).catch(() => { if (generation.current === epoch) setNavigationError(true); })
+      .finally(() => { if (generation.current === epoch) { navigationActive.current = false; setNavigationPending(false); } });
+  }
+
   function runSearch(searchQuery = query, searchLaw = law, searchOrder = order) {
     const cleaned = searchQuery.trim();
     if (!cleaned) return;
     const epoch = ++generation.current;
-    loadingPages.current.clear();
+    loadingPages.current.clear(); navigationActive.current = false;
     setPages({}); setGlobalPage({}); setSelectedId(undefined); setResult(undefined);
+    setNavigationPending(false); setNavigationError(false);
     startSearch(async () => {
       try {
         const next = searchOrder === "price_desc" ? await searchGlobalWorkspace(cleaned, searchLaw, region, includeUnknownRegion) : await searchWorkspace(cleaned, searchLaw);
-        if (generation.current === epoch) setResult(next);
+        if (generation.current === epoch) {
+          setResult(next);
+          if (searchOrder !== "price_desc") hydrateNavigation(next, epoch);
+        }
       } catch {
         if (generation.current === epoch) setResult({ query: cleaned, law: searchLaw, error: "Поиск временно недоступен. Повторите запрос." });
       }
@@ -112,7 +133,7 @@ export function TenderWorkspace() {
   async function loadMore(pageLaw: TenderLaw) {
     const current = result;
     const source = pageLaw === "44" ? current?.result44 : current?.result223;
-    if (!current || !source?.next_cursor || loadingPages.current.has(pageLaw) || pages[pageLaw]?.restart) return;
+    if (!current || !source?.next_cursor || navigationActive.current || loadingPages.current.size > 0 || pages[pageLaw]?.restart) return;
     const epoch = generation.current;
     loadingPages.current.add(pageLaw);
     setPages(value => ({ ...value, [pageLaw]: { pending: true } }));
@@ -133,6 +154,7 @@ export function TenderWorkspace() {
           setResult(value => value ? { ...value, result223: merged, navigation: { ...value.navigation, ...next.navigation } } : value);
         }
         setPages(value => ({ ...value, [pageLaw]: {} }));
+        hydrateNavigation(next, epoch);
       } catch {
         setPages(value => ({ ...value, [pageLaw]: { restart: true, error: "Состав результатов изменился. Повторите поиск, чтобы получить согласованные страницы." } }));
       }
@@ -171,6 +193,8 @@ export function TenderWorkspace() {
     <div className={styles.coverageNote}><span aria-hidden="true">ⓘ</span><p>Поиск по загруженной части ЕИС. Полнота и свежесть не подтверждены. Совпадение по товару ещё не означает соответствие ТЗ.</p></div>
     <div aria-live="polite" aria-atomic="true" className={styles.searchStatus}>
       {pending && <p>Ищем в сохранённых извещениях ЕИС…</p>}
+      {navigationPending && <p>Уточняем места поставки и ссылки. {region.trim() ? "Пока показаны все результаты без фильтра региона." : "Результаты уже доступны."}</p>}
+      {navigationError && <p role="alert">Не удалось уточнить места поставки и ссылки; отсутствующие сведения остаются неподтверждёнными.</p>}
       {result?.globalPrice && !result.error && <p>{result.query} · Найдено {result.globalPrice.matched_count} по запросу и месту поставки</p>}
       {result && !result.globalPrice && !result.error && <p>{result.query}{" · "}{result.result44 ? `44-ФЗ: ${result.result44.matched_count}` : result.error44 ? "44-ФЗ: результат недоступен" : ""}{result.law === "all" && " · "}{result.result223 ? `223-ФЗ: ${result.result223.matched_count}` : result.error223 ? "223-ФЗ: результат недоступен" : ""}{(result.error44 || result.error223) && " · Частичная выдача"}</p>}
     </div>
@@ -185,7 +209,7 @@ export function TenderWorkspace() {
       </div></div>
       <p className={styles.scopeNote}>{order === "price_desc" ? "По начальной сумме лота в рублях по всему сохранённому корпусу для вашего запроса и региона. Следующие страницы продолжают общий порядок 44-ФЗ и 223-ФЗ. Закупки с блокировкой и без сопоставимой цены — в конце. Это сумма закупки, прибыль здесь не рассчитывается." : "Порядок поиска: сначала 44-ФЗ, затем 223-ФЗ. Чтобы увидеть крупные суммы сверху, нажмите «Сначала дорогие»."}</p>
       <p className={styles.scopeNote}>44-ФЗ: срок не истёк или неизвестен. 223-ФЗ: сохранённые извещения, включая истёкшие. Истёкший срок блокирует дальнейшее действие.</p>
-      <BetaFinancialComparison key={`${result.query}:${region}:${regionRows.map(row => row.id).join("|")}:${quoteVersion}:${clock}`} rows={regionRows} region={region} onSelect={setSelectedId} />
+      {!(navigationPending && region.trim()) && <BetaFinancialComparison key={`${result.query}:${region}:${regionRows.map(row => row.id).join("|")}:${quoteVersion}:${clock}`} rows={regionRows} region={region} onSelect={setSelectedId} />}
       {rows.length ? <div className={styles.resultsGrid}>
         <div className={styles.resultList} aria-label="Найденные закупки">
           {rows.map(row => <button type="button" key={row.id} aria-pressed={selected?.id === row.id} aria-controls="tender-detail" className={`${styles.resultCard} ${selected?.id === row.id ? styles.selectedCard : ""}`} onClick={() => setSelectedId(row.id)}>
@@ -196,7 +220,7 @@ export function TenderWorkspace() {
             <span className={`${styles.statusBadge} ${row.blocked ? styles.blocked : ""}`}>{row.statusLabel}</span>
           </button>)}
         </div>
-        {selected && <TenderDetail key={selected.id} row={selected} headingRef={detailHeading} onQuoteSaved={() => setQuoteVersion(value => value + 1)} />}
+        {selected && <TenderDetail betaMode={betaMode} key={selected.id} row={selected} headingRef={detailHeading} onQuoteSaved={() => setQuoteVersion(value => value + 1)} />}
       </div> : <div className={styles.emptyState}><h2>{result.error44 || result.error223 ? "В доступной части выдачи совпадений нет" : "По вашему запросу совпадений нет"}</h2><p>Попробуйте другое название товара или более короткий запрос. Это результат поиска в сохранённой части базы, а не во всей ЕИС.</p></div>}
       <div className={styles.pagination}>
         {result.globalPrice && <div className={styles.pageLaw}>
@@ -213,7 +237,7 @@ export function TenderWorkspace() {
           return <div key={pageLaw} className={styles.pageLaw}>
             <p><b>{pageLaw}-ФЗ</b> · загружено {source.matched.length} из {source.matched_count}</p>
             {source.snapshot_at && <p className={styles.muted}>Снимок: {formatTenderDeadline(source.snapshot_at)}. Продолжение доступно 15 минут.</p>}
-            {source.next_cursor && !page?.restart && <button type="button" className={styles.secondaryButton} disabled={pending || page?.pending} onClick={() => void loadMore(pageLaw)}>{page?.pending ? "Загружаем…" : `Загрузить ещё · ${pageLaw}-ФЗ`}</button>}
+            {source.next_cursor && !page?.restart && <button type="button" className={styles.secondaryButton} disabled={pending || navigationPending || Boolean(pages["44"]?.pending || pages["223"]?.pending)} onClick={() => void loadMore(pageLaw)}>{page?.pending ? "Загружаем…" : `Загрузить ещё · ${pageLaw}-ФЗ`}</button>}
             {page?.error && <p role="alert" className={styles.error}>{page.error}</p>}
             {page?.restart && <button type="button" className={styles.secondaryButton} disabled={pending} onClick={() => { setQuery(result.query); setLaw(result.law); runSearch(result.query, result.law); }}>Повторить поиск</button>}
           </div>;
@@ -223,7 +247,7 @@ export function TenderWorkspace() {
   </section>;
 }
 
-function TenderDetail({ row, headingRef, onQuoteSaved }: { row: TenderRow; headingRef: RefObject<HTMLHeadingElement | null>; onQuoteSaved: () => void }) {
+function TenderDetail({ row, headingRef, onQuoteSaved, betaMode }: { betaMode: boolean; row: TenderRow; headingRef: RefObject<HTMLHeadingElement | null>; onQuoteSaved: () => void }) {
   return <article id="tender-detail" className={styles.detail} aria-labelledby="tender-detail-title">
     <div className={styles.detailTop}><span className={styles.eyebrow}>ВЫБРАННАЯ ЗАКУПКА</span><span className={styles.lawBadge}>{row.law}-ФЗ</span></div>
     <p className={styles.noticeNumber}>№ {row.purchaseNumber} · версия {row.version}</p>
@@ -234,9 +258,9 @@ function TenderDetail({ row, headingRef, onQuoteSaved }: { row: TenderRow; headi
     <section><h3>Место поставки</h3><p>{row.deliveryRegions?.map(fact => fact.value).join("; ") || "Регион поставки не подтверждён"}</p>{row.navigation?.delivery_addresses?.map((fact,index) => <p key={index}>{fact.value}</p>)}<p className={styles.muted}>Полнота мест исполнения требует проверки ТЗ.</p></section>
     <TenderDocuments row={row} />
     <BetaQuote notice={{ law: row.law, purchase_number: row.purchaseNumber, version_number: row.version, notice_xml_sha256: row.xmlSha256 }} lotCount={row.raw223?.notice.lots.length ?? 1} deadline={row.deadline} blocked={row.blocked} onSaved={onQuoteSaved} />
-    {row.law === "44" && <details className={styles.sources} key={`documents:${row.id}`}><summary>Открыть сохранённый разбор ТЗ и документов</summary><IndexedDocuments key={row.id} notice={{ purchase_number: row.purchaseNumber, version_number: row.version, notice_xml_sha256: row.xmlSha256 }} /></details>}
+    {!betaMode && row.law === "44" && <details className={styles.sources} key={`documents:${row.id}`}><summary>Открыть сохранённый разбор ТЗ и документов</summary><IndexedDocuments key={row.id} notice={{ purchase_number: row.purchaseNumber, version_number: row.version, notice_xml_sha256: row.xmlSha256 }} /></details>}
     <details className={styles.checks} open={row.blocked} key={row.id}><summary><span className={styles.checkIcon}>!</span> Что нужно проверить</summary><p>{row.statusLabel.includes("FAIL") ? "Допуск: FAIL. Экономика: UNKNOWN." : "Допуск и экономика: UNKNOWN."} Для решения нужны полный комплект требований, действующее КП и три сценария экономики.</p>{row.reasons.length > 0 && <ul>{row.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul>}<p>Место поставки и соответствие профилю компании проверяются отдельно.</p></details>
-    <div className={styles.detailActions}><AddToMixedComparison notice={{ law: row.law, purchase_number: row.purchaseNumber, version_number: row.version, notice_xml_sha256: row.xmlSha256, title: row.title }} disabled={row.blocked} />{row.blocked && <p className={styles.muted}>Действия по этой карточке заблокированы. Причины указаны выше.</p>}{row.noticeUrl && <a href={row.noticeUrl} target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>Открыть извещение в ЕИС ↗</a>}</div>
+    <div className={styles.detailActions}>{!betaMode && <AddToMixedComparison notice={{ law: row.law, purchase_number: row.purchaseNumber, version_number: row.version, notice_xml_sha256: row.xmlSha256, title: row.title }} disabled={row.blocked} />}{row.blocked && <p className={styles.muted}>Действия по этой карточке заблокированы. Причины указаны выше.</p>}{row.noticeUrl && <a href={row.noticeUrl} target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>Открыть извещение в ЕИС ↗</a>}</div>
     <section><h3>Площадка</h3>{row.platformUrl ? <a href={row.platformUrl} target="_blank" rel="noopener noreferrer">{row.platformName || "Площадка из извещения"} ↗</a> : <p>Ссылка площадки не подтверждена.</p>}{!row.noticeUrl && <p><a href={`https://zakupki.gov.ru/epz/order/extendedsearch/results.html?searchString=${encodeURIComponent(row.purchaseNumber)}`} target="_blank" rel="noopener noreferrer">Найти номер закупки в ЕИС ↗</a> · Прямая публичная ссылка не подтверждена.</p>}</section>
     <details className={styles.sources}><summary>Источники и исходные данные</summary>{row.navigation && [...row.navigation.delivery_regions, row.navigation.eis_url, row.navigation.platform_url, row.navigation.platform_name].filter(item => item !== null).map((fact, index) => <p key={`navigation:${index}`}>{fact.value}<br />{fact.provenance.document_id} · {fact.provenance.locator}{fact.supporting_sources?.map((source, i) => <span key={i}><br />{source.document_id} · {source.locator}</span>)}</p>)}<p>Источник: сохранённое извещение ЕИС. Версия {row.version}. Статус подачи не выводится из совпадения слов.</p>{row.deadlineRaw && <p>Исходный срок: {row.deadlineRaw}</p>}<dl>{row.evidence.map((item, index) => <div key={index}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>{row.positions.length > 0 && <details><summary>Все исходные позиции · {row.positions.length}</summary>{row.positions.map((item, index) => <p key={index}>{item.name} · {item.quantity} · {item.unit}<br /><span className={styles.muted}>{item.locator}</span></p>)}</details>}</details>
   </article>;

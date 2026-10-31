@@ -1,28 +1,32 @@
 # Текущий статус и ближайший срез
 
-Актуально: 2026-10-27.
+Актуально: 2026-10-31.
 Стадия: внутренняя бета; полный MVP не принят.
 [PRD](product/11-product-requirements.md), [roadmap](product/05-roadmap.md), [AGENTS](../AGENTS.md).
 
+## ГосПлан — текущий срез
+
+Root; [контракт и evidence](eis/ingestion/151-gosplan-discovery-slice.md).
+Пагинация установлена, gate56/56 и браузерная проверка обоих законов PASS;
+старый HTTP 422, полнота и приём данных в основную базу остаются UNKNOWN.
+Split-recovery: child 0 ACTIVE offset 500; следующий штатный cron 14:17 UTC.
+Общий admission BLOCKED четырьмя окнами 223; provider hold сохраняется.
+Кандидат `89d2b186…` ограниченно поддерживает наборы отмен из до 8 ZIP;
+review и isolated PG preflight 57/57 PASS после трёх FAIL release gate.
+Полный gate `release-20261031-131541-96f8d9d2c172` работает; затем штатный выпуск.
+
 ## Установленная бета подбора закупок
 
-Владелец root; [контракт](operations/123-beta-shortlist.md). КП/17расходов,
-три сценария, финансовый top5 из20loaded lots, профиль/регион и ссылки44/223.
-КП/расходы пользователя; пропуск UNKNOWN.
-PARTICIPATE UNKNOWN.
-
-B10 evidence:tmp/beta-readiness-20261023-v32/acceptance.json. Полнота ЕИС/ТЗ/PARTICIPATE не приняты; инструкция —[123](operations/123-beta-shortlist.md).
+Root; [контракт](operations/123-beta-shortlist.md), КП/расходы пользователя,
+три сценария, профиль, регион и ссылки 44/223. Пропуски, полнота ЕИС/ТЗ и
+PARTICIPATE UNKNOWN. Evidence: `tmp/beta-readiness-20261023-v32/acceptance.json`.
 
 ## Принятые срезы V43–V45
 
-Root; [контракт123](operations/123-beta-shortlist.md), evidence `tmp/tendox-feedback-20261025-v43/`.
-Установлено: прибыль/единицу внутри групп
-исходных единиц, single-position XML denominator; пропуски UNKNOWN. UI default,
-TOTAL доступен отдельно; до20loaded lots с полными КП/расходами. V1ABI исправлен;
-V2gate50PASS/PG737/web205. Планe373297e установлен25Oct10:52MSK; live readonlyPASS.
-Прибыль UNKNOWN. [V45](eis/search/133-eis-regional-discount.md):
-RGK/PRIZ/history/API/UI установлены; дальнейшая реальная приёмка — V48 ниже.
-[125](operations/125-spec-remediation.md): owner/ZIP отдельно; доставка отложена пользователем.
+Root; [контракт123](operations/123-beta-shortlist.md), `tmp/tendox-feedback-20261025-v43/`.
+Прибыль/единицу и single-position XML установлены; пропуски UNKNOWN, TOTAL отдельно.
+Gate50/PG737/web205, live readonly PASS; прибыль UNKNOWN. [V45](eis/search/133-eis-regional-discount.md)
+установлен, приёмка V48 ниже. [Доставка125](operations/125-spec-remediation.md) отложена.
 
 ## Текущий приоритет — полнота ЕИС
 
@@ -34,9 +38,8 @@ median18.5%/p7530.79%; исходная159 sample0UNKNOWN, PARTICIPATEUNKNOWN.
 [V49](eis/ingestion/137-eis-completeness-recovery.md) root: полнота/скорость44+223.
 Census V58 ниже; nationalUNKNOWN.
 59IDs:58source/UIverified;1transportUNKNOWN, consumedretry0; nationalUNKNOWN.
-Root [V50](eis/ingestion/138-eis-drug-positions.md) принят:6карточек/26позиций/22UNKNOWN,
-main/globalHTTP+actualUI PASS;2×gate50/PG771/web222. API024906c3/WEB71e83972,
-schema26_02; source0/cron0; nationalUNKNOWN.
+Root [V50](eis/ingestion/138-eis-drug-positions.md):6карточек/26позиций/22UNKNOWN,
+HTTP/UI и2×gate50 PASS; schema26_02; nationalUNKNOWN.
 [V51](eis/search/139-eis-freshness-handoff.md) root принят:singlefreshwaiter;
 180окон/27версий/5UI.
 Root [V52](eis/ingestion/140-eis-223-regular-kesmbo.md) принят: schema26_03,
@@ -47,8 +50,7 @@ native/mainHTTP/actualUI5/reviewPASS.
 [V54](eis/ingestion/142-eis-223-regular-zpesmbo.md) root установлен: schema27_01,
 API022f/WEB6e2e;54gate/811PG/cached4/UI PASS. Joint2→0, PARTIAL.
 Волна1260/1260terminal; новыеZP180:33SYNCED/147NO_DATA/0FAILED; nationalUNKNOWN.
-[V55](eis/ingestion/143-eis-223-joint-positions.md) root: исправление двух позиций
-по заказчикам; принят:gate56/PG831/WEB228, schema27_02/APIad34/WEBca9d, HTTP/UI PASS.
+[V55](eis/ingestion/143-eis-223-joint-positions.md):gate56/PG831/WEB228, schema27_02, HTTP/UI PASS.
 [V56](eis/ingestion/144-eis-223-joint-backfill.md):135XML/34ZIP сверены;133обычных/2joint,
 принят:source0 ещё1joint,5mainHTTP/UI/reviewPASS.
 [V57](eis/ingestion/145-eis-zp-corpus-search.md) принят:135mainAPI/287nativeitems/8.23s/reviewPASS.
@@ -65,11 +67,8 @@ M5 INCOMPLETE; [NO_DATA recovery122](operations/122-eis-no-data-overflow.md).
 
 ## Завершённые адресные восстановления ЕИС
 
-R3–R7 bounded; M5 UNKNOWN.
-[Coverage120](eis/ingestion/120-eis-national-coverage.md) содержит census,
-variants/holds, неподдержанные members и незакрытые диапазоны.
+R3–R7 bounded; M5 UNKNOWN, FAILED immutable. [Coverage120](eis/ingestion/120-eis-national-coverage.md).
 R7 evidence: `tmp/eis-transient-recovery-20261023-v31/acceptance.json`.
-FAILED immutable.
 
 ## Подтверждённые границы остальных направлений
 
@@ -93,6 +92,7 @@ PARTICIPATE не принят.
 Supplier/logistics, post-award и SaaS незавершены.
 Публичная цена не становится КП; mandatory FAIL блокирует допуск.
 
-Root [V58](eis/ingestion/146-eis-completeness-census.md):44 414155/153527unattempted/67failed;22350899/1260terminal; 6/14/5UNKNOWN PASS.
-[V59](eis/ingestion/147-eis-223-joint-families.md):106joint; gate56/native PASS, review/план/установка PENDING.
+[V60](eis/ingestion/148-eis-national-census-v60.md): national UNKNOWN.
+[V61](eis/ingestion/149-eis-corpus-initial-wait.md): initial busy evidence PENDING.
+[V62](eis/ingestion/150-eis-historical-bounded-turn.md): production BLOCKED.
 [История](history/implementation/09-status-snapshot-2026-10-20.md).

@@ -219,6 +219,7 @@ def test_all_new_evidence_and_planned_scope_block_cross_tenant_downgrade(storage
             assert_direct_downgrade_guard(
                 MIGRATION,
                 expected_database=db.name,
+                expected_revision="20261027_03",
                 match="223 ZPESMBO history and planned scope must be preserved",
                 tenant_context="unrelated",
             )

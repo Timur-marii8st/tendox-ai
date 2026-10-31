@@ -1,0 +1,19 @@
+# Build only from the immutable installed API image; no dependency installation.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY src/procurement/sources/gosplan_discovery.py /opt/venv/lib/python3.12/site-packages/procurement/sources/gosplan_discovery.py
+COPY src/procurement/sources/gosplan_pagination.py /opt/venv/lib/python3.12/site-packages/procurement/sources/gosplan_pagination.py
+COPY src/procurement/sources/gosplan_scan.py /opt/venv/lib/python3.12/site-packages/procurement/sources/gosplan_scan.py
+COPY src/procurement/sources/gosplan_queue.py /opt/venv/lib/python3.12/site-packages/procurement/sources/gosplan_queue.py
+COPY src/procurement/sources/gosplan_recovery.py /opt/venv/lib/python3.12/site-packages/procurement/sources/gosplan_recovery.py
+COPY src/procurement/sources/gosplan_turn_ledger.py /opt/venv/lib/python3.12/site-packages/procurement/sources/gosplan_turn_ledger.py
+COPY src/procurement/sources/eis_223_number_sync.py /opt/venv/lib/python3.12/site-packages/procurement/sources/eis_223_number_sync.py
+COPY src/procurement/eis_history_demand.py /opt/venv/lib/python3.12/site-packages/procurement/eis_history_demand.py
+COPY src/procurement/eis_history_reader.py /opt/venv/lib/python3.12/site-packages/procurement/eis_history_reader.py
+COPY src/procurement/eis_quarantine_proof.py /opt/venv/lib/python3.12/site-packages/procurement/eis_quarantine_proof.py
+COPY src/procurement/eis_joint_budget.py /opt/venv/lib/python3.12/site-packages/procurement/eis_joint_budget.py
+COPY src/procurement/storage/eis_223_regions.py /opt/venv/lib/python3.12/site-packages/procurement/storage/eis_223_regions.py
+COPY src/procurement/storage/eis_notice_hold.py /opt/venv/lib/python3.12/site-packages/procurement/storage/eis_notice_hold.py
+COPY scripts/server-gosplan-discovery.py /app/gosplan/server-gosplan-discovery.py
+COPY scripts/server-gosplan-recovery.py /app/gosplan/server-gosplan-recovery.py
+COPY scripts/server-gosplan-resolve-legacy-hold.py /app/gosplan/server-gosplan-resolve-legacy-hold.py

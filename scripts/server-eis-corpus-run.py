@@ -285,14 +285,19 @@ class Runner:
                     self.segment_id = str(uuid.uuid4())
                     self.metric("dispatch_start")
                     self.metric("import_wait_start")
-                    acquired = self.acquire(lease) if index == 0 else self.wait_import(lease)
+                    # A first tick that collides with an import should not be
+                    # discarded: wait exactly like a continuation, behind both
+                    # higher-priority owners, within the same parent horizon.
+                    acquired = self.acquire(lease) if index == 0 else False
+                    if not acquired:
+                        acquired = self.wait_import(lease)
                     if not acquired:
                         code = 128 + self.cancelled if self.cancelled else 75
                         reason = (
                             "INTERRUPTED"
                             if self.cancelled
                             else (
-                                "SERVER_IMPORT_BUSY"
+                                "INITIAL_WAIT_HORIZON_REACHED"
                                 if index == 0
                                 else "CONTINUATION_HORIZON_REACHED"
                             )
@@ -327,8 +332,11 @@ class Runner:
                             self.metric("dispatch_finish", "ERROR", 69)
                             self.receipt("PROXY_UNAVAILABLE")
                             return 69
-                        # Proxy probe/metrics can consume the remaining start horizon.
-                        if self.cancelled or (index > 0 and time.monotonic() >= self.deadline):
+                        started = stamp()
+                        self.metric("work_start")
+                        # The work-start metric can itself block; recheck after it
+                        # before starting a new atomic source worker.
+                        if self.cancelled or time.monotonic() >= self.deadline:
                             code = 128 + self.cancelled if self.cancelled else 75
                             self.metric(
                                 "dispatch_finish",
@@ -336,11 +344,15 @@ class Runner:
                                 code,
                             )
                             self.receipt(
-                                "INTERRUPTED" if self.cancelled else "CONTINUATION_HORIZON_REACHED"
+                                "INTERRUPTED"
+                                if self.cancelled
+                                else (
+                                    "INITIAL_WAIT_HORIZON_REACHED"
+                                    if index == 0
+                                    else "CONTINUATION_HORIZON_REACHED"
+                                )
                             )
                             return code
-                        started = stamp()
-                        self.metric("work_start")
                         code, raw, digest = self.worker(lease, dispatch, remaining)
                         self.metric("work_finish", "SUCCESS" if code == 0 else "ERROR", code)
                     finally:

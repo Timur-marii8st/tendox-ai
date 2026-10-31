@@ -83,13 +83,22 @@ def assert_direct_downgrade_guard(
     expected_database: str,
     match: str,
     tenant_context: str | None = None,
+    expected_revision: str | None = None,
 ) -> None:
     """Execute one old downgrade guard without traversing newer irreversible revisions."""
 
     _, admin_url = _validated_gate_urls(expected_database)
     module = importlib.import_module(f"migrations.versions.{migration_stem}")
+    if expected_revision is not None:
+        _assert_owned_database_name(expected_database)
+        script = ScriptDirectory.from_config(Config("alembic.ini"))
+        try:
+            if expected_revision != module.revision:
+                list(script.iterate_revisions(expected_revision, module.revision))
+        except Exception as error:
+            pytest.fail(f"historical revision is not a descendant of guarded migration: {error}")
     engine = create_engine(admin_url, pool_pre_ping=True)
-    declared_head = _latest_head()
+    declared_head = expected_revision if expected_revision is not None else _latest_head()
     original_op = module.op
     try:
         with engine.connect() as connection:

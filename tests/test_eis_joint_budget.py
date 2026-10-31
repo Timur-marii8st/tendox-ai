@@ -157,3 +157,233 @@ def test_completed_synchronous_overrun_is_charged_to_current_hour(tmp_path, cloc
     run.close()
     with budget.JointStartBudget(tmp_path, "tenant") as restarted:
         assert restarted.state.used_seconds == 1000
+
+
+def seed_history(tmp_path, company):
+    # Synthetic pre-provisioning only; production activation is not implemented.
+    path = tmp_path / f"eis-history-turn-{company}.json"
+    path.write_text(json.dumps({
+        "schema_version": 1,
+        "company_id": company,
+        "hour": NOW.replace(minute=0, second=0, microsecond=0).isoformat(),
+        "status": "UNUSED",
+        "window_key": None,
+        "demand_sha256": None,
+        "claim_id": None,
+    }))
+
+
+def test_history_claim_requires_explicit_bootstrap_and_survives_restart(
+    tmp_path, clock, monkeypatch
+):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        with pytest.raises(ValueError, match="HISTORY_STATE_MISSING"):
+            run.claim_history_turn("window/one", "a" * 64)
+        seed_history(tmp_path, "tenant")
+        assert run.claim_history_turn("window/one", "a" * 64)
+        assert not run.claim_history_turn("window/two", "b" * 64)
+    with budget.JointStartBudget(tmp_path, "tenant") as restarted:
+        assert not restarted.claim_history_turn("window/two", "b" * 64)
+
+
+def test_history_claim_keeps_both_reconciliation_reserves(tmp_path, clock, monkeypatch):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        run.state = run.state.model_copy(update={"used_seconds": 2500})
+        assert not run.claim_history_turn("window/one", "a" * 64)
+
+
+@pytest.mark.parametrize("damage", ["missing", "bad_json", "wrong_tenant", "future_hour"])
+def test_history_claim_fails_closed_on_lost_or_invalid_state(tmp_path, clock, monkeypatch, damage):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        path = tmp_path / "eis-history-turn-tenant.json"
+        if damage == "missing":
+            path.unlink()
+        elif damage == "bad_json":
+            path.write_text("{")
+        else:
+            state = json.loads(path.read_text())
+            state["company_id" if damage == "wrong_tenant" else "hour"] = (
+                "other"
+                if damage == "wrong_tenant"
+                else (NOW + timedelta(hours=1)).replace(minute=0).isoformat()
+            )
+            path.write_text(json.dumps(state))
+        with pytest.raises(ValueError):
+            run.claim_history_turn("window/one", "a" * 64)
+
+
+@pytest.mark.parametrize("completed", [True, False])
+def test_history_hour_rollover_preserves_uncertain_or_completed_work(
+    tmp_path, clock, monkeypatch, completed
+):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        assert run.claim_history_turn("window/one", "a" * 64)
+        if completed:
+            run.finish_history_turn()
+    clock["seconds"] = 3600
+    with budget.JointStartBudget(tmp_path, "tenant") as restarted:
+        assert restarted.claim_history_turn("window/two", "b" * 64) is completed
+
+
+def test_history_state_is_tenant_scoped_and_requires_owned_lock(tmp_path, clock, monkeypatch):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "one") as first:
+        seed_history(tmp_path, "one")
+        assert first.claim_history_turn("window/one", "a" * 64)
+        assert not hasattr(first, "initialize_history_turn")
+    with budget.JointStartBudget(tmp_path, "two") as second:
+        seed_history(tmp_path, "two")
+        assert second.claim_history_turn("window/two", "b" * 64)
+    with pytest.raises(ValueError, match="HISTORY_BUDGET_LOCK_REQUIRED"):
+        first.claim_history_turn("window/three", "c" * 64)
+
+
+def test_history_claim_survives_directory_fsync_error(tmp_path, clock, monkeypatch):
+    import os
+    import stat
+
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        fsync = os.fsync
+
+        def fail_directory(fd):
+            if stat.S_ISDIR(os.fstat(fd).st_mode):
+                raise OSError("injected directory fsync failure")
+            return fsync(fd)
+
+        with monkeypatch.context() as context:
+            context.setattr(os, "fsync", fail_directory)
+            with pytest.raises(OSError):
+                run.claim_history_turn("window/one", "a" * 64)
+        assert not run.claim_history_turn("window/two", "b" * 64)
+
+
+def test_history_overrun_consumes_new_hour_and_uncertainty_stays_blocked(
+    tmp_path, clock, monkeypatch
+):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        assert run.claim_history_turn("window/one", "a" * 64)
+        clock["seconds"] = 3600
+        run.finish_history_turn()
+        assert not run.claim_history_turn("window/two", "b" * 64)
+    clock["seconds"] = 7200
+    with budget.JointStartBudget(tmp_path, "tenant") as restarted:
+        assert restarted.claim_history_turn("window/three", "c" * 64)
+    clock["seconds"] = 10800
+    with budget.JointStartBudget(tmp_path, "tenant") as restarted:
+        assert not restarted.claim_history_turn("window/four", "d" * 64)
+    clock["seconds"] = 14400
+    with budget.JointStartBudget(tmp_path, "tenant") as restarted:
+        assert not restarted.claim_history_turn("window/five", "e" * 64)
+
+
+def test_history_symlink_and_disabled_reserves_cannot_admit(tmp_path, clock, monkeypatch):
+    import os
+
+    monkeypatch.delenv("EIS_RECONCILIATION_SHARE_ENABLED", raising=False)
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        with pytest.raises(ValueError, match="HISTORY_RECONCILIATION_GUARD_REQUIRED"):
+            run.claim_history_turn("window/one", "a" * 64)
+        path = tmp_path / "eis-history-turn-tenant.json"
+        target = tmp_path / "foreign"
+        target.write_bytes(path.read_bytes())
+        path.unlink()
+        path.symlink_to(target)
+        run.protected_reconciliation = True
+        with pytest.raises(OSError):
+            run.claim_history_turn("window/one", "a" * 64)
+        assert os.path.islink(path) and target.read_bytes()
+
+
+@pytest.mark.parametrize(
+    "window,digest", [("", "a" * 64), ("line\nbreak", "a" * 64), ("ok", "x" * 64)]
+)
+def test_history_rejects_invalid_claim_without_consuming_slot(
+    tmp_path, clock, monkeypatch, window, digest
+):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        with pytest.raises(ValueError, match="HISTORY_CLAIM_INVALID"):
+            run.claim_history_turn(window, digest)
+        assert run.claim_history_turn("window/valid", "a" * 64)
+
+
+def test_history_crashed_claim_cannot_be_finished_by_new_owner(tmp_path, clock, monkeypatch):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    run = budget.JointStartBudget(tmp_path, "tenant")
+    seed_history(tmp_path, "tenant")
+    assert run.claim_history_turn("window/one", "a" * 64)
+    run.lock.close()
+    with (
+        budget.JointStartBudget(tmp_path, "tenant") as restarted,
+        pytest.raises(ValueError, match="HISTORY_TURN_NOT_OWNED"),
+    ):
+        restarted.finish_history_turn()
+
+
+def test_history_deleted_claim_has_no_worker_bootstrap_api(tmp_path, clock, monkeypatch):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        assert run.claim_history_turn("window/one", "a" * 64)
+        (tmp_path / "eis-history-turn-tenant.json").unlink()
+        assert not hasattr(run, "initialize_history_turn")
+        with pytest.raises(ValueError, match="HISTORY_STATE_MISSING"):
+            run.claim_history_turn("window/two", "b" * 64)
+
+
+def test_history_fifo_is_rejected_without_blocking(tmp_path, clock, monkeypatch):
+    import os
+    import time
+
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        os.mkfifo(tmp_path / "eis-history-turn-tenant.json")
+        start = time.perf_counter()
+        with pytest.raises(ValueError, match="HISTORY_STATE_INVALID"):
+            run.claim_history_turn("window/one", "a" * 64)
+        assert time.perf_counter() - start < 1
+
+
+@pytest.mark.parametrize("failure", ["file_fsync", "rename"])
+def test_history_write_failure_does_not_grant_a_claim(tmp_path, clock, monkeypatch, failure):
+    import os
+
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        path = tmp_path / "eis-history-turn-tenant.json"
+        before = path.read_bytes()
+
+        def fail(*_args):
+            raise OSError("injected history persistence failure")
+
+        with monkeypatch.context() as context:
+            context.setattr(os, "fsync" if failure == "file_fsync" else "replace", fail)
+            with pytest.raises(OSError):
+                run.claim_history_turn("window/one", "a" * 64)
+        assert path.read_bytes() == before
+        with pytest.raises(ValueError, match="HISTORY_TURN_NOT_PENDING"):
+            run.finish_history_turn()
+
+
+def test_history_does_not_extend_existing_budget_schema(tmp_path, clock, monkeypatch):
+    monkeypatch.setenv("EIS_RECONCILIATION_SHARE_ENABLED", "1")
+    with budget.JointStartBudget(tmp_path, "tenant") as run:
+        seed_history(tmp_path, "tenant")
+        assert run.claim_history_turn("window/one", "a" * 64)
+    state = json.loads((tmp_path / "eis-joint-budget-tenant.json").read_text())
+    assert set(state) == set(budget.BudgetState.model_fields)
+    assert budget.BudgetState.model_validate(state).company_id == "tenant"

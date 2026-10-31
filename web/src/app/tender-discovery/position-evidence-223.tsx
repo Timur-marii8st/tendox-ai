@@ -10,6 +10,9 @@ export function PositionEvidence223View({ projection, ordinaryPositions = [] }: 
 }) {
   const total = projection.lots.reduce((n, lot) => n + lot.customers.reduce((m, c) => m + c.items.length, 0), 0);
   const groups = projection.lots.flatMap(lot => lot.customers);
+  const ordinary = projection.reasons.includes("JOINT_MIRRORED_DIRECT_ITEMS")
+    ? ordinaryPositions.filter(item => !projection.lots.some(lot => item.locator.startsWith(`${lot.provenance.locator}/t:lotData/`)))
+    : ordinaryPositions;
   const visibleGroups = groups.slice(0, 100);
   const visibleLots = projection.lots.map(lot => ({
     ...lot,
@@ -20,7 +23,9 @@ export function PositionEvidence223View({ projection, ordinaryPositions = [] }: 
     }),
   })).filter(lot => lot.customers.length > 0);
   return <div style={{ overflowWrap: "anywhere" }}>
-    <p>Позиции совместной закупки по заказчикам. Полнота ТЗ и расчёт экономики не подтверждены.</p>
+    {projection.reasons.includes("JOINT_FLAG_FALSE_WITH_CUSTOMERS")
+      ? <p>Позиции из групп заказчиков; признак совместной закупки не установлен в части лотов. Проверьте источник. Полнота ТЗ и расчёт экономики не подтверждены.</p>
+      : <p>Позиции совместной закупки по заказчикам. Полнота ТЗ и расчёт экономики не подтверждены.</p>}
     {projection.source_item_coverage !== "PASS" && <p>Состав позиций подтверждён частично. Проверьте источник.</p>}
     {visibleLots.map(lot => <div key={lot.lot_index}>
       <h4>Лот {lot.ordinal.value ?? lot.lot_index}</h4>
@@ -43,7 +48,7 @@ export function PositionEvidence223View({ projection, ordinaryPositions = [] }: 
       })}
     </div>)}
     {(total > 100 || groups.length > 100) && <p>Показаны первые 100 позиций и до 100 групп из {total} исходных позиций. Полный состав — в XML.</p>}
-    {ordinaryPositions.length > 0 && <div><h4>Позиции остальных лотов из извещения</h4>{ordinaryPositions.slice(0, 100).map((item, index) => <p key={`${item.locator}:${index}`}>{item.name} · {item.quantity} · {item.unit}<br />{item.locator}</p>)}{ordinaryPositions.length > 100 && <p>Показаны 100 из {ordinaryPositions.length} обычных позиций. Полный состав — в XML.</p>}</div>}
+    {ordinary.length > 0 && <div><h4>Позиции остальных лотов из извещения</h4>{ordinary.slice(0, 100).map((item, index) => <p key={`${item.locator}:${index}`}>{item.name} · {item.quantity} · {item.unit}<br />{item.locator}</p>)}{ordinary.length > 100 && <p>Показаны 100 из {ordinary.length} обычных позиций. Полный состав — в XML.</p>}</div>}
     <p>XML SHA-256: {projection.notice_xml_sha256}<br />Файл: {projection.source_member}</p>
   </div>;
 }

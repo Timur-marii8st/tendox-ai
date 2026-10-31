@@ -26,6 +26,16 @@ test("missing quantity and incomplete group remain explicit unknown", () => {
   for (const value of ["подтверждён частично", "исходное: не определено", "Позиции заказчика не подтверждены"]) assert.ok(html.includes(value));
 });
 
+test("false joint flag never labels customer positions as a joint purchase", () => {
+  const projection = fixture();
+  projection.source_item_coverage = "UNKNOWN";
+  projection.reasons = ["JOINT_FLAG_FALSE_WITH_CUSTOMERS"];
+  const html = renderToStaticMarkup(createElement(PositionEvidence223View, { projection }));
+  assert.ok(html.includes("признак совместной закупки не установлен"));
+  assert.ok(html.includes("6290.8"));
+  assert.ok(!html.includes("Позиции совместной закупки по заказчикам"));
+});
+
 test("large display is bounded and truncation is visible", () => {
   const projection = fixture(); const item = projection.lots[0].customers[0].items[0];
   projection.lots[0].customers[0].items = Array.from({ length: 101 }, (_, i) => ({ ...item, provenance: { ...item.provenance, locator: `item[${i}]` } }));
@@ -44,4 +54,21 @@ test("ordinary items of a mixed notice remain visible beside both customer group
     projection: fixture(), ordinaryPositions: [{ name: "Обычная позиция другого лота", quantity: "17", unit: "Штука", locator: "lot[2]/lotData/lotItem[1]" }]
   }));
   for (const value of ["6290.8", "1140", "Обычная позиция другого лота", "17", "lot[2]/lotData/lotItem[1]"]) assert.ok(html.includes(value));
+});
+
+test("mirrored direct positions are not displayed twice; unrelated lots remain visible", () => {
+  const projection = fixture();
+  projection.source_item_coverage = "UNKNOWN";
+  projection.reasons = ["JOINT_MIRRORED_DIRECT_ITEMS"];
+  projection.lots[0].provenance = { ...projection.lots[0].provenance, locator: "p:lots/t:lot[1]" };
+  const html = renderToStaticMarkup(createElement(PositionEvidence223View, {
+    projection, ordinaryPositions: [
+      { name: "Копия общей позиции", quantity: "5", unit: "шт", locator: "p:lots/t:lot[1]/t:lotData/t:lotItems/t:lotItem[1]" },
+      { name: "Другой лот", quantity: "6", unit: "шт", locator: "p:lots/t:lot[2]/t:lotData/t:lotItems/t:lotItem[1]" },
+    ],
+  }));
+  assert.ok(html.includes("Заказчик 1:"));
+  assert.ok(!html.includes("Копия общей позиции"));
+  assert.ok(html.includes("Другой лот"));
+  assert.ok(html.includes("подтверждён частично"));
 });

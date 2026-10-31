@@ -70,6 +70,7 @@ def record_attempt(
     checked_at: datetime,
     response_sha256: str | None,
     reason: str | None = None,
+    fetch_detail: dict[str, object] | None = None,
 ) -> None:
     _aware(checked_at)
     if not actor_id.strip() or not re.fullmatch(
@@ -78,6 +79,49 @@ def record_attempt(
         key,
     ):
         raise ValueError("ATTEMPT_SCOPE_INVALID")
+    if fetch_detail is not None:
+        # Only bounded enums/counters may enter tenant audit; reject arbitrary source data.
+        if type(fetch_detail) is not dict or type(fetch_detail.get("kind")) is not str:
+            raise ValueError("FETCH_DIAGNOSTIC_INVALID")
+        kind = fetch_detail["kind"]
+        causes = {
+            "ARCHIVE_RESOURCE": {"ARCHIVE_BYTES", "MEMBER_COUNT", "EXPANDED_BYTES", "MEMBER_BYTES"},
+            "ARCHIVE_SET": {
+                "INITIAL_COUNT", "INITIAL_DUPLICATE", "PREPARED_COUNT", "PREPARED_DUPLICATE",
+                "UID_MISMATCH", "DOWNLOADED_MISMATCH",
+            },
+        }
+        expected_reasons = {
+            "ARCHIVE_RESOURCE": "ARCHIVE_RESOURCE_LIMIT",
+            "ARCHIVE_SET": "ARCHIVE_SET_MISMATCH",
+            "WINDOW_BYTES": "WINDOW_BYTES_LIMIT",
+        }
+        is_rejection = key.endswith("/purchaseRejection")
+        is_lot_event = key.endswith("/purchaseLotCancellation")
+        valid = (
+            outcome == "FAILED" and expected_reasons.get(kind) == reason
+            and ((kind == "ARCHIVE_SET" and is_rejection)
+                 or (kind in {"ARCHIVE_RESOURCE", "WINDOW_BYTES"}
+                     and not is_rejection and not is_lot_event))
+        )
+        if kind in causes:
+            valid = (
+                valid and set(fetch_detail) == {"kind", "cause"}
+                and type(fetch_detail.get("cause")) is str
+                and fetch_detail.get("cause") in causes[kind]
+            )
+        elif kind == "WINDOW_BYTES":
+            count = fetch_detail.get("downloaded_count")
+            size = fetch_detail.get("compressed_mib_floor")
+            valid = (
+                valid and set(fetch_detail) == {"kind", "downloaded_count", "compressed_mib_floor"}
+                and type(count) is int and 1 <= count <= 8
+                and type(size) is int and 40 <= size <= 64
+            )
+        else:
+            valid = False
+        if not valid:
+            raise ValueError("FETCH_DIAGNOSTIC_INVALID")
     event = key.endswith("/purchaseRejection")
     windows = eis_223_event_windows if event else eis_223_windows
     attempts = eis_223_event_sync_attempts if event else eis_223_sync_attempts
@@ -128,6 +172,7 @@ def record_attempt(
                     "reason": reason,
                     "coverage": "UNKNOWN",
                     "freshness": "UNKNOWN",
+                    **({"fetch_detail": fetch_detail} if fetch_detail is not None else {}),
                 },
             )
         )

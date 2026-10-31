@@ -1,8 +1,11 @@
 """Bounded local overlap experiment; no source/production calls."""
 
 import asyncio
+import time
+import zipfile
 from datetime import date
 from itertools import pairwise
+from types import SimpleNamespace
 from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
@@ -107,6 +110,10 @@ class PacedPayloads:
 
 
 def test_same_payload_overlap_finishes_ready223_before_more44(monkeypatch):
+    # ZIP metadata must not depend on crossing a real two-second clock boundary.
+    monkeypatch.setattr(
+        zipfile, "time", SimpleNamespace(time=lambda: 1700000000, localtime=time.localtime)
+    )
     monkeypatch.setenv("EIS_NO_DATA_EVIDENCE_DIR", "")
 
     async def exercise(enabled):

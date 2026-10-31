@@ -34,6 +34,49 @@ JointDocumentType223 = Literal[
 SUPPORTED_JOINT_DOCUMENT_TYPES = frozenset(get_args(JointDocumentType223))
 
 
+def _identical_joint_mirrors(direct: list[ET.Element], joint: ET.Element) -> bool:
+    """Accept only bijective GUID matches with identical item trees except local ordinal."""
+    grouped = [item for item in joint.iter() if item.tag == f"{{{TYPES_NS}}}lotItem"]
+    if not direct or len(direct) != len(grouped) or len(direct) > MAX_NOTICE_ITEMS:
+        return False
+
+    def identity(item: ET.Element) -> str | None:
+        values = _children(item, TYPES_NS, "guid")
+        ordinals = _children(item, TYPES_NS, "ordinalNumber")
+        if (len(values) != 1 or len(values[0]) or not values[0].text or len(ordinals) != 1
+                or ordinals[0].attrib or len(ordinals[0]) or not ordinals[0].text
+                or not ordinals[0].text.strip().isdecimal()
+                or (ordinals[0].tail and ordinals[0].tail.strip())):
+            return None
+        value = values[0].text.strip()
+        return value if value and len(value) <= 100 else None
+
+    def shape(item: ET.Element, *, root: bool = False, depth: int = 0) -> tuple:
+        if depth > 64:
+            raise ValueError("MIRROR_DEPTH_LIMIT")
+        # Ignore only formatting-only whitespace; preserve all substantive bytes.
+        text = item.text if item.text and item.text.strip() else None
+        tail = item.tail if item.tail and item.tail.strip() else None
+        return (
+            item.tag, tuple(sorted(item.attrib.items())), text, tail,
+            tuple(shape(child, depth=depth + 1) for child in item if not (
+                root and child.tag == f"{{{TYPES_NS}}}ordinalNumber"
+            )),
+        )
+
+    direct_ids = [identity(item) for item in direct]
+    joint_ids = [identity(item) for item in grouped]
+    if (None in direct_ids or None in joint_ids or len(set(direct_ids)) != len(direct_ids)
+            or len(set(joint_ids)) != len(joint_ids) or set(direct_ids) != set(joint_ids)):
+        return False
+    by_id = dict(zip(joint_ids, grouped, strict=True))
+    try:
+        return all(shape(item, root=True) == shape(by_id[ident], root=True)
+                   for item, ident in zip(direct, direct_ids, strict=True))
+    except ValueError:
+        return False
+
+
 class JointCustomerPositions223(SourceModel):
     customer_index: int = Field(ge=1)
     name: TextFact
@@ -195,6 +238,8 @@ def joint_positions223(raw: bytes, notice: Eis223NoticeSnapshot) -> Eis223Positi
         sha = notice.xml_sha256
         base = f"{notice.document_type}/p:body/p:item/p:{notice.document_type}Data/p:lots"
         complete = True
+        false_with_customers = False
+        mirrored_direct_items = False
         for li, lot in enumerate(native_lots, 1):
             direct_parent = _optional(_optional(lot, TYPES_NS, "lotData"), TYPES_NS, "lotItems")
             direct_items = (
@@ -215,13 +260,18 @@ def joint_positions223(raw: bytes, notice: Eis223NoticeSnapshot) -> Eis223Positi
             header = _optional(lot, TYPES_NS, "lotData")
             direct = _optional(header, TYPES_NS, "lotItems")
             if direct is not None and _children(direct, TYPES_NS, "lotItem"):
-                raise ValueError("JOINT_AMBIGUOUS_LOT_SHAPES")
+                if flag != "true" or not _identical_joint_mirrors(direct_items, joint):
+                    raise ValueError("JOINT_AMBIGUOUS_LOT_SHAPES")
+                # The observed duplicates have different ordinals. Do not claim
+                # complete item coverage or project the same items twice.
+                mirrored_direct_items = True
+                complete = False
             path = base + f"/t:lot[{li}]"
-            if (
-                _text(joint, TYPES_NS, "jointLot", sha, path + "/t:jointLotData/t:jointLot").value
-                != "true"
-            ):
+            if flag not in {"true", "false"}:
                 raise ValueError("JOINT_FLAG_UNSUPPORTED")
+            if flag == "false":
+                false_with_customers = True
+                complete = False
             for element in joint.iter():
                 local = element.tag.rsplit("}", 1)[-1]
                 if (
@@ -325,7 +375,13 @@ def joint_positions223(raw: bytes, notice: Eis223NoticeSnapshot) -> Eis223Positi
             source_member=notice.source_member,
             lots=tuple(groups),
             source_item_coverage="PASS" if complete else "UNKNOWN",
-            reasons=() if complete else ("JOINT_CUSTOMER_ITEMS_UNKNOWN",),
+            reasons=(
+                (("JOINT_FLAG_FALSE_WITH_CUSTOMERS",) if false_with_customers else ())
+                + (("JOINT_MIRRORED_DIRECT_ITEMS",) if mirrored_direct_items else ())
+                + (("JOINT_CUSTOMER_ITEMS_UNKNOWN",) if any(
+                    not customer.items for lot in groups for customer in lot.customers
+                ) else ())
+            ),
         )
     except (Eis223ContractError, ET.ParseError) as error:
         raise ValueError("JOINT_SOURCE_INVALID") from error

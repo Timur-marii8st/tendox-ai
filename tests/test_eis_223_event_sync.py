@@ -135,3 +135,79 @@ def test_invalid_region_fails_before_rejection_source_call(region):
     with pytest.raises(ValueError, match="REGION_INVALID"):
         fetch(transport, region=region)
     assert transport.posts == transport.downloads == 0
+
+
+def test_complete_eight_archive_set_and_ninth_rejected_before_download():
+    from procurement.sources.eis_223_event_sync import (
+        bind_purchase_rejection_window,
+        preflight_purchase_rejection_window,
+    )
+    from test_eis_223_index import source_set
+
+    key = "getDocsIP/RI223/50/2026-10-01+03:00/purchaseRejection"
+    initial, prepared, _ = source_set(8)
+    archives = {
+        ref.url: zip_bytes([(f"{i}.xml", event_xml(guid=f"{i:08X}-0000-0000-0000-000000000000"))])
+        for i, ref in enumerate(prepared.prepared_archives, 1)
+    }
+    window = bind_purchase_rejection_window(key, initial, prepared, archives)
+    assert len(preflight_purchase_rejection_window("tenant-a", window)) == 8
+    initial, prepared, _ = source_set(9)
+    with pytest.raises(ValueError, match="ARCHIVE_SET_MISMATCH"):
+        bind_purchase_rejection_window(
+            key, initial, prepared, {r.url: b"preflight" for r in prepared.prepared_archives}
+        )
+
+
+@pytest.mark.parametrize(("limit", "reason"), [
+    ("MAX_EVENT_MEMBERS", "WINDOW_MEMBER_LIMIT"),
+    ("MAX_EVENT_EXPANDED_BYTES", "WINDOW_EXPANDED_LIMIT"),
+])
+def test_total_window_bounds_apply_before_any_xml_parsing(monkeypatch, limit, reason):
+    import procurement.sources.eis_223_event_sync as subject
+    from test_eis_223_index import source_set
+
+    initial, prepared, _ = source_set(3)
+    archives = {
+        ref.url: zip_bytes([(f"{i}.xml", event_xml(guid=f"{i:08X}-0000-0000-0000-000000000000"))])
+        for i, ref in enumerate(prepared.prepared_archives, 1)
+    }
+    key = "getDocsIP/RI223/50/2026-10-01+03:00/purchaseRejection"
+    window = subject.bind_purchase_rejection_window(key, initial, prepared, archives)
+    monkeypatch.setattr(subject, limit, 2)
+    def must_not_parse(*args, **kwargs):
+        pytest.fail("parsed before budget check")
+
+    monkeypatch.setattr(subject, "inspect_purchase_rejection_archive", must_not_parse)
+    with pytest.raises(ValueError, match=reason):
+        subject.preflight_purchase_rejection_window("tenant-a", window)
+
+
+def test_fetch_reserves_buffer_budget_before_next_archive(monkeypatch):
+    from uuid import UUID
+
+    import procurement.sources.eis_223_event_sync as subject
+    from test_eis_223_index import UID as REQUEST_UID
+    from test_eis_223_index import source_set
+
+    initial, prepared, _ = source_set(3)
+    replies = iter((initial, prepared))
+
+    async def parsed(*args):
+        return next(replies)
+
+    class SizedTransport:
+        downloads = 0
+
+        async def download(self, url, token):
+            self.downloads += 1
+            return 200, b"123456"
+
+    monkeypatch.setattr(subject, "_parsed_post", parsed)
+    monkeypatch.setattr(subject, "uuid4", lambda: UUID(REQUEST_UID))
+    monkeypatch.setattr(subject, "MAX_ARCHIVE_BYTES", 10)
+    monkeypatch.setattr(subject, "MAX_EVENT_COMPRESSED_BYTES", 20)
+    transport = SizedTransport()
+    with pytest.raises(ValueError, match="WINDOW_BYTES_LIMIT"):
+        fetch(transport)
+    assert transport.downloads == 2

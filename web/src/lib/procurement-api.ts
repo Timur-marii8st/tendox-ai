@@ -3178,3 +3178,27 @@ export function searchGlobalPrice(query: string, law: "all" | "44" | "223", regi
   if (cursor) params.set("cursor", cursor);
   return request<GlobalPriceResult>(`/v1/tender-discovery/global-price?${params}`, { signal: AbortSignal.timeout(60_000) });
 }
+
+export type GosplanLaw = "44" | "223";
+export type GosplanSearchItem = {
+  law: GosplanLaw; number: string; title: string; purchase_type: string;
+  price: string | null; currency: string | null; deadline_raw: string | null;
+  deadline_status: "UNKNOWN"; submission_status: "UNKNOWN"; source_sha256: string;
+};
+export type GosplanSearchPage = {
+  law: GosplanLaw; query: string; observed_at: string; response_sha256: string;
+  items: GosplanSearchItem[]; may_have_more: boolean; coverage: "UNKNOWN";
+};
+export type GosplanDetail = {
+  law: GosplanLaw; number: string; observed_at: string; response_sha256: string;
+  eis_url: string | null; eis_url_origin: "PROVIDER" | "NUMBER_DERIVED" | null; platform_url: string | null;
+  documents: { name: string; url: string; source_sha256: string }[];
+  documents_truncated: boolean; submission_status: "UNKNOWN";
+};
+export async function searchGosplan(query: string, law: GosplanLaw, offset = 0): Promise<GosplanSearchPage> {
+  const params = new URLSearchParams({ query, law, offset: String(offset) });
+  return request<GosplanSearchPage>(`/v1/tender-discovery/gosplan/search?${params}`, { signal: AbortSignal.timeout(30_000) });
+}
+export async function readGosplanDetail(law: GosplanLaw, number: string): Promise<GosplanDetail> {
+  return request<GosplanDetail>(`/v1/tender-discovery/gosplan/detail/${law}/${encodeURIComponent(number)}`, { signal: AbortSignal.timeout(30_000) });
+}

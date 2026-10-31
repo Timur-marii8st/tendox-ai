@@ -5,7 +5,10 @@ from __future__ import annotations
 import math
 import os
 import re
+import stat
+import tempfile
 import time
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -28,6 +31,19 @@ class BudgetState(BaseModel):
     active_started_at: AwareDatetime | None = None
 
 
+class HistoryTurnState(BaseModel):
+    """Separate opt-in accounting; never changes the existing budget JSON schema."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    company_id: str
+    hour: AwareDatetime
+    status: Literal["UNUSED", "PENDING", "FINISHED", "UNCERTAIN"]
+    window_key: str | None = None
+    demand_sha256: str | None = None
+    claim_id: str | None = None
+
+
 class JointStartBudget:
     """54min shared admission; atomic180s tail;60s recovery starts per law/hour.
 
@@ -44,6 +60,9 @@ class JointStartBudget:
     def __init__(self, root: Path, company: str, *, reservation: int = 360):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", company) or reservation not in {360, 540}:
             raise ValueError("JOINT_BUDGET_SCOPE_INVALID")
+        self.company = company
+        self.history_path = root / f"eis-history-turn-{company}.json"
+        self._history_owned_claim: str | None = None
         self.protected_reconciliation = os.environ.get("EIS_RECONCILIATION_SHARE_ENABLED") == "1"
         self.path = root / f"eis-joint-budget-{company}.json"
         self.lock = (root / f"eis-joint-budget-{company}.lock").open("a+b")
@@ -145,6 +164,106 @@ class JointStartBudget:
             getattr(self.state, f"recovery{law}_seconds") + self.recovery[law]
             < self.PROTECTED_RECOVERY_SECONDS
         )
+
+    @staticmethod
+    def _history_hour() -> datetime:
+        now = datetime.now(UTC)
+        return now.replace(minute=0, second=0, microsecond=0)
+
+    def _read_history_turn(self) -> HistoryTurnState:
+        if self.lock.closed:
+            raise ValueError("HISTORY_BUDGET_LOCK_REQUIRED")
+        try:
+            fd = os.open(self.history_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except FileNotFoundError as error:
+            raise ValueError("HISTORY_STATE_MISSING") from error
+        with os.fdopen(fd, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                raise ValueError("HISTORY_STATE_INVALID")
+            raw = handle.read(16385)
+        if len(raw) > 16384:
+            raise ValueError("HISTORY_STATE_INVALID")
+        state = HistoryTurnState.model_validate_json(raw)
+        hour = self._history_hour()
+        if (
+            state.company_id != self.company
+            or state.hour.utcoffset() != timedelta(0)
+            or state.hour != state.hour.replace(minute=0, second=0, microsecond=0)
+            or state.hour > hour
+            or (state.status == "UNUSED")
+            != (state.window_key is None and state.demand_sha256 is None and state.claim_id is None)
+            or (
+                state.status != "UNUSED"
+                and (not state.window_key or not state.demand_sha256 or not state.claim_id)
+            )
+            or (
+                state.window_key is not None
+                and not re.fullmatch(r"[^\x00-\x1f\x7f]{1,512}", state.window_key)
+            )
+            or (
+                state.demand_sha256 is not None
+                and not re.fullmatch(r"[0-9a-f]{64}", state.demand_sha256)
+            )
+            or (state.claim_id is not None and not re.fullmatch(r"[0-9a-f]{32}", state.claim_id))
+        ):
+            raise ValueError("HISTORY_STATE_INVALID")
+        return state
+
+    def _write_history_turn(self, state: HistoryTurnState) -> None:
+        fd, temporary = tempfile.mkstemp(prefix=".eis-history-turn-", dir=self.history_path.parent)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(state.model_dump_json().encode())
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.history_path)
+            directory = os.open(self.history_path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    def claim_history_turn(self, window_key: str, demand_sha256: str) -> bool:
+        """Reserve one READY turn; caller must validate demand and audit before source."""
+        if not self.protected_reconciliation:
+            raise ValueError("HISTORY_RECONCILIATION_GUARD_REQUIRED")
+        if not re.fullmatch(r"[^\x00-\x1f\x7f]{1,512}", window_key) or not re.fullmatch(
+            r"[0-9a-f]{64}", demand_sha256
+        ):
+            raise ValueError("HISTORY_CLAIM_INVALID")
+        state = self._read_history_turn()
+        hour = self._history_hour()
+        if state.status == "UNCERTAIN" or (state.hour == hour and state.status != "UNUSED"):
+            return False
+        if state.hour < hour and state.status == "PENDING":
+            self._write_history_turn(state.model_copy(update={"hour": hour, "status": "UNCERTAIN"}))
+            return False
+        if not self.can_start(pending_reconciliation=("44", "223")):
+            return False
+        claim_id = uuid.uuid4().hex
+        self._write_history_turn(
+            HistoryTurnState(
+                company_id=self.company, hour=hour, status="PENDING",
+                window_key=window_key, demand_sha256=demand_sha256, claim_id=claim_id,
+            )
+        )
+        self._history_owned_claim = claim_id
+        return True
+
+    def finish_history_turn(self) -> None:
+        """Record completion without returning the hourly slot, including on rollover."""
+        state = self._read_history_turn()
+        if state.status != "PENDING":
+            raise ValueError("HISTORY_TURN_NOT_PENDING")
+        if self._history_owned_claim is None or state.claim_id != self._history_owned_claim:
+            raise ValueError("HISTORY_TURN_NOT_OWNED")
+        self._write_history_turn(
+            state.model_copy(update={"hour": self._history_hour(), "status": "FINISHED"})
+        )
+        self._history_owned_claim = None
 
     def can_start(
         self,

@@ -8,7 +8,7 @@
 | Папка / вход | Назначение и порядок чтения |
 |---|---|
 | [Текущий статус](15-implementation-plan.md) | Подтверждённые границы, ограничения, следующая задача |
-| [product/](product/README.md) | Видение, PRD, трассировка, целевые релизы и продуктовые агенты |
+| [product/](product/README.md) | Оба направления продукта, PRD поставщика, планируемый ИИ для заказчиков, материалы для инвесторов |
 | [architecture/](architecture/README.md) | Домен, архитектура, compliance, экономика и legal/security |
 | [documents/](documents/README.md) | Extraction/OCR, completeness, выбранный документ и независимый review |
 | [eis/](eis/README.md) | Источник/приём данных и поиск/сравнение; отдельные индексы |

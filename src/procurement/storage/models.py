@@ -1282,7 +1282,7 @@ eis_223_event_windows = Table(
         name="ck_eis_223_event_window_hashes",
     ),
     CheckConstraint(
-        "archive_count BETWEEN 1 AND 2 AND record_count >= 1", name="ck_eis_223_event_counts"
+        "archive_count BETWEEN 1 AND 8 AND record_count >= 1", name="ck_eis_223_event_counts"
     ),
 )
 eis_223_event_archive_sources = Table(

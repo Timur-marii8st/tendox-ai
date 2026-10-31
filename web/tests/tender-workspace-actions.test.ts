@@ -101,8 +101,12 @@ test("region evidence covers the complete two-law page and remains bounded", asy
     readTenderNavigation: ref => ({ ...(ref as object), delivery_regions: [] }),
   });
   const result = await api.searchWorkspace("бумага", "44");
+  assert.equal(navigationCalls.length, 0);
+  const refs = rowsFromResult(result as never).slice(0, 200).map(row => ({ id: row.id, law: row.law, number: row.purchaseNumber, version: row.version, sha256: row.xmlSha256 }));
+  const enriched = await api.enrichWorkspaceNavigation(refs);
   assert.equal(navigationCalls.length, 200);
-  assert.equal(Object.keys(result.navigation as object).length, 200);
+  assert.equal(enriched.failed, 0);
+  assert.equal(Object.keys(enriched.navigation as object).length, 200);
   assert.equal((navigationCalls[199] as { purchase_number: string }).purchase_number, String(200).padStart(19, "0"));
 });
 
@@ -123,4 +127,18 @@ test("global price response cannot cross region or query and invalid input never
   assert.ok((await api.searchGlobalWorkspace("бумага", "all", "x".repeat(201), false)).error);
   assert.ok((await api.searchGlobalWorkspace("бумага", "all", "Москва", false, "bad cursor")).error);
   assert.equal(calls.length, 1);
+});
+
+
+test("initial results do not wait for navigation and failures stay unknown", async () => {
+  const matched = [{ purchase_number: "1".padStart(19, "0"), version_number: 1, xml_sha256: "a".repeat(64), deadline: null, application_status: "UNKNOWN", reasons: [], lot_items: [], attachments: [], title: "Paper", nmck_rub: "100", source_window: "synthetic", source_member: "notice.xml" }];
+  const { api, navigationCalls } = harness({ searchIndexed: () => ({ result: { matched } }), readTenderNavigation: () => { throw new Error("unavailable"); } });
+  const result = await api.searchWorkspace("бумага", "44");
+  assert.equal(navigationCalls.length, 0);
+  const row = rowsFromResult(result as never)[0];
+  const enriched = await api.enrichWorkspaceNavigation([{ id: row.id, law: row.law, number: row.purchaseNumber, version: row.version, sha256: row.xmlSha256 }]);
+  assert.equal(enriched.failed, 1);
+  assert.equal(Object.keys(enriched.navigation as object).length, 0);
+  await assert.rejects(() => api.enrichWorkspaceNavigation([{ id: "__proto__", law: row.law, number: row.purchaseNumber, version: row.version, sha256: row.xmlSha256 }]));
+  assert.equal(navigationCalls.length, 1);
 });

@@ -19,6 +19,136 @@ worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
 
 
+def test_failure_diagnostic_exposes_only_allowlisted_metadata():
+    from sqlalchemy.exc import IntegrityError
+
+    class DatabaseFailure(Exception):
+        sqlstate = "23505"
+
+    error = IntegrityError("secret SQL", {"token": "secret"}, DatabaseFailure("secret"))
+    assert worker.failure_diagnostic(error, "INGEST") == {
+        "phase": "INGEST", "category": "SQL_INTEGRITY", "sqlstate": "23505", "code": None,
+        "location": None,
+    }
+    other = RuntimeError("secret token and source contents")
+    assert worker.failure_diagnostic(other, "FETCH") == {
+        "phase": "FETCH", "category": "OTHER", "sqlstate": None, "code": None,
+        "location": None,
+    }
+    diagnostic = worker.failure_diagnostic(
+        worker.Eis223ContractError("FIELD_NAMESPACE_INVALID"), "FETCH"
+    )
+    assert diagnostic["code"] == "FIELD_NAMESPACE_INVALID"
+    diagnostic = worker.failure_diagnostic(
+        ValueError("223_POSITION_REPLAY_CONFLICT"), "INGEST"
+    )
+    assert diagnostic["code"] == "223_POSITION_REPLAY_CONFLICT"
+    assert worker.failure_diagnostic(KeyError("secret"), "FETCH")["category"] == "KEY_ERROR"
+    assert worker.failure_diagnostic(KeyError("secret"), "FETCH")["code"] is None
+    namespace = {"__name__": "procurement.storage.eis_223_index"}
+    exec("def trigger():\n    raise ValueError('secret')\n", namespace)
+    try:
+        namespace["trigger"]()
+    except ValueError as error:
+        diagnostic = worker.failure_diagnostic(error, "INGEST")
+    assert diagnostic["location"] == "procurement.storage.eis_223_index:2"
+    assert "secret" not in str(diagnostic)
+    namespace = {"__name__": "procurement.sources.eis_223_joint_positions"}
+    exec("def trigger():\n    raise ValueError('JOINT_UNMAPPED_ITEMS')\n", namespace)
+    try:
+        namespace["trigger"]()
+    except ValueError as error:
+        diagnostic = worker.failure_diagnostic(error, "INGEST")
+    assert diagnostic["location"] == "procurement.sources.eis_223_joint_positions:2"
+    assert diagnostic["code"] == "JOINT_UNMAPPED_ITEMS"
+    with pytest.raises(ValueError, match="DIAGNOSTIC_PHASE_INVALID"):
+        worker.failure_diagnostic(other, "secret")
+
+
+def test_worker_records_failure_category_without_exception_contents(loop, monkeypatch):
+    target = Eis223RefreshTarget(date(2026, 10, 11), "purchaseNotice", "77")
+    recorded = []
+    monkeypatch.setattr(
+        worker, "regional_due_windows", lambda *a, **k: (target,) if not recorded else ()
+    )
+
+    async def fail(*args, **kwargs):
+        raise ValueError("sensitive-source-content")
+
+    monkeypatch.setattr(worker, "fetch_notice223_day", fail)
+    monkeypatch.setattr(worker, "record_attempt", lambda *a, **k: recorded.append((a, k)))
+    result = asyncio.run(worker.run())
+    assert result["outcomes"][0]["reason"] == "SYNC_FAILED"
+    assert result["outcomes"][0]["diagnostic"] == {
+        "phase": "FETCH", "category": "VALUE_ERROR", "sqlstate": None, "code": None,
+        "location": None,
+    }
+    assert "sensitive-source-content" not in str(result)
+    assert recorded[0][0][3] == "FAILED"
+
+
+@pytest.mark.parametrize("flag, expected", [
+    ("false", "JOINT_FLAG_FALSE_WITH_CONTENT"), ("0", "JOINT_FLAG_NUMERIC_FALSE"),
+    ("1", "JOINT_FLAG_NUMERIC_TRUE"), ("secret", "JOINT_FLAG_OTHER"),
+])
+def test_joint_flag_diagnostic_is_bounded(flag, expected):
+    namespace = {"__name__": "procurement.sources.eis_223_joint_positions"}
+    exec("def trigger(flag):\n    raise ValueError('JOINT_FLAG_UNSUPPORTED')\n", namespace)
+    try:
+        namespace["trigger"](flag)
+    except ValueError as error:
+        diagnostic = worker.failure_diagnostic(error, "INGEST")
+    assert diagnostic["code"] == expected
+    assert "secret" not in str(diagnostic)
+
+
+@pytest.mark.parametrize("child, expected", [
+    ("lotCustomers", "CONTAINER_ONLY"), ("lotCustomer", "CUSTOMER_PRESENT"),
+    ("lotItem", "ITEM_PRESENT"), ("untrusted", "OTHER"),
+])
+def test_joint_false_diagnostic_only_reports_bounded_shape(child, expected):
+    from xml.etree.ElementTree import Element, SubElement
+
+    joint = Element("jointLotData")
+    SubElement(joint, child).text = "sensitive data"
+    namespace = {"__name__": "procurement.sources.eis_223_joint_positions"}
+    exec(
+        "def trigger(joint):\n    flag = 'false'\n    raise ValueError('JOINT_FLAG_UNSUPPORTED')\n",
+        namespace,
+    )
+    try:
+        namespace["trigger"](joint)
+    except ValueError as error:
+        diagnostic = worker.failure_diagnostic(error, "INGEST")
+    assert diagnostic["joint_shape"] == expected
+    assert "sensitive data" not in str(diagnostic)
+
+
+def test_worker_distinguishes_ingest_error_and_preserves_response_hash(loop, monkeypatch):
+    target = Eis223RefreshTarget(date(2026, 10, 11), "purchaseNotice", "77")
+    recorded = []
+    monkeypatch.setattr(
+        worker, "regional_due_windows", lambda *a, **k: (target,) if not recorded else ()
+    )
+
+    async def fetched(*args, **kwargs):
+        return SimpleNamespace(status="SYNCED", window=object(), response_sha256="a" * 64)
+
+    def fail_ingest(*args, **kwargs):
+        raise worker.Eis223IndexConflict("WINDOW_REPLAY_CONFLICT")
+
+    monkeypatch.setattr(worker, "fetch_notice223_day", fetched)
+    monkeypatch.setattr(worker, "ingest_notice223_window", fail_ingest)
+    monkeypatch.setattr(worker, "record_attempt", lambda *a, **k: recorded.append((a, k)))
+    result = asyncio.run(worker.run())
+    assert result["outcomes"][0]["diagnostic"] == {
+        "phase": "INGEST", "category": "EIS_223_INDEX", "sqlstate": None,
+        "code": "WINDOW_REPLAY_CONFLICT", "location": None,
+    }
+    assert recorded[0][0][3] == "FAILED"
+    assert recorded[0][1]["response_sha256"] == "a" * 64
+
+
 @pytest.fixture
 def loop(monkeypatch):
     seconds = [0.0]
@@ -214,3 +344,180 @@ def test_fresh_lane_switch_respects_same_selection_cap(loop, monkeypatch):
     assert result["selected_batches"] == result["max_selected_batches"] == 1
     assert result["stop_reason"] == "BATCH_RESELECTION_LIMIT" and result["attempted"] == 0
     fetch.assert_not_called()
+
+
+def _check_capture_happens_only_after_failed_attempt(loop, monkeypatch, audit_available):
+    target = Eis223RefreshTarget(date(2026, 10, 29), "purchaseNoticeKESMBO", "16")
+    events = []
+    calls = []
+    monkeypatch.setattr(
+        worker, "regional_due_windows", lambda *a, **k: (target,) if not events else ()
+    )
+
+    async def fetched(*args, **kwargs):
+        calls.append("fetch")
+        return SimpleNamespace(
+            status="SYNCED",
+            window=SimpleNamespace(window_key=worker.CAPTURE_KEY),
+            response_sha256="a" * 64,
+        )
+
+    def fail_ingest(*args, **kwargs):
+        raise ValueError("JOINT_AMBIGUOUS_LOT_SHAPES")
+
+    def recorded(*args, **kwargs):
+        assert args[3] == "FAILED"
+        events.append("FAILED")
+
+    def capture(*args, **kwargs):
+        assert events == ["FAILED"]
+        events.append("CAPTURE")
+        raise OSError("retention unavailable")
+
+    monkeypatch.setattr(worker, "fetch_notice223_day", fetched)
+    monkeypatch.setattr(worker, "ingest_notice223_window", fail_ingest)
+    monkeypatch.setattr(
+        worker,
+        "failure_diagnostic",
+        lambda *_: {
+            "code": "JOINT_AMBIGUOUS_LOT_SHAPES",
+            "location": "procurement.sources.eis_223_joint_positions:219",
+        },
+    )
+    monkeypatch.setattr(worker, "record_attempt", recorded)
+    monkeypatch.setattr(worker, "retain_failed_223", capture)
+    def audit(*args):
+        events.append("AUDIT")
+        if not audit_available:
+            raise OSError("secret in audit exception")
+
+    monkeypatch.setattr(worker, "_audit_capture_failure", audit)
+    result = asyncio.run(worker.run())
+    assert calls == ["fetch"] and events == ["FAILED", "CAPTURE", "AUDIT"]
+    assert result["diagnostic_capture"] == {
+        "status": "UNKNOWN",
+        "reason": "OTHER",
+        "audit": "RECORDED" if audit_available else "UNKNOWN",
+    }
+    assert result["outcomes"][0]["status"] == "FAILED"
+
+
+def test_capture_happens_only_after_failed_attempt_and_never_extra_source_call(loop, monkeypatch):
+    _check_capture_happens_only_after_failed_attempt(loop, monkeypatch, True)
+
+
+def test_capture_audit_failure_stays_unknown(loop, monkeypatch):
+    _check_capture_happens_only_after_failed_attempt(loop, monkeypatch, False)
+
+
+@pytest.mark.parametrize(
+    "case, expected",
+    [("archive", "ARCHIVE_BYTES"), ("members", "MEMBER_COUNT"),
+     ("expanded", "EXPANDED_BYTES"), ("member", "MEMBER_BYTES")],
+)
+def test_fetch_archive_resource_diagnostic_is_bounded(case, expected):
+    from io import BytesIO
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    from procurement.storage.eis_223_index import preflight_notice223_window
+    from test_eis_223_index import window
+
+    if case == "archive":
+        raw = b"x" * (16 * 1024**2 + 1)
+    else:
+        output = BytesIO()
+        with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
+            if case == "members":
+                for i in range(201):
+                    archive.writestr(f"private-{i}.xml", b"x")
+            elif case == "expanded":
+                for i in range(3):
+                    archive.writestr(f"private-{i}.xml", b"x" * (11 * 1024**2))
+            else:
+                archive.writestr("private.xml", b"x" * (12 * 1024**2 + 1))
+        raw = output.getvalue()
+    with pytest.raises(ValueError, match="ARCHIVE_RESOURCE_LIMIT") as caught:
+        preflight_notice223_window("tenant-a", window(raw))
+    detail = worker.failure_diagnostic(caught.value, "FETCH")["fetch_detail"]
+    assert detail == {"kind": "ARCHIVE_RESOURCE", "cause": expected}
+    assert "private" not in str(detail)
+
+
+def test_fetch_window_bytes_reports_only_bounded_counts_and_stops_downloads():
+    from test_eis_223_sync import MultiArchiveTransport, fetch
+
+    class LargeTransport(MultiArchiveTransport):
+        async def download(self, url, token):
+            self.downloads += 1
+            return 200, b"x" * (16 * 1024**2)
+
+    transport = LargeTransport(4)
+    with pytest.raises(ValueError, match="WINDOW_BYTES_LIMIT") as caught:
+        fetch(transport)
+    assert transport.downloads == 3
+    detail = worker.failure_diagnostic(caught.value, "FETCH")["fetch_detail"]
+    assert detail == {"kind": "WINDOW_BYTES", "downloaded_count": 3, "compressed_mib_floor": 48}
+    assert "http" not in str(detail)
+
+
+def test_fetch_archive_set_mismatch_reports_safe_cause_without_download():
+    from test_eis_223_event_sync import Transport, fetch
+
+    transport = Transport(failure="archive_set")
+    with pytest.raises(ValueError, match="ARCHIVE_SET_MISMATCH") as caught:
+        fetch(transport)
+    assert transport.downloads == 0
+    detail = worker.failure_diagnostic(caught.value, "FETCH")["fetch_detail"]
+    assert detail == {"kind": "ARCHIVE_SET", "cause": "UID_MISMATCH"}
+    assert "http" not in str(detail)
+
+
+@pytest.mark.parametrize("detail", [
+    {"kind": "WINDOW_BYTES", "downloaded_count": 3, "compressed_mib_floor": 48,
+     "url": "secret"},
+    {"kind": "WINDOW_BYTES", "downloaded_count": True, "compressed_mib_floor": 48},
+    {"kind": "ARCHIVE_RESOURCE", "cause": "secret"},
+    {"kind": "ARCHIVE_SET", "cause": "UID_MISMATCH"},
+    {"kind": []},
+])
+def test_attempt_rejects_unbounded_or_wrong_family_diagnostic_before_transaction(detail):
+    from datetime import UTC, datetime
+
+    from procurement.storage.eis_223_sync import record_attempt
+
+    class NoTransaction:
+        def transaction(self, *_args, **_kwargs):
+            pytest.fail("invalid metadata must not start a transaction")
+
+    with pytest.raises(ValueError, match="FETCH_DIAGNOSTIC_INVALID"):
+        record_attempt(NoTransaction(), "tenant-a", "getDocsIP/RI223/77/2026-10-30+03:00/"
+                       "purchaseNotice", "FAILED", actor_id="test", checked_at=datetime.now(UTC),
+                       response_sha256=None, reason="WINDOW_BYTES_LIMIT", fetch_detail=detail)
+
+
+@pytest.mark.parametrize("case,expected", [
+    ("empty", "INITIAL_COUNT"), ("duplicate_initial", "INITIAL_DUPLICATE"),
+    ("too_many_prepared", "PREPARED_COUNT"), ("duplicate_prepared", "PREPARED_DUPLICATE"),
+    ("missing_download", "DOWNLOADED_MISMATCH"),
+])
+def test_fetch_archive_set_detail_classifies_existing_bounded_checks(case, expected):
+    from dataclasses import replace
+
+    from procurement.sources.eis_223_event_sync import bind_purchase_rejection_window
+    from test_eis_223_index import responses
+
+    initial, prepared = responses()
+    if case == "empty":
+        initial = replace(initial, archive_urls=())
+    elif case == "duplicate_initial":
+        initial = replace(initial, archive_urls=initial.archive_urls * 2)
+    elif case == "too_many_prepared":
+        prepared = replace(prepared, prepared_archives=prepared.prepared_archives * 9)
+    elif case == "duplicate_prepared":
+        prepared = replace(prepared, prepared_archives=prepared.prepared_archives * 2)
+    key = "getDocsIP/RI223/77/2026-10-30+03:00/purchaseRejection"
+    with pytest.raises(ValueError, match="ARCHIVE_SET_MISMATCH") as caught:
+        bind_purchase_rejection_window(key, initial, prepared, {})
+    assert worker.failure_diagnostic(caught.value, "FETCH")["fetch_detail"] == {
+        "kind": "ARCHIVE_SET", "cause": expected,
+    }

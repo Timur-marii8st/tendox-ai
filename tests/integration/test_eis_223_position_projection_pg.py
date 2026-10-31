@@ -1,7 +1,9 @@
 """Owner-aware223 projection, real disposable PostgreSQL invariants."""
 
+import hashlib
 import os
 from uuid import uuid4
+from xml.etree import ElementTree as ET
 
 import pytest
 from alembic import command
@@ -10,6 +12,7 @@ from sqlalchemy import create_engine, delete, event, func, insert, select, text,
 from sqlalchemy.exc import DBAPIError
 from test_eis_223_index_pg import storage as pg_storage
 
+from procurement.sources.eis_223_archive import TYPES_NS
 from procurement.sources.eis_223_joint_positions import joint_positions223
 from procurement.storage.eis_223_index import (
     bind_notice223_window,
@@ -32,7 +35,12 @@ from procurement.storage.models import (
 )
 from test_eis_223_archive import zip_bytes
 from test_eis_223_index import NOW, URL, responses
-from test_eis_223_joint_positions import ADDED_FAMILIES, family_joint_xml, joint_xml
+from test_eis_223_joint_positions import (
+    ADDED_FAMILIES,
+    family_joint_xml,
+    joint_xml,
+    mirrored_joint_xml,
+)
 from test_eis_223_zpesmbo import NUMBER, REGIONAL
 
 DATABASE = "procurement_eis_test_20261005_s209"
@@ -91,6 +99,71 @@ def test_automatic_projection_main_search_and_replay_do_not_rewrite_canonical(st
     assert lead.position_projection.economics_status == "UNKNOWN"
     with storage.transaction(company) as conn:
         assert conn.execute(select(versions)).mappings().one() == source
+    assert counts(storage, company) == before
+
+
+def test_false_joint_flag_intake_is_scoped_audited_and_unknown(storage):
+    root = ET.fromstring(joint_xml())
+    root.find(f".//{{{TYPES_NS}}}jointLot").text = "false"
+    initial, prepared = responses()
+    window = bind_notice223_window(
+        REGIONAL, initial, prepared, {URL: zip_bytes([("joint.xml", ET.tostring(root))])}
+    )
+    company = "false-joint-" + uuid4().hex
+    assert (
+        ingest_notice223_window(storage, company, window, actor_id="test", now=NOW).new_versions
+        == 1
+    )
+    projection = search_notice223_index(
+        storage, company, NUMBER, now=NOW
+    ).matched[0].position_projection
+    assert projection.source_item_coverage == "UNKNOWN"
+    assert projection.reasons == ("JOINT_FLAG_FALSE_WITH_CUSTOMERS",)
+    assert projection.lots[0].customers[0].items[0].quantity.value is not None
+    with storage.transaction(company) as conn:
+        audit = conn.execute(select(audit_events).where(
+            audit_events.c.event_type == "EIS_223_POSITIONS_PROJECTED"
+        )).mappings().one()
+        assert audit["basis"]["source_item_coverage"] == "UNKNOWN"
+    with storage.transaction(company + "-other") as conn:
+        assert conn.scalar(select(func.count()).select_from(projections)) == 0
+    before = counts(storage, company)
+    assert ingest_notice223_window(storage, company, window, actor_id="test", now=NOW).replayed
+    assert counts(storage, company) == before
+
+
+def test_mirrored_joint_items_are_stored_with_unknown_coverage_and_audit(storage):
+    initial, prepared = responses()
+    source_xml = mirrored_joint_xml()
+    window = bind_notice223_window(
+        REGIONAL, initial, prepared, {URL: zip_bytes([("joint.xml", source_xml)])}
+    )
+    company = "mirror-" + uuid4().hex
+    result = ingest_notice223_window(storage, company, window, actor_id="test", now=NOW)
+    assert result.new_versions == 1
+    lead = search_notice223_index(storage, company, NUMBER, now=NOW).matched[0]
+    assert len(lead.notice.lots[0].items) == 2
+    projection = lead.position_projection
+    assert projection.source_item_coverage == "UNKNOWN"
+    assert projection.reasons == ("JOINT_MIRRORED_DIRECT_ITEMS",)
+    assert projection.notice_xml_sha256 == hashlib.sha256(source_xml).hexdigest()
+    assert sum(len(customer.items) for customer in projection.lots[0].customers) == 2
+    assert all(
+        "jointLotData" in item.provenance.locator
+        for customer in projection.lots[0].customers for item in customer.items
+    )
+    with storage.transaction(company) as conn:
+        audit = conn.execute(select(audit_events).where(
+            audit_events.c.event_type == "EIS_223_POSITIONS_PROJECTED"
+        )).mappings().one()
+        stored = conn.execute(select(projections)).mappings().one()
+        assert audit["basis"]["source_item_coverage"] == "UNKNOWN"
+        assert audit["basis"]["xml_sha256"] == projection.notice_xml_sha256
+        assert audit["basis"]["projection_sha256"] == stored["projection_sha256"]
+    with storage.transaction(company + "-other") as conn:
+        assert conn.scalar(select(func.count()).select_from(projections)) == 0
+    before = counts(storage, company)
+    assert ingest_notice223_window(storage, company, window, actor_id="test", now=NOW).replayed
     assert counts(storage, company) == before
 
 

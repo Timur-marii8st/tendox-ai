@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, insert, literal, select, text
+from sqlalchemy import create_engine, func, insert, literal, select, text
 from sqlalchemy.engine import make_url
 from test_eis_analogs_pg import NOW, ingest
 from test_eis_notice_index_pg import storage as storage_fixture
@@ -16,7 +16,10 @@ from test_eis_notice_projection_pg import prepare
 
 from procurement.sources.eis_analogs import AnalogRequest
 from procurement.storage.eis_analogs import read_analog_candidates
-from procurement.storage.eis_notice_hold import notice_variant_hold_clause
+from procurement.storage.eis_notice_hold import (
+    notice_variant_hold_clause,
+    read_notice_source_hold_connection,
+)
 from procurement.storage.eis_notice_projection import project_retained_notice_variants
 from procurement.storage.models import (
     audit_events,
@@ -26,7 +29,11 @@ from procurement.storage.models import (
 )
 from test_eis_notice_conflicts import notice
 
-GATE_DATABASE = "procurement_eis_test_20261005_s209"
+GATE_DATABASE = (
+    "procurement_eis_test_history"
+    if os.environ.get("HISTORY_READER_INSTALLED_SCHEMA_TEST") == "1"
+    else "procurement_eis_test_20261005_s209"
+)
 ANALOG_SHA = "3b43638c735e443423d923a0fbb48a6f4cad56906c7448edb3fb46e7bd64b619"
 HOLD_SHA = "b044241cc52de3cc742d13f597060cb76d0268072e78879b0680d6d80e6cf570"
 
@@ -37,7 +44,14 @@ def storage():
         if not os.environ.get(key):
             pytest.skip("Requires isolated PostgreSQL gate database")
         assert make_url(os.environ[key]).database == GATE_DATABASE
-    yield from storage_fixture.__wrapped__()
+    if os.environ.get("HISTORY_READER_INSTALLED_SCHEMA_TEST") == "1":
+        from procurement.storage.repository import PostgresStorage
+
+        engine = create_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
+        yield PostgresStorage(engine)
+        engine.dispose()
+    else:
+        yield from storage_fixture.__wrapped__()
 
 
 def load(name, env, sha):
@@ -118,6 +132,8 @@ def holds(storage, company, number, version, legacy, *, scope_company=None):
             conn.scalar(select(legacy[1].notice_variant_hold_clause(company, number, version)))
         )
         default = bool(conn.scalar(select(notice_variant_hold_clause(company, number, version))))
+        actual_hold = read_notice_source_hold_connection(conn, company, number, version)
+        assert (actual_hold.status != "NO_HOLD") == default
         scoped = bool(
             conn.scalar(
                 select(

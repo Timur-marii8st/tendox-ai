@@ -66,4 +66,10 @@
 
 - [V58: свежий census44/223](146-eis-completeness-census.md) — 6drug/14позиций восстановлены; HTTP/UI6 и review PASS,106joint далее.
 
-- [V59: joint general/KES/AES](147-eis-223-joint-families.md) —106nativeitems/6карточек; ограниченная реализация готовится.
+- [V59: joint general/KES/AES](147-eis-223-joint-families.md) —106 позиций/6 карточек установлены, приёмка PASS_BOUNDED.
+
+- [V60: текущий census и распределение очереди](148-eis-national-census-v60.md) — 44/223 и наблюдение одного часа, national UNKNOWN.
+- [V61: первое ожидание corpus](149-eis-corpus-initial-wait.md) — host установлен без обхода fresh guards; cron evidence PENDING.
+- [V62: ограниченный исторический turn](150-eis-historical-bounded-turn.md) — локальная основа учёта, source0; policy ещё не включена.
+
+- [151-gosplan-discovery-slice.md](151-gosplan-discovery-slice.md) — Локальный адаптер ГосПлана, границы и оставшаяся интеграция.

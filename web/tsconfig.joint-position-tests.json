@@ -18,6 +18,10 @@
   },
   "include": [
     "tests/position-evidence-223.test.tsx",
-    "src/app/tender-discovery/position-evidence-223.tsx"
+    "src/app/tender-discovery/position-evidence-223.tsx",
+    "tests/gosplan-detail.test.tsx",
+    "tests/gosplan-pagination.test.tsx",
+    "src/app/tender-discovery/gosplan-pagination.tsx",
+    "src/app/tender-discovery/gosplan-detail.tsx"
   ]
 }

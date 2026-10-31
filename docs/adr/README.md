@@ -142,3 +142,7 @@
 - [0122-eis-223-regular-zpesmbo.md](0122-eis-223-regular-zpesmbo.md) — V54: ZP source binding и add-only5/6→7scope; contract review.
 
 - [0123: joint positions223](0123-eis-223-joint-position-projection.md).
+
+- [0124: позиции при false-флаге](0124-eis-223-false-flag-customer-positions.md) — локальный кандидат, semantic UNKNOWN и совместимость UI.
+
+- [0125: пользовательский поиск ГосПлана](0125-gosplan-live-search.md) — прямое чтение, изоляция, квоты и UNKNOWN.

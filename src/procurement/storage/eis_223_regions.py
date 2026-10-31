@@ -122,7 +122,7 @@ def _latest(company: str) -> CTE:
         )
         # Dispatch joins this history to many planned windows. Computing it once
         # avoids rescanning DISTINCT ON for each row of a nested-loop join.
-        .cte()
+        .cte("eis_223_latest_attempts")
         .prefix_with("MATERIALIZED")
     )
 
@@ -542,7 +542,7 @@ def regional_due_windows(
                 latest.c.status,
             )
             .select_from(scope.outerjoin(latest, scope.c.window_key == latest.c.window_key))
-            .cte()
+            .cte("eis_223_region_dispatch")
             .prefix_with("MATERIALIZED")
         )
         active_keys = select(targets.c.window_key).where(

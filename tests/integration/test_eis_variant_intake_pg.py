@@ -1,12 +1,13 @@
 """Automatic source conflict progress never closes an ordinary checkpoint."""
 
 import asyncio
+import os
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import create_engine, func, select
 from test_eis_notice_index_pg import storage as storage_fixture
 
 from procurement.sources import eis_corpus, eis_feed_sync, eis_freshness, eis_variant_intake
@@ -40,7 +41,19 @@ OTHER = "0373100047426001451"
 
 @pytest.fixture(scope="module")
 def storage():
-    yield from storage_fixture.__wrapped__()
+    if os.environ.get("HISTORY_READER_INSTALLED_SCHEMA_TEST") == "1":
+        from sqlalchemy.engine import make_url
+
+        from procurement.storage.repository import PostgresStorage
+
+        url = os.environ["DATABASE_URL"]
+        if make_url(url).database != "procurement_eis_test_history":
+            pytest.fail("isolated database required")
+        engine = create_engine(url, pool_pre_ping=True)
+        yield PostgresStorage(engine)
+        engine.dispose()
+    else:
+        yield from storage_fixture.__wrapped__()
 
 
 class RetainedTransport(FakeTransport):
@@ -116,6 +129,50 @@ def test_real_sync_refresh_persists_partial_observation_and_exact_replay(
         ).scalar_one()
         assert EisWindowObservation.model_validate(basis["observation"]) == first.observations[0]
         assert conn.scalar(select(eis_feed_windows.c.intake_kind)) == "VARIANT_TRANSPORT"
+    import procurement.eis_quarantine_proof as quarantine
+    from procurement.eis_quarantine_proof import verify_quarantined_conflict
+
+    with storage.transaction(company, consistent_read=True) as conn:
+        attempt_id = conn.scalar(
+            select(eis_sync_attempts.c.attempt_id).where(eis_sync_attempts.c.company_id == company)
+        )
+        proof = verify_quarantined_conflict(conn, company, SELECTION.window_key, attempt_id)
+        assert proof.status == "VERIFIED" and proof.held_count == 1
+        assert proof.snapshot and proof.checked_at and proof.checked_at.utcoffset() is not None
+        assert proof.coverage == "UNKNOWN" and proof.source_admission == "NOT_GRANTED"
+        with monkeypatch.context() as patch:
+            patch.setattr(quarantine, "_sha", lambda value: "0" * 64)
+            assert (
+                verify_quarantined_conflict(conn, company, SELECTION.window_key, attempt_id).status
+                == "UNKNOWN"
+            )
+        with monkeypatch.context() as patch:
+            from types import SimpleNamespace
+
+            patch.setattr(
+                quarantine,
+                "read_notice_source_hold_connection",
+                lambda *args: SimpleNamespace(status="NO_HOLD", resolution="UNKNOWN"),
+            )
+            assert (
+                verify_quarantined_conflict(conn, company, SELECTION.window_key, attempt_id).status
+                == "UNKNOWN"
+            )
+        assert (
+            verify_quarantined_conflict(conn, company, SELECTION.window_key, "wrong").status
+            == "UNKNOWN"
+        )
+        assert (
+            verify_quarantined_conflict(
+                conn, company + "-foreign", SELECTION.window_key, attempt_id
+            ).status
+            == "UNKNOWN"
+        )
+    with storage.transaction(company) as conn:
+        assert (
+            verify_quarantined_conflict(conn, company, SELECTION.window_key, attempt_id).status
+            == "UNKNOWN"
+        )
     before = tenant_counts(storage, company)
     replay = asyncio.run(
         eis_freshness.run_freshness(
@@ -125,6 +182,11 @@ def test_real_sync_refresh_persists_partial_observation_and_exact_replay(
     assert replay.new_versions == replay.synced == 0 and replay.partial_windows == 1
     assert replay.replayed_projection_batches == 1 and replay.held_pairs == 1
     after = tenant_counts(storage, company)
+    with storage.transaction(company, consistent_read=True) as conn:
+        assert (
+            verify_quarantined_conflict(conn, company, SELECTION.window_key, attempt_id).status
+            == "UNKNOWN"
+        )
     for table in (
         eis_feed_windows,
         eis_notice_versions,

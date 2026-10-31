@@ -343,12 +343,16 @@ def test_foreground_waiter_regression_and_async_term_cleanup(wrappers, name, tmp
 def test_import_busy_or_timeout_is_observed_without_worker_or_foreign_cleanup(wrappers, name, args):
     import fcntl
 
-    _, state, browser, _ = wrappers
+    scripts, state, browser, _ = wrappers
+    if name == "server-eis-corpus.sh":
+        helper = scripts / "server-eis-corpus-run.py"
+        helper.write_text(helper.read_text().replace("HORIZON = 840", "HORIZON = 1"))
     with (state / "eis-import.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         result = run_wrapper(wrappers, name, args=args)
     assert result.returncode == 75
-    assert json.loads(result.stdout)["reason"] == "SERVER_IMPORT_BUSY"
+    expected_reason = "INITIAL_WAIT_HORIZON_REACHED" if args else "SERVER_IMPORT_BUSY"
+    assert json.loads(result.stdout)["reason"] == expected_reason
     records = events(state)
     assert [r["phase"] for r in records] == [
         "dispatch_start",

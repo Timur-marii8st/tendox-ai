@@ -2060,6 +2060,9 @@ def create_app(
     from procurement.api.tender_navigation import tender_navigation_router
 
     app.include_router(tender_navigation_router(eis_index_storage, current_principal))
+    from procurement.api.gosplan_search import gosplan_search_router
+
+    app.include_router(gosplan_search_router(current_principal))
 
     async def document_review_principal(
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],

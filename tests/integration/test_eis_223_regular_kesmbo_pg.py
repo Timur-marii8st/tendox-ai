@@ -325,6 +325,7 @@ def test_new_regular_history_blocks_cross_tenant_downgrade(storage, kind):
             assert_direct_downgrade_guard(
                 MIGRATION,
                 expected_database=db.name,
+                expected_revision="20261027_03",
                 match="223 regular KESMBO history must be preserved",
                 tenant_context="unrelated",
             )

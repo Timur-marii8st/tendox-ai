@@ -32,6 +32,8 @@ _PERSONAL_READ_GETS = tuple(
         "runs",
         "runs/{run_id}",
         "runs/{run_id}/artifacts/{digest}",
+        "gosplan/search",
+        "gosplan/detail/{law}/{number}",
         "eis-index",
         "eis-protocols",
         "eis-223-index",
@@ -163,8 +165,18 @@ def create_discovery_app() -> FastAPI:
             )
         return principal
 
+    async def gosplan_principal(
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(personal_bearer)],
+    ) -> Principal:
+        if credentials is None or credentials.scheme.lower() != "bearer":
+            raise HTTPException(401, "invalid_credentials", headers={"Cache-Control": "no-store"})
+        if secrets.compare_digest(credentials.credentials, token):
+            return await indexed_read_principal(credentials)
+        return await personal_principal(credentials)
+
     # Included routers are lazy in the pinned FastAPI. The route allowlist above
     # removes these wrappers; mount cached reads after filtering, like profiles.
+    from procurement.api.gosplan_search import gosplan_search_router
     from procurement.api.public_unit_price import public_unit_price_router
     from procurement.api.tender_navigation import tender_navigation_router
 
@@ -178,6 +190,7 @@ def create_discovery_app() -> FastAPI:
         for route in app.router.routes
     ):
         app.include_router(public_unit_price_router(storage, indexed_read_principal))
+    app.include_router(gosplan_search_router(gosplan_principal))
 
     app.include_router(company_profile_router(storage, personal_principal))
     app.include_router(comparison_router(storage, personal_principal))

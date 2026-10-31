@@ -3,8 +3,9 @@
 from uuid import uuid4
 
 import pytest
-from migration_support import assert_direct_downgrade_guard
-from sqlalchemy import delete, func, select, update
+from alembic import command
+from migration_support import assert_direct_downgrade_guard, historical_database
+from sqlalchemy import create_engine, delete, event, func, select, text, update
 from sqlalchemy.exc import DBAPIError
 from test_eis_223_index_pg import storage as pg_storage
 
@@ -24,6 +25,7 @@ from procurement.storage.eis_223_index import ingest_notice223_window, search_no
 from procurement.storage.eis_223_sync import due_windows, record_attempt
 from procurement.storage.models import (
     audit_events,
+    eis_223_blobs,
     eis_223_event_archive_sources,
     eis_223_event_schema_checks,
     eis_223_event_sync_attempts,
@@ -31,7 +33,7 @@ from procurement.storage.models import (
     eis_223_events,
 )
 from test_eis_223_events import event_xml, zip_bytes
-from test_eis_223_index import NOW, URL, window
+from test_eis_223_index import NOW, URL, source_set, window
 
 TABLES = (
     eis_223_event_windows,
@@ -39,6 +41,7 @@ TABLES = (
     eis_223_events,
     eis_223_event_schema_checks,
     eis_223_event_sync_attempts,
+    eis_223_blobs,
     audit_events,
 )
 
@@ -64,6 +67,93 @@ def ready(raw, response="a" * 64):
         archive_urls=(URL,),
         archives=(zip_bytes([("rejection.xml", raw)]),),
     )
+
+
+def test_multi_archive_event_ingest_replay_tenant_and_downgrade(storage):
+    company = "event-wide-" + uuid4().hex
+    other = "event-other-" + uuid4().hex
+    initial, prepared, _ = source_set(3)
+    raws = tuple(
+        zip_bytes([(f"event-{i}.xml", event_xml(
+            guid=f"{i:08X}-0000-0000-0000-000000000000", number=f"326{i:08d}"
+        ))]) for i in range(1, 4)
+    )
+    wide = Eis223EventReadyWindow(
+        window_key="getDocsIP/RI223/50/2026-10-01+03:00/purchaseRejection",
+        response_sha256=initial.source_sha256,
+        prepared_sha256=prepared.source_sha256,
+        archive_urls=initial.archive_urls,
+        archives=raws,
+    )
+    before = counts(storage, company)
+    other_before = counts(storage, other)
+    invalid = wide.model_copy(update={"archives": (*raws[:2], b"not-a-zip")})
+    with pytest.raises(ValueError, match="ARCHIVE_INVALID"):
+        ingest_event223_window(storage, company, invalid, actor_id="test", now=NOW)
+    assert counts(storage, company) == before
+    source_inserts = []
+
+    def fail_second_source(_conn, _cursor, statement, _parameters, _context, _many):
+        if statement.lower().startswith("insert into eis_223_event_archive_sources"):
+            source_inserts.append(1)
+            if len(source_inserts) == 2:
+                raise RuntimeError("synthetic late database failure")
+
+    event.listen(storage._engine, "before_cursor_execute", fail_second_source)
+    try:
+        with pytest.raises(RuntimeError, match="synthetic late database failure"):
+            ingest_event223_window(storage, company, wide, actor_id="test", now=NOW)
+    finally:
+        event.remove(storage._engine, "before_cursor_execute", fail_second_source)
+    assert len(source_inserts) == 2
+    assert counts(storage, company) == before
+    report = ingest_event223_window(storage, company, wide, actor_id="test", now=NOW)
+    assert report.new_events == 3 and not report.replayed
+    saved = counts(storage, company)
+    assert saved[0] == before[0] + 1 and saved[2] == before[2] + 3
+    assert saved[-1] > before[-1]
+    assert counts(storage, other) == other_before
+    assert ingest_event223_window(storage, company, wide, actor_id="test", now=NOW).replayed
+    assert counts(storage, company) == saved
+    assert_direct_downgrade_guard(
+        "20261031_01_eis_223_event_archive_set",
+        expected_database="procurement_eis_test_20261005_s209",
+        match="223 event archive history must be preserved",
+        tenant_context=other,
+    )
+
+
+def test_event_archive_constraint_matches_historical_revision():
+    with historical_database(
+        expected_database="procurement_eis_test_20261005_s209", revision="20261027_03"
+    ) as db:
+        engine = create_engine(db.admin_url)
+
+        def constraint():
+            with engine.connect() as conn:
+                return conn.scalar(text(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                    "WHERE conrelid='eis_223_event_windows'::regclass "
+                    "AND conname='ck_eis_223_event_counts'"
+                ))
+
+        try:
+            assert "<= 2" in constraint()
+            with pytest.raises(pytest.fail.Exception, match="not a descendant"):
+                assert_direct_downgrade_guard(
+                    "20261031_01_eis_223_event_archive_set",
+                    expected_database=db.name,
+                    expected_revision="20260908_01",
+                    match="223 event archive history must be preserved",
+                )
+            command.upgrade(db.config, "20261031_01")
+            assert "<= 8" in constraint()
+            command.downgrade(db.config, "20261027_03")
+            assert "<= 2" in constraint()
+            command.upgrade(db.config, "20261031_01")
+            assert "<= 8" in constraint()
+        finally:
+            engine.dispose()
 
 
 def store(storage, company, raw, response="a" * 64):

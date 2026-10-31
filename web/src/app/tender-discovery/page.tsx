@@ -10,6 +10,7 @@ import { loadEis223RegionalCoverage } from "./actions";
 import { RegionalCoverage } from "./regional-coverage";
 import { loadNoticeProfileContext } from "./profile-comparison-actions";
 import { TenderWorkspace } from "./workspace";
+import { GosplanWorkspace } from "./gosplan-workspace";
 import styles from "./workspace.module.css";
 
 export const metadata: Metadata = { title: "Поиск закупок ЕИС — Tendox" };
@@ -30,10 +31,11 @@ export default async function TenderDiscoveryPage() {
       </nav>
       <div className={styles.content}>
         <MixedComparisonProvider profileContext={profile.context} profileError={profile.error}>
-          <TenderWorkspace />
+          <GosplanWorkspace />
           <details className={styles.advanced}>
-            <summary>Расширенные инструменты и состояние источников</summary>
+            <summary>Поиск в нашей базе и расширенные инструменты</summary>
             <div className={styles.legacyContent}>
+              <TenderWorkspace />
               <IndexedSearch />
               <Indexed223Search />
               <details className={styles.legacySection}>

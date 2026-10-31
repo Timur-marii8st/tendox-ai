@@ -444,10 +444,22 @@ def read_notice_source_hold_connection(
             .limit(MAX_HOLD_RECEIPTS + 1)
         ).scalars()
     )
+    resolution_scope = select(
+        literal(company_id).label("company_id"),
+        literal(purchase_number).label("purchase_number"),
+        literal(version_number).label("version_number"),
+    ).cte("single_notice_hold_scope")
     held = (
         bool(
             connection.scalar(
-                select(notice_variant_hold_clause(company_id, purchase_number, version_number))
+                select(
+                    notice_variant_hold_clause(
+                        company_id,
+                        purchase_number,
+                        version_number,
+                        _resolution_scope=resolution_scope,
+                    )
+                )
             )
         )
         if not incomplete and (variant_count or origin_count)

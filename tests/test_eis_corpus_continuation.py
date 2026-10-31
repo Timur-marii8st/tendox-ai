@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -123,6 +124,7 @@ import json,os,sys,time
 from pathlib import Path
 args=sys.argv[1:]
 if 'inspect' in args:
+ time.sleep(float(os.environ.get('HEALTH_SLEEP','0')))
  print('healthy');sys.exit(0)
 calls=Path(os.environ['CALLS'])
 index=len(calls.read_text().splitlines()) if calls.exists() else 0
@@ -332,3 +334,120 @@ def test_foreign_dispatch_wait_has_time_bound(dispatch):
         child = launch(dispatch, [{"exit": 2, "output": payload(1, "REGIONAL_REFRESH_REQUESTED")}])
         assert finish(child)[0] == 75 and len(calls(dispatch)) == 1
         assert receipts(dispatch)[-1]["reason"] == "CONTINUATION_HORIZON_REACHED"
+
+
+@pytest.mark.parametrize("higher_lock", ["eis-priority.lock", "eis-223-dispatch.lock"])
+def test_initial_busy_import_waits_for_higher_priority_owners_then_runs(dispatch, higher_lock):
+    import fcntl
+
+    state = dispatch[1]
+    with (
+        (state / "eis-import.lock").open("ab") as busy,
+        (state / higher_lock).open("ab") as priority,
+    ):
+        fcntl.flock(busy, fcntl.LOCK_EX)
+        fcntl.flock(priority, fcntl.LOCK_EX)
+        child = launch(dispatch, [{"output": payload(1)}])
+        try:
+            metrics = state / "eis-worker-metrics/local-eis-supplier.jsonl"
+            wait_for(lambda: metrics.exists() and "import_wait_start" in metrics.read_text())
+            assert child.poll() is None and not calls(dispatch)
+            duplicate = launch(dispatch, [{"output": payload(1)}])
+            code, out = finish(duplicate)
+            assert code == 75 and json.loads(out)["reason"] == "CORPUS_WORKER_BUSY"
+            fcntl.flock(busy, fcntl.LOCK_UN)
+            time.sleep(0.12)
+            assert child.poll() is None and not calls(dispatch)
+            with (state / "eis-import.lock").open("ab") as check:
+                fcntl.flock(check, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(priority, fcntl.LOCK_UN)
+            assert finish(child)[0] == 0 and len(calls(dispatch)) == 1
+            assert "--mandatory-fresh-first" in calls(dispatch)[0]
+            assert receipts(dispatch)[-1]["reason"] == "PASS_FINISHED"
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+
+
+def test_initial_busy_import_timeout_is_bounded_and_never_starts_worker(dispatch):
+    import fcntl
+
+    helper = dispatch[0].with_name("server-eis-corpus-run.py")
+    helper.write_text(helper.read_text().replace("HORIZON = 5", "HORIZON = 1"))
+    with (dispatch[1] / "eis-import.lock").open("ab") as owner:
+        fcntl.flock(owner, fcntl.LOCK_EX)
+        child = launch(dispatch, [{"output": payload(1)}])
+        code, output = finish(child)
+        assert code == 75 and json.loads(output)["reason"] == "INITIAL_WAIT_HORIZON_REACHED"
+        assert not calls(dispatch) and receipts(dispatch)[-1]["attempted"] == 0
+        with pytest.raises(BlockingIOError), (dispatch[1] / "eis-import.lock").open("ab") as other:
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+@pytest.mark.parametrize("signum, expected", [(signal.SIGTERM, 143), (signal.SIGINT, 130)])
+def test_initial_busy_wait_is_interruptible_and_leaves_foreign_import_owner(
+    dispatch, signum, expected
+):
+    import fcntl
+
+    state = dispatch[1]
+    with (state / "eis-import.lock").open("ab") as owner:
+        fcntl.flock(owner, fcntl.LOCK_EX)
+        child = launch(dispatch, [{"output": payload(1)}])
+        try:
+            metrics = state / "eis-worker-metrics/local-eis-supplier.jsonl"
+            wait_for(lambda: metrics.exists() and "import_wait_start" in metrics.read_text())
+            assert child.poll() is None
+            child.send_signal(signum)
+            code, output = finish(child)
+            assert code == expected and json.loads(output)["reason"] == "INTERRUPTED"
+            assert not calls(dispatch) and receipts(dispatch)[-1]["attempted"] == 0
+            with pytest.raises(BlockingIOError), (state / "eis-import.lock").open("ab") as other:
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with (state / "eis-corpus-dispatch.lock").open("ab") as check:
+                fcntl.flock(check, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+
+
+def test_initial_health_check_cannot_start_worker_after_horizon(dispatch):
+    helper = dispatch[0].with_name("server-eis-corpus-run.py")
+    helper.write_text(helper.read_text().replace("HORIZON = 5", "HORIZON = 1"))
+    dispatch[4]["HEALTH_SLEEP"] = "1.2"
+    child = launch(dispatch, [{"output": payload(1)}])
+    code, _ = finish(child)
+    assert code == 75 and not calls(dispatch)
+    assert receipts(dispatch)[-1]["reason"] == "INITIAL_WAIT_HORIZON_REACHED"
+
+
+@pytest.mark.parametrize("interrupt", ["deadline", "signal"])
+def test_work_start_metric_cannot_start_worker_after_stop(dispatch, interrupt):
+    helper = dispatch[0].with_name("server-eis-corpus-run.py")
+    metrics = dispatch[0].with_name("server-eis-metrics.py")
+    marker = dispatch[1] / "work-start-metric"
+    if interrupt == "deadline":
+        helper.write_text(helper.read_text().replace("HORIZON = 5", "HORIZON = 1"))
+    metrics.write_text(
+        "import pathlib,sys,time\n"
+        "if sys.argv[5] == 'work_start':\n"
+        f" pathlib.Path({str(marker)!r}).touch()\n"
+        " time.sleep(1.2)\n"
+    )
+    child = launch(dispatch, [{"output": payload(1)}])
+    try:
+        wait_for(marker.exists)
+        if interrupt == "signal":
+            child.send_signal(signal.SIGTERM)
+        code, _ = finish(child)
+        assert code == (75 if interrupt == "deadline" else 143)
+        assert not calls(dispatch)
+        assert receipts(dispatch)[-1]["reason"] == (
+            "INITIAL_WAIT_HORIZON_REACHED" if interrupt == "deadline" else "INTERRUPTED"
+        )
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()

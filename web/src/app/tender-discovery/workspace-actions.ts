@@ -1,6 +1,6 @@
 "use server";
 
-import { rowsFromResult, type TenderLaw, type TenderLawFilter, type WorkspaceResult } from "@/lib/tender-workspace";
+import { type TenderLaw, type TenderLawFilter, type WorkspaceResult } from "@/lib/tender-workspace";
 import { ApiError, searchGlobalPrice, readTenderNavigation } from "@/lib/procurement-api";
 import {
   loadIndexed223SearchPage,
@@ -37,7 +37,7 @@ export async function searchWorkspace(query: string, law: TenderLawFilter): Prom
       result.error223 = part223.value.error;
     } else result.error223 = "Не удалось прочитать результаты 223-ФЗ. Повторите поиск.";
   }
-  return enrichNavigation(result);
+  return result;
 }
 
 /** Продолжение только одного снимка; курсор другого закона не подставляется. */
@@ -53,10 +53,10 @@ export async function loadWorkspacePage(
   try {
     if (law === "44") {
       const next = await loadIndexedSearchPage(normalized, "NOT_EXPIRED_OR_UNKNOWN", cursor);
-      return { ...await enrichNavigation({ query: normalized, law, result44: next.result, error44: next.error }), restartRequired: next.restartRequired };
+      return { query: normalized, law, result44: next.result, error44: next.error, restartRequired: next.restartRequired };
     }
     const next = await loadIndexed223SearchPage(normalized, cursor);
-    return { ...await enrichNavigation({ query: normalized, law, result223: next.result, error223: next.error }), restartRequired: next.restartRequired };
+    return { query: normalized, law, result223: next.result, error223: next.error, restartRequired: next.restartRequired };
   } catch {
     return { query: normalized, law, ...(law === "44"
       ? { error44: "Не удалось загрузить продолжение 44-ФЗ. Попробуйте ещё раз." }
@@ -65,18 +65,24 @@ export async function loadWorkspacePage(
 }
 
 
-async function enrichNavigation(result: WorkspaceResult): Promise<WorkspaceResult> {
+export type WorkspaceNavigationRef = { id: string; law: TenderLaw; number: string; version: number; sha256: string };
+
+/** Cached navigation is optional enrichment; the initial list must not wait for it. */
+export async function enrichWorkspaceNavigation(refs: WorkspaceNavigationRef[]): Promise<{ navigation: NonNullable<WorkspaceResult["navigation"]>; failed: number }> {
+  if (!Array.isArray(refs) || refs.length > 200 || refs.some(ref => !ref ||
+    !["44", "223"].includes(ref.law) || typeof ref.id !== "string" || ref.id.length > 200 ||
+    typeof ref.number !== "string" || !(ref.law === "44" ? /^\d{19}$/ : /^\d{11}$/).test(ref.number) ||
+    !Number.isSafeInteger(ref.version) || ref.version < 1 || typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(ref.sha256) ||
+    ref.id !== `${ref.law}:${ref.number}:${ref.version}:${ref.sha256}`)) throw new Error("invalid navigation references");
   const navigation: NonNullable<WorkspaceResult["navigation"]> = {};
-  // Bounded parallel cached reads; failed/missing sources remain explicitly unknown.
-  // A response contains at most 100 notices per law; bind delivery facts for the whole page.
-  const rows = rowsFromResult(result).slice(0, 200);
-  for (let offset = 0; offset < rows.length; offset += 3) {
-    const batch = rows.slice(offset, offset + 3);
-    const reports = await Promise.allSettled(batch.map(row => readTenderNavigation({ law: row.law,
-      purchase_number: row.purchaseNumber, version_number: row.version, notice_xml_sha256: row.xmlSha256 })));
-    reports.forEach((report, index) => { if (report.status === "fulfilled") navigation[batch[index].id] = report.value; });
+  let failed = 0;
+  for (let offset = 0; offset < refs.length; offset += 3) {
+    const batch = refs.slice(offset, offset + 3);
+    const reports = await Promise.allSettled(batch.map(ref => readTenderNavigation({ law: ref.law,
+      purchase_number: ref.number, version_number: ref.version, notice_xml_sha256: ref.sha256 })));
+    reports.forEach((report, index) => { if (report.status === "fulfilled") navigation[batch[index].id] = report.value; else failed++; });
   }
-  return { ...result, navigation };
+  return { navigation, failed };
 }
 
 

@@ -117,6 +117,32 @@ def test_ordinary_false_joint_marker_does_not_conflict_with_direct_items():
     assert projection is None
 
 
+def test_false_joint_flag_with_customer_items_is_preserved_as_uncertain():
+    root = ET.fromstring(joint_xml())
+    flag = root.find(f".//{{{TYPES_NS}}}jointLot")
+    assert flag is not None
+    flag.text = "false"
+    notice, projection = project(ET.tostring(root))
+    assert projection is not None
+    assert projection.notice_xml_sha256 == notice.xml_sha256
+    assert projection.source_item_coverage == "UNKNOWN"
+    assert "JOINT_FLAG_FALSE_WITH_CUSTOMERS" in projection.reasons
+    assert len(projection.lots[0].customers) == 2
+    assert projection.lots[0].customers[0].items[0].quantity.value == Decimal("6290.8")
+    assert projection.economics_status == "UNKNOWN"
+
+
+def test_false_joint_flag_does_not_bypass_ambiguous_lot_guard():
+    root = ET.fromstring(joint_xml())
+    root.find(f".//{{{TYPES_NS}}}jointLot").text = "false"
+    lot = root.find(f".//{{{TYPES_NS}}}lot")
+    detail = lot.find(f"{{{TYPES_NS}}}lotData")
+    direct = ET.SubElement(detail, f"{{{TYPES_NS}}}lotItems")
+    direct.append(copy.deepcopy(root.find(f".//{{{TYPES_NS}}}lotItem")))
+    with pytest.raises(ValueError, match="JOINT_AMBIGUOUS_LOT_SHAPES"):
+        project(ET.tostring(root))
+
+
 @pytest.mark.parametrize("name", ["inn", "qty", "lotCustomers", "additionalInfo"])
 def test_foreign_scalar_or_container_qname_rejected(name):
     root = ET.fromstring(joint_xml())
@@ -241,3 +267,79 @@ def test_unverified_joint_family_stays_unsupported():
     raw = family_joint_xml(family)
     notice = parse_notice223_xml(raw, source_member="unknown-family.xml", document_type=family)
     assert joint_positions223(raw, notice) is None
+
+
+def mirrored_joint_xml(*, mismatch=None):
+    root = ET.fromstring(joint_xml())
+    lot = root.find(f".//{{{TYPES_NS}}}lot")
+    detail = lot.find(f"{{{TYPES_NS}}}lotData")
+    joint = lot.find(f"{{{TYPES_NS}}}jointLotData")
+    items = list(joint.iter(f"{{{TYPES_NS}}}lotItem"))
+    direct = ET.SubElement(detail, f"{{{TYPES_NS}}}lotItems")
+    for index, item in enumerate(items, 1):
+        ET.SubElement(item, f"{{{TYPES_NS}}}guid").text = f"guid-{index}"
+        source_ordinal = item.find(f"{{{TYPES_NS}}}ordinalNumber")
+        if source_ordinal is None:
+            source_ordinal = ET.SubElement(item, f"{{{TYPES_NS}}}ordinalNumber")
+        source_ordinal.text = str(index)
+        duplicate = copy.deepcopy(item)
+        ordinal = duplicate.find(f"{{{TYPES_NS}}}ordinalNumber")
+        if ordinal is None:
+            ordinal = ET.SubElement(duplicate, f"{{{TYPES_NS}}}ordinalNumber")
+        ordinal.text = str(index + 4)
+        direct.append(duplicate)
+    if mismatch == "quantity":
+        direct[0].find(f"{{{TYPES_NS}}}qty").text = "1"
+    if mismatch == "duplicate-guid":
+        direct[1].find(f"{{{TYPES_NS}}}guid").text = "guid-1"
+    if mismatch == "missing-item":
+        direct.remove(direct[-1])
+    if mismatch == "missing-guid":
+        direct[0].remove(direct[0].find(f"{{{TYPES_NS}}}guid"))
+    if mismatch == "different-text":
+        direct[0].find(f"{{{TYPES_NS}}}qty").text += " "
+    if mismatch == "meaningful-tail":
+        direct[0][0].tail = "unexpected text"
+    if mismatch == "multiple-ordinals":
+        ET.SubElement(direct[0], f"{{{TYPES_NS}}}ordinalNumber").text = "9"
+    if mismatch == "ordinal-attributes":
+        direct[0].find(f"{{{TYPES_NS}}}ordinalNumber").set("unexpected", "x")
+    if mismatch == "excess-depth":
+        node = direct[0]
+        for _ in range(70):
+            node = ET.SubElement(node, "nested")
+    return ET.tostring(root)
+
+
+def test_bijective_joint_mirrors_preserve_customer_items_with_unknown_coverage():
+    notice, projection = project(mirrored_joint_xml())
+    assert projection.source_item_coverage == "UNKNOWN"
+    assert "JOINT_MIRRORED_DIRECT_ITEMS" in projection.reasons
+    assert sum(len(c.items) for c in projection.lots[0].customers) == 2
+    assert [c.items[0].quantity.value for c in projection.lots[0].customers] == [
+        Decimal("6290.8"),
+        Decimal("1140"),
+    ]
+    assert projection.notice_xml_sha256 == notice.xml_sha256
+    assert all(
+        "jointLotData" in c.items[0].provenance.locator for c in projection.lots[0].customers
+    )
+
+
+@pytest.mark.parametrize(
+    "mismatch",
+    [
+        "quantity",
+        "duplicate-guid",
+        "missing-item",
+        "missing-guid",
+        "different-text",
+        "meaningful-tail",
+        "multiple-ordinals",
+        "ordinal-attributes",
+        "excess-depth",
+    ],
+)
+def test_joint_mirror_mismatch_remains_hard_failure(mismatch):
+    with pytest.raises(ValueError, match="JOINT_AMBIGUOUS_LOT_SHAPES"):
+        project(mirrored_joint_xml(mismatch=mismatch))

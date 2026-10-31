@@ -29,6 +29,14 @@ def upgrade():
     for table in TABLES:
         name = table.name
         constraints = list(table.constraints)
+        if name == "eis_223_event_windows":
+            # This revision predates wider event windows; do not import the
+            # current model's later CHECK into a fresh historical database.
+            constraints = [c for c in constraints if c.name != "ck_eis_223_event_counts"]
+            constraints.append(CheckConstraint(
+                "archive_count BETWEEN 1 AND 2 AND record_count >= 1",
+                name="ck_eis_223_event_counts",
+            ))
         if name == "eis_223_event_sync_attempts":
             constraints = [c for c in constraints if c.name != "ck_eis_223_event_attempt_scope"]
             constraints.append(

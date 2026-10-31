@@ -11,7 +11,7 @@ from itertools import pairwise
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from xml.etree import ElementTree as ET
-from zipfile import ZipFile
+from zipfile import ZipFile, ZipInfo
 
 import pytest
 
@@ -245,7 +245,7 @@ def _archive() -> bytes:
     buffer = BytesIO()
     with ZipFile(buffer, "w") as archive:
         archive.writestr(
-            "notice.xml",
+            ZipInfo("notice.xml", date_time=(2026, 9, 27, 12, 0, 0)),
             b'<export xmlns="http://zakupki.gov.ru/oos/export/1">'
             b"<epNotificationEF2020><versionNumber>1</versionNumber>"
             b"<commonInfo><purchaseNumber>0848300054826000154</purchaseNumber>"

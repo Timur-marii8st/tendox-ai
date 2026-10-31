@@ -11,11 +11,11 @@ from typing import Literal
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID, uuid4
 from xml.etree import ElementTree as ET
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from procurement.sources.eis_223_archive import MAX_ARCHIVE_BYTES
+from procurement.sources.eis_223_archive import MAX_ARCHIVE_BYTES, MAX_EXPANDED_BYTES, MAX_MEMBERS
 from procurement.sources.eis_223_events import (
     EVENT_TYPE,
     Eis223EventArchiveInspection,
@@ -39,6 +39,10 @@ _WINDOW = re.compile(
 _TOKEN = re.compile(r"^[A-Za-z0-9-]{16,128}$")
 _SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/"
 _IP_NS = "http://zakupki.gov.ru/fz44/get-docs-ip/ws"
+MAX_EVENT_ARCHIVES = 8
+MAX_EVENT_COMPRESSED_BYTES = 32 * 1024 * 1024
+MAX_EVENT_EXPANDED_BYTES = 2 * MAX_EXPANDED_BYTES
+MAX_EVENT_MEMBERS = 2 * MAX_MEMBERS
 
 
 class EventSyncModel(BaseModel):
@@ -49,8 +53,8 @@ class Eis223EventReadyWindow(EventSyncModel):
     window_key: str
     response_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     prepared_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
-    archives: tuple[bytes, ...] = Field(min_length=1, max_length=2)
-    archive_urls: tuple[str, ...] = Field(min_length=1, max_length=2)
+    archives: tuple[bytes, ...] = Field(min_length=1, max_length=MAX_EVENT_ARCHIVES)
+    archive_urls: tuple[str, ...] = Field(min_length=1, max_length=MAX_EVENT_ARCHIVES)
 
 
 @dataclass(frozen=True)
@@ -136,7 +140,7 @@ def bind_purchase_rejection_window(
         )
     references = prepared.prepared_archives
     if (
-        not 1 <= len(initial_uids) <= 2
+        not 1 <= len(initial_uids) <= MAX_EVENT_ARCHIVES
         or len(set(initial_uids)) != len(initial_uids)
         or len({item.archive_uid for item in references}) != len(references)
         or set(initial_uids) != {item.archive_uid for item in references}
@@ -165,12 +169,33 @@ def preflight_purchase_rejection_window(
     if match is None or len(window.archives) != len(window.archive_urls):
         raise EisSyncError("WINDOW_INVALID")
     date.fromisoformat(match["day"])
-    if sum(map(len, window.archives)) > 32 * 1024 * 1024:
+    if sum(map(len, window.archives)) > MAX_EVENT_COMPRESSED_BYTES:
         raise EisSyncError("WINDOW_BYTES_LIMIT")
     if len(set(window.archive_urls)) != len(window.archive_urls):
         raise EisSyncError("ARCHIVE_URL_DUPLICATE")
     for url in window.archive_urls:
         validate_eis_archive_url(url)
+    expanded = members_count = 0
+    try:
+        for raw in window.archives:
+            if not raw or len(raw) > MAX_ARCHIVE_BYTES:
+                raise EisSyncError("ARCHIVE_BYTES_LIMIT")
+            with ZipFile(BytesIO(raw)) as archive:
+                members = archive.infolist()
+                archive_expanded = sum(member.file_size for member in members)
+                if (
+                    not members or len(members) > MAX_MEMBERS
+                    or archive_expanded > MAX_EXPANDED_BYTES
+                ):
+                    raise EisSyncError("ARCHIVE_EXPANSION_LIMIT")
+                members_count += len(members)
+                expanded += archive_expanded
+                if members_count > MAX_EVENT_MEMBERS:
+                    raise EisSyncError("WINDOW_MEMBER_LIMIT")
+                if expanded > MAX_EVENT_EXPANDED_BYTES:
+                    raise EisSyncError("WINDOW_EXPANDED_LIMIT")
+    except BadZipFile as error:
+        raise EisSyncError("ARCHIVE_INVALID") from error
     inspections = tuple(
         inspect_purchase_rejection_archive(
             raw,
@@ -261,7 +286,13 @@ async def fetch_purchase_rejection_day(
             key, initial, prepared, {ref.url: b"preflight" for ref in prepared.prepared_archives}
         )
         downloaded: dict[str, bytes] = {}
+        compressed_bytes = 0
         for ref in prepared.prepared_archives:
+            # Keep retained bytes before a GET at most one accepted ZIP (16 MiB).
+            # Transport may buffer an oversize response before rejecting it, as
+            # in the previous two-archive implementation.
+            if compressed_bytes + MAX_ARCHIVE_BYTES > MAX_EVENT_COMPRESSED_BYTES:
+                raise EisSyncError("WINDOW_BYTES_LIMIT")
             status, raw = await transport.download(ref.url, token)
             if status != 200 or not raw or len(raw) > MAX_ARCHIVE_BYTES or token.encode() in raw:
                 raise EisSyncError(
@@ -280,6 +311,9 @@ async def fetch_purchase_rejection_day(
                         ),
                     ),
                 )
+            compressed_bytes += len(raw)
+            if compressed_bytes > MAX_EVENT_COMPRESSED_BYTES:
+                raise EisSyncError("WINDOW_BYTES_LIMIT")
             downloaded[ref.url] = raw
         ready = bind_purchase_rejection_window(key, initial, prepared, downloaded)
         preflight_purchase_rejection_window(company, ready)

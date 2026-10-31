@@ -11,3 +11,7 @@
 - [33-gosplan-internals-review.md](33-gosplan-internals-review.md) — ГосПлан: устройство сервиса и выводы для нашего проекта.
 - [41-eis-architecture-effectiveness.md](41-eis-architecture-effectiveness.md) — Эффективность архитектуры ЕИС: аудит S166.
 - [42-eis-acquisition-research.md](42-eis-acquisition-research.md) — Получение свежего публичного корпуса ЕИС без полного архива вложений.
+
+- [ЕИС: пакет для DeepSearch](eis-deepsearch/README.md) — схема потока, evidence и шесть самостоятельных исследовательских запросов.
+
+- [43-gosplan-production-comparison.md](43-gosplan-production-comparison.md) — Сверка 40 карточек ГосПлана с официальным индексом и точечная проверка поиска.
